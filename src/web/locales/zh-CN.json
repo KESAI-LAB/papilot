@@ -198,5 +198,22 @@
   "read {n} files on {pages}": "读取了 {n} 个文件（{pages}）",
   "{file}, lines {lines}": "{file} 第 {lines} 行",
   "{sections} and {n} more": "{sections} 等 {n} 处",
-  "§{number} {title}": "§{number} {title}"
+  "§{number} {title}": "§{number} {title}",
+  "Cached input": "缓存的输入",
+  "Compaction reserve": "压缩预留空间",
+  "Context": "上下文",
+  "Free space": "剩余空间",
+  "New input": "新输入",
+  "Output": "输出",
+  "Paper maps": "论文地图",
+  "Replies": "回复",
+  "Summaries of earlier turns": "之前轮次的摘要",
+  "System prompt": "系统提示词",
+  "The total is what the model provider counted for the latest request.": "总数是模型提供商为最近一次请求统计的值。",
+  "The total is what the model provider counted for the latest request; the parts are estimated from their text. Earlier turns are summarized when the context reaches the compaction reserve.": "总数是模型提供商为最近一次请求统计的值；各部分根据其文本估算。上下文达到压缩预留空间时，之前的轮次会被总结。",
+  "Tool calls": "工具调用",
+  "Tool results": "工具结果",
+  "Your messages": "你的消息",
+  "{percent}% used": "已用 {percent}%",
+  "{tokens} of {window} tokens": "{tokens} / {window} 个 token"
 }

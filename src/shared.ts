@@ -81,7 +81,10 @@ export function taskFinished(task: Task) {
 // reviewRound is 0 while awaiting a result, null when no changes were produced,
 // or the published round. Older runs omit it.
 export interface Run { id: string; taskId: string; requestKey: string; prompt: string; attachments?: Attachment[]; feedbackCursor?: number; status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'uncertain'; createdAt: number; finishedAt: number | null; reviewRound?: number | null; noteRounds?: Record<number, number>; noteOptionsRequested?: boolean; noteOptions?: PreparedNoteOptions[] }
-export interface ContextUsage { tokens: number; window: number }
+/** One part of what fills the context window; ids are named in the web app. */
+export interface ContextPart { id: string; tokens: number }
+/** breakdown: the parts, when the agent can tell them apart, adding up to the window. */
+export interface ContextUsage { tokens: number; window: number; breakdown?: ContextPart[] }
 /** What a tool call did, when the agent says so: the chat words, groups and marks it by kind. */
 export interface ToolCallInfo { kind: string; target?: string; lines?: string; place?: ToolPlace }
 /** Where a read was in the paper: the sections it covered and the PDF pages they print on. */

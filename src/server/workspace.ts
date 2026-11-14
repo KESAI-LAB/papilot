@@ -763,8 +763,12 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       // The latest request's tokens are what the context holds now.
       const usage = p.tokenUsage || {}, tokens = Number(usage.last?.totalTokens ?? usage.last?.total_tokens), window = Number(usage.modelContextWindow ?? usage.model_context_window);
       if (tokens > 0 && window > 0) {
-        const previous = task.context;
-        if (!previous || previous.tokens !== tokens || previous.window !== window) this.store.updateTask(task.id, { context: { tokens: Math.round(tokens), window: Math.round(window) } });
+        // Papilot Writer names the parts; for Codex, the latest request's own counts are the best split there is.
+        const last = usage.last || {}, cached = Number(last.cachedInputTokens) || 0, input = Number(last.inputTokens) || 0, output = Number(last.outputTokens) || 0;
+        const breakdown = Array.isArray(p.breakdown) ? p.breakdown.filter((part: any) => typeof part?.id === 'string' && Number.isFinite(part.tokens)).slice(0, 20).map((part: any) => ({ id: part.id, tokens: Math.max(0, Math.round(part.tokens)) }))
+          : input ? [{ id: 'cached', tokens: cached }, { id: 'input', tokens: Math.max(0, input - cached) }, { id: 'output', tokens: output }, { id: 'free', tokens: Math.max(0, Math.round(window - tokens)) }].filter(part => part.tokens > 0)
+          : undefined;
+        this.store.updateTask(task.id, { context: { tokens: Math.round(tokens), window: Math.round(window), ...(breakdown ? { breakdown } : {}) } });
       }
       return;
     }

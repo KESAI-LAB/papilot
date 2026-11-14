@@ -1397,5 +1397,22 @@
   "read {n} files on {pages}": "파일 {n}개를 읽었습니다({pages})",
   "{file}, lines {lines}": "{file}, {lines}행",
   "{sections} and {n} more": "{sections} 외 {n}개",
-  "§{number} {title}": "§{number} {title}"
+  "§{number} {title}": "§{number} {title}",
+  "Cached input": "캐시된 입력",
+  "Compaction reserve": "압축 예비 공간",
+  "Context": "컨텍스트",
+  "Free space": "여유 공간",
+  "New input": "새 입력",
+  "Output": "출력",
+  "Paper maps": "논문 맵",
+  "Replies": "답변",
+  "Summaries of earlier turns": "이전 턴 요약",
+  "System prompt": "시스템 프롬프트",
+  "The total is what the model provider counted for the latest request.": "합계는 모델 제공자가 최근 요청에 대해 센 값입니다.",
+  "The total is what the model provider counted for the latest request; the parts are estimated from their text. Earlier turns are summarized when the context reaches the compaction reserve.": "합계는 모델 제공자가 최근 요청에 대해 센 값이며, 각 부분은 텍스트로 추정한 값입니다. 컨텍스트가 압축 예비 공간에 닿으면 이전 턴이 요약됩니다.",
+  "Tool calls": "도구 호출",
+  "Tool results": "도구 결과",
+  "Your messages": "내 메시지",
+  "{percent}% used": "{percent}% 사용",
+  "{tokens} of {window} tokens": "{tokens} / {window} 토큰"
 }

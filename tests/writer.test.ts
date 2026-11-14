@@ -9,6 +9,7 @@ import { paperMap } from '../src/server/writer/paper-map.ts';
 import { writerTools, type ToolHost } from '../src/server/writer/tools.ts';
 import { WriterAgent, toolItem } from '../src/server/writer/agent.ts';
 import { claudeSubscription, WriterCredentials } from '../src/server/writer/auth.ts';
+import { contextBreakdown, COMPACTION_RESERVE } from '../src/server/writer/context.ts';
 
 function paper() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot writer 中文 '));
@@ -271,4 +272,31 @@ test('a read names the sections it covered and the pages they print on', async (
   assert.equal(toolSentence(item), 'Read §2.1 Loss');
   assert.equal(toolNote(item), 'pages 4–5 · sections/method.tex, lines 3–5');
   assert.equal(toolSummary([item, { ...item, id: 's', tool: { ...item.tool, target: 'main.tex', place: { sections: [], pages: [2, 2] } } }], () => []).text, 'Read 2 files on pages 2–5');
+});
+
+test('The context breakdown names what fills the window and adds up to what the provider counted', () => {
+  const map = '<paper-map>' + 'x'.repeat(4000) + '</paper-map>';
+  const session = {
+    systemPrompt: 's'.repeat(8000),
+    getActiveToolNames: () => ['read_file'],
+    getAllTools: () => [{ name: 'read_file', description: 'd'.repeat(400), parameters: {} }, { name: 'unused', description: 'u'.repeat(9000), parameters: {} }],
+    messages: [
+      { role: 'user', content: [{ type: 'text', text: map + 'Tighten the abstract.' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'r'.repeat(400) }, { type: 'toolCall', name: 'read_file', arguments: { path: 'main.tex' } }] },
+      { role: 'toolResult', content: [{ type: 'text', text: 't'.repeat(2000) }, { type: 'image' }] },
+      { role: 'compactionSummary', summary: 'm'.repeat(800) },
+    ],
+  } as any;
+  const parts = contextBreakdown(session, 10000, 200000);
+  const of = (id: string) => parts.find(part => part.id === id)?.tokens || 0;
+  assert.deepEqual(parts.map(part => part.id), ['system', 'tools', 'map', 'messages', 'replies', 'toolCalls', 'toolResults', 'summaries', 'reserve', 'free']);
+  assert.equal(parts.filter(part => part.id !== 'reserve' && part.id !== 'free').reduce((sum, part) => sum + part.tokens, 0), 10000, 'The used parts add up to the reported total');
+  assert.equal(of('reserve'), COMPACTION_RESERVE);
+  assert.equal(of('free'), 200000 - 10000 - COMPACTION_RESERVE);
+  assert.ok(of('system') > of('map') && of('map') > of('messages'), 'The paper map is told apart from what the author wrote');
+  assert.ok(of('tools') < of('replies') * 2, 'Inactive tools are not counted');
+  // Near the limit, the reserve is only what is left.
+  const full = contextBreakdown(session, 195000, 200000);
+  assert.equal(full.find(part => part.id === 'reserve')?.tokens, 5000);
+  assert.equal(full.find(part => part.id === 'free')?.tokens, 0);
 });

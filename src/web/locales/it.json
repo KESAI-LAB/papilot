@@ -1397,5 +1397,22 @@
   "read {n} files on {pages}": "ha letto {n} file ({pages})",
   "{file}, lines {lines}": "{file}, righe {lines}",
   "{sections} and {n} more": "{sections} e altre {n}",
-  "§{number} {title}": "§{number} {title}"
+  "§{number} {title}": "§{number} {title}",
+  "Cached input": "Input in cache",
+  "Compaction reserve": "Riserva per la compattazione",
+  "Context": "Contesto",
+  "Free space": "Spazio libero",
+  "New input": "Nuovo input",
+  "Output": "Output",
+  "Paper maps": "Mappe dell’articolo",
+  "Replies": "Risposte",
+  "Summaries of earlier turns": "Riassunti dei turni precedenti",
+  "System prompt": "Prompt di sistema",
+  "The total is what the model provider counted for the latest request.": "Il totale è quanto conteggiato dal fornitore del modello per l’ultima richiesta.",
+  "The total is what the model provider counted for the latest request; the parts are estimated from their text. Earlier turns are summarized when the context reaches the compaction reserve.": "Il totale è quanto conteggiato dal fornitore del modello per l’ultima richiesta; le parti sono stimate dal loro testo. I turni precedenti vengono riassunti quando il contesto raggiunge la riserva per la compattazione.",
+  "Tool calls": "Chiamate agli strumenti",
+  "Tool results": "Risultati degli strumenti",
+  "Your messages": "I tuoi messaggi",
+  "{percent}% used": "{percent}% usato",
+  "{tokens} of {window} tokens": "{tokens} di {window} token"
 }

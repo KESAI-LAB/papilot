@@ -1397,5 +1397,22 @@
   "read {n} files on {pages}": "läste {n} filer ({pages})",
   "{file}, lines {lines}": "{file}, rad {lines}",
   "{sections} and {n} more": "{sections} och {n} till",
-  "§{number} {title}": "§{number} {title}"
+  "§{number} {title}": "§{number} {title}",
+  "Cached input": "Cachad indata",
+  "Compaction reserve": "Reserv för komprimering",
+  "Context": "Kontext",
+  "Free space": "Ledigt utrymme",
+  "New input": "Ny indata",
+  "Output": "Utdata",
+  "Paper maps": "Artikelkartor",
+  "Replies": "Svar",
+  "Summaries of earlier turns": "Sammanfattningar av tidigare rundor",
+  "System prompt": "Systemprompt",
+  "The total is what the model provider counted for the latest request.": "Summan är vad modellleverantören räknade för den senaste begäran.",
+  "The total is what the model provider counted for the latest request; the parts are estimated from their text. Earlier turns are summarized when the context reaches the compaction reserve.": "Summan är vad modellleverantören räknade för den senaste begäran; delarna är uppskattade utifrån sin text. Tidigare rundor sammanfattas när kontexten når reserven för komprimering.",
+  "Tool calls": "Verktygsanrop",
+  "Tool results": "Verktygsresultat",
+  "Your messages": "Dina meddelanden",
+  "{percent}% used": "{percent} % använt",
+  "{tokens} of {window} tokens": "{tokens} av {window} token"
 }

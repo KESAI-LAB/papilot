@@ -8,6 +8,7 @@ import { Adapter, type Item, type Thread, type Turn } from '../agents.ts';
 import { imageType } from '../attachments.ts';
 import { AUTH_FILE, WRITER_DIR, WriterCredentials } from './auth.ts';
 import { CHARTER, COMPACTION } from './charter.ts';
+import { contextBreakdown } from './context.ts';
 import { fromList, listModels } from './models.ts';
 import { toolError, type WriterMode } from './policy.ts';
 import type { BuildNote } from './paper-map.ts';
@@ -336,7 +337,8 @@ export class WriterAgent extends Adapter {
         if (final.trim()) this.item(turn, { id: `${turn.id}:text:${message}`, type: 'agentMessage', text: final });
         if (event.message.stopReason === 'error') fail(event.message.errorMessage || 'The model provider returned an error.');
         const usage = session.getContextUsage();
-        if (usage?.tokens) this.notify('thread/tokenUsage/updated', { threadId: turn.threadId, turnId: turn.id, tokenUsage: { last: { totalTokens: usage.tokens }, modelContextWindow: usage.contextWindow } });
+        if (usage?.tokens) this.notify('thread/tokenUsage/updated', { threadId: turn.threadId, turnId: turn.id, tokenUsage: { last: { totalTokens: usage.tokens }, modelContextWindow: usage.contextWindow },
+          breakdown: contextBreakdown(session, usage.tokens, usage.contextWindow) });
       } else if (event.type === 'tool_execution_start') {
         const item = toolItem(event.toolCallId, event.toolName, event.args || {});
         shown.set(event.toolCallId, item);

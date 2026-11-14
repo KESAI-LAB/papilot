@@ -1397,5 +1397,22 @@
   "read {n} files on {pages}": "讀取了 {n} 個檔案（{pages}）",
   "{file}, lines {lines}": "{file} 第 {lines} 行",
   "{sections} and {n} more": "{sections} 等 {n} 處",
-  "§{number} {title}": "§{number} {title}"
+  "§{number} {title}": "§{number} {title}",
+  "Cached input": "快取的輸入",
+  "Compaction reserve": "壓縮預留空間",
+  "Context": "上下文",
+  "Free space": "剩餘空間",
+  "New input": "新輸入",
+  "Output": "輸出",
+  "Paper maps": "論文地圖",
+  "Replies": "回覆",
+  "Summaries of earlier turns": "先前輪次的摘要",
+  "System prompt": "系統提示詞",
+  "The total is what the model provider counted for the latest request.": "總數是模型供應商為最近一次請求統計的值。",
+  "The total is what the model provider counted for the latest request; the parts are estimated from their text. Earlier turns are summarized when the context reaches the compaction reserve.": "總數是模型供應商為最近一次請求統計的值；各部分依其文字估算。上下文達到壓縮預留空間時，先前的輪次會被摘要。",
+  "Tool calls": "工具呼叫",
+  "Tool results": "工具結果",
+  "Your messages": "你的訊息",
+  "{percent}% used": "已用 {percent}%",
+  "{tokens} of {window} tokens": "{tokens} / {window} 個 token"
 }

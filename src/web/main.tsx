@@ -37,6 +37,7 @@ import { DeleteTaskDialog } from './task-dialog.tsx';
 import { ActionMenu } from './action-menu.tsx';
 import { Icon } from './icons.tsx';
 import { toolIcon, toolNote, toolSentence, toolSummary } from './tool-calls.ts';
+import { ContextMeter } from './context-meter.tsx';
 import { UpdateNotice, versionLabel } from './update-notice.tsx';
 import { chooseDirectory, DesktopWindowChrome, nativeFolders } from './desktop-chrome.tsx';
 import { MainFileDialog } from './main-file-dialog.tsx';
@@ -421,19 +422,6 @@ function Activity({ source, onRevealQuote, task, runtime, reconnecting, onReconn
       {hint && <p className="composer-hint" role="status">{hint}</p>}
     </div>
   </section>;
-}
-
-// How full the agent's context window is, as a small ring beside Send.
-function ContextMeter({ usage }: { usage?: { tokens: number; window: number } | null }) {
-  if (!usage?.window) return null;
-  const share = Math.min(1, usage.tokens / usage.window), percent = Math.round(share * 100);
-  const compact = (n: number) => new Intl.NumberFormat(locale(), { notation: 'compact', maximumFractionDigits: 1 }).format(n);
-  const text = t('Context {percent}% full: {tokens} of {window} tokens', { percent, tokens: compact(usage.tokens), window: compact(usage.window) });
-  const r = 8, length = 2 * Math.PI * r;
-  return <span className={'context-meter' + (share >= 0.9 ? ' critical' : share >= 0.75 ? ' warning' : '')} role="img" aria-label={text} title={text}>
-    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r={r}/><circle className="context-meter-fill" cx="10" cy="10" r={r} strokeDasharray={`${share * length} ${length}`} transform="rotate(-90 10 10)"/></svg>
-    <span className="context-meter-value">{percent}%</span>
-  </span>;
 }
 
 // Shorten an absolute repository path to its last folders for menus.

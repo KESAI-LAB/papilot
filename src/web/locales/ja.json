@@ -1397,5 +1397,22 @@
   "read {n} files on {pages}": "{n} 個のファイルを読みました（{pages}）",
   "{file}, lines {lines}": "{file} の {lines} 行目",
   "{sections} and {n} more": "{sections} ほか {n} 件",
-  "§{number} {title}": "§{number} {title}"
+  "§{number} {title}": "§{number} {title}",
+  "Cached input": "キャッシュ済み入力",
+  "Compaction reserve": "圧縮用の予備",
+  "Context": "コンテキスト",
+  "Free space": "空き容量",
+  "New input": "新規入力",
+  "Output": "出力",
+  "Paper maps": "論文マップ",
+  "Replies": "返答",
+  "Summaries of earlier turns": "以前のターンの要約",
+  "System prompt": "システムプロンプト",
+  "The total is what the model provider counted for the latest request.": "合計は、直近のリクエストについてモデルプロバイダーが数えた値です。",
+  "The total is what the model provider counted for the latest request; the parts are estimated from their text. Earlier turns are summarized when the context reaches the compaction reserve.": "合計は、直近のリクエストについてモデルプロバイダーが数えた値です。内訳はテキストから推定しています。コンテキストが圧縮用の予備に達すると、以前のターンが要約されます。",
+  "Tool calls": "ツール呼び出し",
+  "Tool results": "ツールの結果",
+  "Your messages": "あなたのメッセージ",
+  "{percent}% used": "{percent}% 使用",
+  "{tokens} of {window} tokens": "{tokens} / {window} トークン"
 }

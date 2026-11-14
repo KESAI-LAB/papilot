@@ -1397,5 +1397,22 @@
   "read {n} files on {pages}": "{n} Dateien gelesen ({pages})",
   "{file}, lines {lines}": "{file}, Zeilen {lines}",
   "{sections} and {n} more": "{sections} und {n} weitere",
-  "§{number} {title}": "§{number} {title}"
+  "§{number} {title}": "§{number} {title}",
+  "Cached input": "Zwischengespeicherte Eingabe",
+  "Compaction reserve": "Reserve für Komprimierung",
+  "Context": "Kontext",
+  "Free space": "Freier Platz",
+  "New input": "Neue Eingabe",
+  "Output": "Ausgabe",
+  "Paper maps": "Paper-Übersichten",
+  "Replies": "Antworten",
+  "Summaries of earlier turns": "Zusammenfassungen früherer Runden",
+  "System prompt": "Systemprompt",
+  "The total is what the model provider counted for the latest request.": "Die Summe hat der Modellanbieter für die letzte Anfrage gezählt.",
+  "The total is what the model provider counted for the latest request; the parts are estimated from their text. Earlier turns are summarized when the context reaches the compaction reserve.": "Die Summe hat der Modellanbieter für die letzte Anfrage gezählt; die Teile sind anhand ihres Texts geschätzt. Frühere Runden werden zusammengefasst, wenn der Kontext die Reserve für Komprimierung erreicht.",
+  "Tool calls": "Tool-Aufrufe",
+  "Tool results": "Tool-Ergebnisse",
+  "Your messages": "Ihre Nachrichten",
+  "{percent}% used": "{percent} % belegt",
+  "{tokens} of {window} tokens": "{tokens} von {window} Tokens"
 }
