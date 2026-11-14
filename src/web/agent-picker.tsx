@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { AgentId, RuntimeStatus, TaskPermissions } from '../shared.ts';
 import { Icon } from './icons.tsx';
 import { BrandIcon } from './brand-icon.tsx';
@@ -64,7 +64,16 @@ function remember(agent: AgentId, model: string) {
 }
 
 export interface AgentOption { value: AgentId; label: string; runtime?: RuntimeStatus }
-interface Choice { key: string; agent: AgentOption; model: string; name: string; isDefault: boolean; recent: boolean }
+// An agent's models in runs of the same source, in list order; models without one stay ungrouped.
+function bySource(items: Choice[]) {
+  const parts: { source?: string; items: Choice[] }[] = [];
+  for (const item of items) {
+    const last = parts.at(-1);
+    if (last && last.source === item.source) last.items.push(item); else parts.push({ source: item.source, items: [item] });
+  }
+  return parts;
+}
+interface Choice { key: string; agent: AgentOption; model: string; name: string; source?: string; isDefault: boolean; recent: boolean }
 
 // An agent's state when it cannot be used yet, shown beside its name.
 function agentState(runtime?: RuntimeStatus) {
@@ -102,11 +111,11 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
     const list = option.runtime?.models || [];
     return [
       ...(allowUnknownDefault && !list.some(item => item.isDefault) ? [{ key: `${option.value}\n`, agent: option, model: '', name: t('Default model'), isDefault: false, recent: false }] : []),
-      ...list.map(item => ({ key: `${option.value}\n${item.id}`, agent: option, model: item.id, name: item.name, isDefault: item.isDefault, recent: false })),
+      ...list.map(item => ({ key: `${option.value}\n${item.id}`, agent: option, model: item.id, name: item.name, source: item.source, isDefault: item.isDefault, recent: false })),
     ];
   };
   const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
-  const matches = (choice: Choice) => terms.every(term => `${choice.agent.label} ${choice.name} ${choice.model}`.toLocaleLowerCase().includes(term));
+  const matches = (choice: Choice) => terms.every(term => `${choice.agent.label} ${choice.source || ''} ${choice.name} ${choice.model}`.toLocaleLowerCase().includes(term));
   const groups = agents.map(option => ({ option, items: choices(option).filter(matches) })).filter(group => group.items.length);
   const recentItems = terms.length ? [] : recent.flatMap(item => {
     const option = agents.find(candidate => candidate.value === item.agent);
@@ -155,11 +164,11 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
   }
   const renderChoice = (choice: Choice) => {
     const chosen = isSelected(choice), state = agentState(choice.agent.runtime);
-    return <div key={choice.key} id={`${id}-${choice.key.replace(/\W/g, '_')}`} data-key={choice.key} role="option" aria-selected={chosen} aria-label={`${choice.name} · ${choice.agent.label}`}
+    return <div key={choice.key} id={`${id}-${choice.key.replace(/\W/g, '_')}`} data-key={choice.key} role="option" aria-selected={chosen} aria-label={[choice.name, choice.source, choice.agent.label].filter(Boolean).join(' · ')}
       className={'model-option' + (choice.key === active ? ' active' : '')} onPointerMove={() => setActive(choice.key)} onClick={() => choose(choice)}>
       {choice.recent && <BrandIcon name={choice.agent.value} size={15}/>}<span className="model-option-name">{choice.name}</span>
       {choice.isDefault && !choice.recent && <small className="model-option-tag">{t('Default')}</small>}
-      {(choice.recent || state) && <small className={'model-option-agent' + (state ? ' warn' : '')}>{choice.recent ? choice.agent.label : state}</small>}
+      {(choice.recent || state) && <small className={'model-option-agent' + (state ? ' warn' : '')}>{choice.recent ? [choice.agent.label, choice.source].filter(Boolean).join(' · ') : state}</small>}
       {chosen && <Icon name="check" size={14}/>}
     </div>;
   };
@@ -182,7 +191,7 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
       <label className="model-search"><Icon name="search" size={14}/>
         <input ref={search} type="search" value={query} placeholder={t('Search models')} aria-label={t('Search models')} role="combobox" aria-expanded="true" aria-controls={`${id}-list`} aria-autocomplete="list"
           aria-activedescendant={activeChoice ? `${id}-${activeChoice.key.replace(/\W/g, '_')}` : undefined}
-          onChange={event => { setQuery(event.target.value); const terms = event.target.value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean); const first = agents.flatMap(choices).find(choice => terms.every(term => `${choice.agent.label} ${choice.name} ${choice.model}`.toLocaleLowerCase().includes(term))); setActive(first?.key || ''); }}
+          onChange={event => { setQuery(event.target.value); const terms = event.target.value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean); const first = agents.flatMap(choices).find(choice => terms.every(term => `${choice.agent.label} ${choice.source || ''} ${choice.name} ${choice.model}`.toLocaleLowerCase().includes(term))); setActive(first?.key || ''); }}
           onKeyDown={event => {
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); move(event.key === 'ArrowDown' ? 1 : -1); }
             else if (event.key === 'Enter' && activeChoice) { event.preventDefault(); choose(activeChoice); }
@@ -192,7 +201,9 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
         {recentItems.length > 0 && <div role="group" aria-label={t('Recent')} className="model-group"><div className="model-group-head" aria-hidden="true">{t('Recent')}</div>{recentItems.map(renderChoice)}</div>}
         {groups.map(group => <div key={group.option.value} role="group" aria-label={group.option.label} className="model-group">
           <div className="model-group-head" aria-hidden="true"><BrandIcon name={group.option.value} size={15}/>{group.option.label}</div>
-          {group.items.map(renderChoice)}
+          {bySource(group.items).map(part => part.source
+            ? <div key={part.source} role="group" aria-label={`${group.option.label}, ${part.source}`} className="model-subgroup"><div className="model-subgroup-head" aria-hidden="true">{part.source}</div>{part.items.map(renderChoice)}</div>
+            : <Fragment key="">{part.items.map(renderChoice)}</Fragment>)}
         </div>)}
         {!visible.length && <p className="model-empty">{t('No models match “{query}”', { query: query.trim() })}</p>}
       </div>

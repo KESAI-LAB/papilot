@@ -151,11 +151,13 @@ export class WriterAgent extends Adapter {
   protected async models() {
     await this.refreshModels();
     const fallback = this.defaultModel();
+    // The picker groups models by provider, under the names Papilot's settings use.
+    const sources = new Map(this.credentials!.status().providers.map(provider => [provider.id, provider.name]));
     return { data: this.available().map(model => {
       const listed = this.catalog.get(model.provider)?.efforts.get(model.id);
       const efforts = listed || (model.reasoning ? this.ai!.getSupportedThinkingLevels(model).filter(level => level !== 'off') : []);
       return {
-        model: modelId(model), displayName: `${model.name} · ${this.registry!.getProviderDisplayName(model.provider)}`, isDefault: model === fallback,
+        model: modelId(model), displayName: model.name, source: sources.get(model.provider) || this.registry!.getProviderDisplayName(model.provider), isDefault: model === fallback,
         supportedReasoningEfforts: efforts.map(reasoningEffort => ({ reasoningEffort })), defaultReasoningEffort: efforts.includes('medium') ? 'medium' : efforts[0] || null,
       };
     }) };

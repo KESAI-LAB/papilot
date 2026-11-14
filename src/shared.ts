@@ -123,7 +123,8 @@ export interface WriterProvider { id: string; name: string; kind: 'login' | 'key
 export interface WriterLogin { id: string; provider: string; name: string; status: 'waiting' | 'done' | 'failed' | 'cancelled'; url: string | null; instructions: string | null; error: string | null; startedAt: number }
 export interface WriterAuth { providers: WriterProvider[]; logins: WriterLogin[] }
 export const isAgentId = (value: unknown): value is AgentId => AGENT_IDS.includes(value as AgentId);
-export interface AgentModel { id: string; name: string; isDefault: boolean; efforts: string[]; defaultEffort: string | null; fastMode?: { serviceTier: string; description: string } }
+/** source: where an agent with several model providers gets this model, such as a subscription. */
+export interface AgentModel { id: string; name: string; source?: string; isDefault: boolean; efforts: string[]; defaultEffort: string | null; fastMode?: { serviceTier: string; description: string } }
 // The account's included usage: rolling windows (minutes long, reset time in ms) and credits.
 export interface UsageWindow { usedPercent: number; minutes: number | null; resetsAt: number | null }
 export interface Usage { plan: string | null; windows: UsageWindow[]; credits: { unlimited: boolean; balance: number | null } | null; reached: boolean }

@@ -225,7 +225,8 @@ test('Papilot Writer lists the provider\'s models and falls back to Pi\'s entrie
   };
   const listed = new WriterAgent({ dir: fs.mkdtempSync(path.join(os.tmpdir(), 'papilot writer models ')), auth: AuthStorage.inMemory({ openai: { type: 'api_key', key: 'sk-test' } }), env: {}, fetch: fetcher });
   await listed.start();
-  const ids = (await listed.request('model/list')).data.map((model: any) => model.model);
+  const data = (await listed.request('model/list')).data, ids = data.map((model: any) => model.model);
+  assert.ok(data.every((model: any) => model.source === 'OpenAI' && !model.displayName.includes(' · ')), 'The provider is a group in the picker, not a suffix');
   assert.deepEqual([...ids].sort(), ['openai/gpt-5.4', 'openai/gpt-6']);
   online = false;
   const offline = new WriterAgent({ dir: fs.mkdtempSync(path.join(os.tmpdir(), 'papilot writer models ')), auth: AuthStorage.inMemory({ openai: { type: 'api_key', key: 'sk-test' } }), env: {}, fetch: fetcher });

@@ -513,6 +513,9 @@ body.resizing iframe{pointer-events:none}
 .agent-picker-panel.has-permissions .model-list{max-height:min(208px,28dvh)}
 .model-group+.model-group{margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
 .model-group-head{display:flex;align-items:center;gap:7px;padding:7px 8px 3px;font-size:11.5px;font-weight:600;color:var(--text-3)}
+/* An agent's model sources, such as a subscription and each API key, under its name. */
+.model-subgroup-head{padding:6px 8px 2px 18px;font-size:11px;color:var(--text-3)}
+.model-subgroup .model-option{padding-left:26px}
 .model-option{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 8px 0 18px;border-radius:7px;font-size:13px;color:var(--text);cursor:pointer;user-select:none}
 .model-option.active{background:var(--bg-hover)}
 .model-option[aria-selected=true]{font-weight:600}

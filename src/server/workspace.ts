@@ -47,7 +47,7 @@ export const agentModel = (m: any): AgentModel => {
     ? m.serviceTiers.find((tier: any) => typeof tier?.id === 'string' && (tier.name === 'Fast' || tier.id === 'fast' || tier.id === 'priority'))
     : m.additionalSpeedTiers?.includes('fast') ? { id: 'priority' } : undefined;
   return {
-    id: m.model || m.id, name: m.displayName || m.model || m.id, isDefault: Boolean(m.isDefault),
+    id: m.model || m.id, name: m.displayName || m.model || m.id, ...(typeof m.source === 'string' && m.source ? { source: m.source } : {}), isDefault: Boolean(m.isDefault),
     efforts: (m.supportedReasoningEfforts || []).map((e: any) => e?.reasoningEffort).filter((e: unknown) => typeof e === 'string'),
     defaultEffort: typeof m.defaultReasoningEffort === 'string' ? m.defaultReasoningEffort : null,
     ...(fast ? { fastMode: { serviceTier: fast.id, description: typeof fast.description === 'string' ? fast.description : '' } } : {}),
