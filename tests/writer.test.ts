@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { decide, resolveInside } from '../src/server/writer/policy.ts';
-import { project, simpleMacros } from '../src/server/writer/plain-text.ts';
+import { blankComments, project, simpleMacros } from '../src/server/writer/plain-text.ts';
 import { paperMap } from '../src/server/writer/paper-map.ts';
 import { writerTools, type ToolHost } from '../src/server/writer/tools.ts';
 import { WriterAgent, toolItem } from '../src/server/writer/agent.ts';
@@ -299,4 +299,23 @@ test('The context breakdown names what fills the window and adds up to what the 
   const full = contextBreakdown(session, 195000, 200000);
   assert.equal(full.find(part => part.id === 'reserve')?.tokens, 5000);
   assert.equal(full.find(part => part.id === 'free')?.tokens, 0);
+});
+
+test('The paper map pins the live title and abstract, not ones commented out', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot writer title '));
+  fs.writeFileSync(path.join(dir, 'main.tex'), String.raw`\documentclass{article}
+% \title{An Old Working Title}
+%\begin{abstract}Draft abstract.\end{abstract}
+\title{The Real Title}
+\begin{document}
+\begin{abstract}
+We cut errors by 50\% overall. % not this
+\end{abstract}
+\end{document}
+`);
+  const map = await paperMap(dir);
+  assert.match(map.text, /^Title \(main\.tex:4\): The Real Title$/m);
+  assert.match(map.text, /^Abstract \(main\.tex:6-8\):$/m);
+  assert.doesNotMatch(map.text, /Old Working Title|Draft abstract|not this/);
+  assert.equal(blankComments('a\\% b % c\n\\\\% d'), 'a\\% b    \n\\\\   ', 'An escaped % stays; one after \\\\ starts a comment');
 });

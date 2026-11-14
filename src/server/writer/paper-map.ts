@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { engine } from '../references.ts';
 import type { BibliographyReport } from '../../shared.ts';
-import { argumentOf, lineAt, project, simpleMacros } from './plain-text.ts';
+import { argumentOf, blankComments, lineAt, project, simpleMacros } from './plain-text.ts';
 
 // The paper map: what Papilot Writer knows about the manuscript before it
 // reads a line. It is rebuilt from the sources at the start of every turn,
@@ -82,7 +82,8 @@ export async function paperMap(root: string, build?: BuildNote | null): Promise<
     raw = new Map(files.map(file => [file, read(file) || ''] as const));
     const textMacros = simpleMacros([...raw.values()]);
     const pinned = (name: 'title' | 'abstract') => {
-      for (const [file, source] of raw) {
+      // Drafts keep old titles commented out; only the live one counts.
+      for (const [file, source] of [...raw].map(([file, text]) => [file, blankComments(text)] as const)) {
         const range = name === 'title' ? argumentOf(source, 'title')
           : (() => { const m = /\\begin\s*\{abstract\}([\s\S]*?)\\end\s*\{abstract\}/.exec(source); return m ? { start: m.index + m[0].indexOf('}') + 1, end: m.index + m[0].length - '\\end{abstract}'.length } : argumentOf(source, 'abstract'); })();
         if (range) return { file, line: lineAt(source, range.start), lastLine: lineAt(source, range.end), text: project(source.slice(range.start, range.end), textMacros).text.trim() };

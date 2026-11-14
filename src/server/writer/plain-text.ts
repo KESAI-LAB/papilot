@@ -117,6 +117,11 @@ export function lineAt(source: string, offset: number) {
 }
 
 /** The balanced argument of the first \name{...} in a source, or null. */
+/** The source with each comment blanked to spaces, so offsets and line numbers still point into the file. A % after an odd number of backslashes is a literal percent sign. */
+export function blankComments(source: string) {
+  return source.replace(/(^|[^\\])((?:\\\\)*)(%.*)$/gm, (_, before, slashes, comment) => before + slashes + ' '.repeat(comment.length));
+}
+
 export function argumentOf(source: string, name: string) {
   const m = new RegExp(`\\\\${name}\\*?\\s*(?:\\[[^\\]]*\\]\\s*)?\\{`).exec(source);
   if (!m) return null;
