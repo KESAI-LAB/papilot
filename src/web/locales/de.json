@@ -1414,5 +1414,9 @@
   "Tool results": "Tool-Ergebnisse",
   "Your messages": "Ihre Nachrichten",
   "{percent}% used": "{percent} % belegt",
-  "{tokens} of {window} tokens": "{tokens} von {window} Tokens"
+  "{tokens} of {window} tokens": "{tokens} von {window} Tokens",
+  "{n} file": "{n} Datei",
+  "{n} files": "{n} Dateien",
+  "{n} place in the paper": "{n} Stelle im Paper",
+  "{n} places in the paper": "{n} Stellen im Paper"
 }

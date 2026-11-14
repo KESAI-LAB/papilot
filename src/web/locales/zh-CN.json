@@ -215,5 +215,9 @@
   "Tool results": "工具结果",
   "Your messages": "你的消息",
   "{percent}% used": "已用 {percent}%",
-  "{tokens} of {window} tokens": "{tokens} / {window} 个 token"
+  "{tokens} of {window} tokens": "{tokens} / {window} 个 token",
+  "{n} file": "{n} 个文件",
+  "{n} files": "{n} 个文件",
+  "{n} place in the paper": "论文中 {n} 处",
+  "{n} places in the paper": "论文中 {n} 处"
 }

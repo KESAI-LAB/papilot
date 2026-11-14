@@ -38,6 +38,7 @@ import { ActionMenu } from './action-menu.tsx';
 import { Icon } from './icons.tsx';
 import { toolIcon, toolNote, toolSentence, toolSummary } from './tool-calls.ts';
 import { ContextMeter } from './context-meter.tsx';
+import { ChangeSummary, FileDiffs } from './file-changes.tsx';
 import { UpdateNotice, versionLabel } from './update-notice.tsx';
 import { chooseDirectory, DesktopWindowChrome, nativeFolders } from './desktop-chrome.tsx';
 import { MainFileDialog } from './main-file-dialog.tsx';
@@ -220,6 +221,8 @@ function CopyButton({ text }: { text: string }) {
 // absolute paths; the chat shows the command itself and paths in the task.
 const shellCommand = (text: string) => text.match(/^\/bin\/(?:ba|z)?sh -lc (['"])([\s\S]*)\1$/)?.[2] ?? text;
 const taskPath = (file: string, root: string) => root && file.startsWith(root + '/') ? file.slice(root.length + 1) : file;
+// Items are named task:turn:item; a user message starts the next turn.
+const turnOf = (item: TimelineItem) => item.type === 'user' ? null : item.id.split(':')[1] || null;
 const editedFiles = (item: TimelineItem, root: string) => item.text.split('\n').filter(Boolean).map(file => taskPath(file, root));
 const toolState = (item: TimelineItem) => item.status === 'inProgress' ? 'running' : item.status && item.status !== 'completed' ? 'failed' : '';
 
@@ -303,10 +306,10 @@ const TimelineEntry = memo(function TimelineEntry({ item, agent, root, pages = t
   if (item.type === 'assistant') return <article className="message assistant" aria-label={`${agent}, ${time(item.createdAt)}`}><div className="message-body markdown"><Markdown text={item.text}/></div><div className="message-actions"><CopyButton text={item.text}/><time dateTime={new Date(item.createdAt).toISOString()}>{time(item.createdAt)}</time></div></article>;
   const files = item.type === 'files' ? editedFiles(item, root) : [];
   const label = item.type === 'command' ? shellCommand(item.text) || t('Run command') : item.type === 'files' ? (files.length === 1 ? t('Edited {file}', { file: files[0] }) : t('Edited {n} files', { n: files.length })) : item.type === 'pdf' ? (item.text ? t('Viewed the PDF: {places}', { places: item.text }) : t('Viewed the PDF')) : toolSentence(item) || item.text || t('Run tool');
-  const detail = item.type === 'files' ? files.join('\n') : item.detail;
+  const detail = item.type === 'files' ? null : item.detail;
   const note = toolNote(item);
   const state = toolState(item);
-  const row = <details className={'tool-item ' + state} data-kind={item.type === 'tool' ? item.tool?.kind || 'tool' : item.type}><summary><Icon name={toolIcon(item)} size={14}/><span className="tool-label">{label}{note && <span className="tool-note">{note}</span>}</span>{state === 'running' ? <span className="spinner" aria-label={t('Running')}/> : state && <span className="tool-status">{item.status === 'declined' ? t('Declined') : t('Failed')}</span>}</summary>{detail && <pre>{detail}</pre>}</details>;
+  const row = <details className={'tool-item ' + state} data-kind={item.type === 'tool' ? item.tool?.kind || 'tool' : item.type}><summary><Icon name={toolIcon(item)} size={14}/><span className="tool-label">{label}{note && <span className="tool-note">{note}</span>}</span>{state === 'running' ? <span className="spinner" aria-label={t('Running')}/> : state && <span className="tool-status">{item.status === 'declined' ? t('Declined') : t('Failed')}</span>}</summary>{item.type === 'files' ? <FileDiffs changes={item.changes} files={files}/> : detail && <pre>{detail}</pre>}</details>;
   return pages && item.pages?.length ? <>{row}<PageStrip items={[item]}/></> : row;
 });
 
@@ -388,7 +391,14 @@ function Activity({ source, onRevealQuote, task, runtime, reconnecting, onReconn
   // React skip the conversation until its items change.
   const agent = agentName(task), review = task.mode === 'review', root = task.worktree;
   const thread = useMemo(() => timelineEntries(visibleTimeline(items).filter(item => item.type !== 'reviewOutput').map(item => review && item.type === 'assistant' ? { ...item, text: aiReviewSummary(item.text) } : item))
-    .map(entry => entry.length > 1 ? <ToolGroup key={entry[0].id} items={entry} agent={agent} root={root}/> : <TimelineEntry key={entry[0].id} item={entry[0]} agent={agent} root={root}/>), [items, review, agent, root]);
+    .flatMap((entry, index, all) => {
+      const shown = entry.length > 1 ? <ToolGroup key={entry[0].id} items={entry} agent={agent} root={root}/> : <TimelineEntry key={entry[0].id} item={entry[0]} agent={agent} root={root}/>;
+      // A finished turn that changed files ends with where it changed the paper.
+      const turn = turnOf(entry[0]), next = all[index + 1];
+      if (!turn || (next && (next[0].type !== 'user' && turnOf(next[0]) === turn)) || (!next && active)) return [shown];
+      const edits = all.filter(other => turnOf(other[0]) === turn).flat().filter(item => item.type === 'files' && item.changes?.length);
+      return edits.length ? [shown, <ChangeSummary key={turn + ':changes'} items={edits}/>] : [shown];
+    }), [items, review, agent, root, active]);
   const hint = task.status === 'deleting' ? t('This task is being deleted') : task.status === 'uncertain' ? t('Check task status before sending') : task.preparation ? t('Send more instructions once the task has started.') : sending ? t('Sending…')
     : emptyNotes ? canSend ? tn(emptyNotes, '{n} empty comment will stay in drafts', '{n} empty comments will stay in drafts') : t('Write a comment or message to send.') : active ? t('{agent} is working · new instructions run next', { agent: agentName(task) }) : '';
   // A source tab beside the chat hides the chat while it is selected; both stay as they were.

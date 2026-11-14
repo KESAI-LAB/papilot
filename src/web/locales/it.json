@@ -1414,5 +1414,9 @@
   "Tool results": "Risultati degli strumenti",
   "Your messages": "I tuoi messaggi",
   "{percent}% used": "{percent}% usato",
-  "{tokens} of {window} tokens": "{tokens} di {window} token"
+  "{tokens} of {window} tokens": "{tokens} di {window} token",
+  "{n} file": "{n} file",
+  "{n} files": "{n} file",
+  "{n} place in the paper": "{n} punto dell’articolo",
+  "{n} places in the paper": "{n} punti dell’articolo"
 }

@@ -1414,5 +1414,9 @@
   "Tool results": "工具結果",
   "Your messages": "你的訊息",
   "{percent}% used": "已用 {percent}%",
-  "{tokens} of {window} tokens": "{tokens} / {window} 個 token"
+  "{tokens} of {window} tokens": "{tokens} / {window} 個 token",
+  "{n} file": "{n} 個檔案",
+  "{n} files": "{n} 個檔案",
+  "{n} place in the paper": "論文中 {n} 處",
+  "{n} places in the paper": "論文中 {n} 處"
 }

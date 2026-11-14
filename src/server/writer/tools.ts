@@ -290,7 +290,8 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
       await permit(host, 'edit', rel, { kind: 'file', title: `Edit ${rel}`, path: rel }, signal);
       if (fs.readFileSync(abs, 'utf8') !== before) throw toolError(`${rel} changed while waiting for approval. Read it again and redo the edit.`);
       fs.writeFileSync(abs, after);
-      return text(clip(createTwoFilesPatch(rel, rel, before, after, '', '', { context: 2 }).split('\n').slice(2).join('\n'), 12000), { path: rel, changed: true });
+      const patch = createTwoFilesPatch(rel, rel, before, after, '', '', { context: 2 }).split('\n').slice(2).join('\n');
+      return text(clip(patch, 12000), { path: rel, changed: true, diff: patch });
     },
   });
 
@@ -303,9 +304,11 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
       const { abs, rel } = resolveInside(cwd, file), exists = fs.existsSync(abs);
       if (exists && fs.statSync(abs).isDirectory()) throw toolError(`${rel} is a folder.`);
       await permit(host, exists ? 'overwrite' : 'create', rel, { kind: 'file', title: `${exists ? 'Replace' : 'Create'} ${rel}`, path: rel }, signal);
+      const before = exists ? fs.readFileSync(abs, 'utf8') : '';
       fs.mkdirSync(path.dirname(abs), { recursive: true });
       fs.writeFileSync(abs, content);
-      return text(`${exists ? 'Replaced' : 'Created'} ${rel} (${content.split('\n').length} lines).`, { path: rel, changed: true });
+      const patch = createTwoFilesPatch(rel, rel, before, content, '', '', { context: 2 }).split('\n').slice(2).join('\n');
+      return text(`${exists ? 'Replaced' : 'Created'} ${rel} (${content.split('\n').length} lines).`, { path: rel, changed: true, diff: patch });
     },
   });
 

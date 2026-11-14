@@ -1,6 +1,6 @@
 {
   ", ": {
-    "revision": "616d6be20e226bcb9b527e08704878200086857827628bebcb7469b7fd6d1da2",
+    "revision": "a3507bf4d5ede338cce66f1b18037c31e74bfd4fcbe01b290e992433589da059",
     "textHash": "0a07f659461970d8d8dcefe4fff96a1745599810dc7d47391e95c803b7b2072c",
     "model": "gemini-4-argon-medium"
   },
@@ -500,7 +500,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Changes": {
-    "revision": "e3d9af91646a51c8323090cf9958b56c530ba5f4ecfc4ea324107b4617848d3c",
+    "revision": "4a289aba384ccbc699086de864bc44655c65f753d139c0335e3581592eb73842",
     "textHash": "34538baeda2cc10d6dd727ac19e9f16bf1ff815372d29aff4660aa376c43217a",
     "model": "gemini-4-argon-medium"
   },
@@ -5220,7 +5220,7 @@
     "model": "gemini-4-argon-medium"
   },
   "p. {page}": {
-    "revision": "8d4e50e129fddae6001883cf8db1a961e501b4a446ad75f3ea64ea9fdbd9a920",
+    "revision": "63256974076eef2b54b73afddc0bbd205ca83ae6f3076bb708729c37f5cc4c2b",
     "textHash": "1cbd1edb7c6e32ee50c7edb83eb1e5bef69aff9b63c08f68170026c564877890",
     "model": "gemini-4-argon-medium"
   },

@@ -13,6 +13,7 @@ import { writerTools, type ToolHost } from '../src/server/writer/tools.ts';
 import { WriterAgent, toolItem } from '../src/server/writer/agent.ts';
 import { claudeSubscription, WriterCredentials } from '../src/server/writer/auth.ts';
 import { contextBreakdown, COMPACTION_RESERVE } from '../src/server/writer/context.ts';
+import { fileEdit } from '../src/server/writer/edits.ts';
 
 function paper() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot writer 中文 '));
@@ -380,4 +381,22 @@ Text.
   assert.match(map.text, /^- 1 Shown \(p\. 1\) — main\.tex:15-16 /m);
   assert.doesNotMatch(map.text, /Old Working Title|draft sentence|not this|Hidden/);
   assert.equal(blankComments('a\\% b % c\n\\\\% d'), 'a\\% b    \n\\\\   ', 'An escaped % stays; one after \\\\ starts a comment');
+});
+
+test('an edit is shown as its diff and named by the parts of the paper it changed', () => {
+  const heading = (id: string, number: string, title: string, level: number, ranges: [number, number][], page: string, parent: string | null = null) =>
+    ({ id, number, title, kind: 'section', level, file: 'main.tex', line: ranges[0][0], labels: [], ranges: { 'main.tex': ranges }, parent, page });
+  const outline = [heading('s1', '1', 'Introduction', 1, [[10, 30]], '1'), heading('s2', '2', 'Parsing', 1, [[31, 80]], '3'), heading('s2.1', '2.1', 'A Simple Implementation', 2, [[40, 60]], '4', 's2')];
+  const diff = '--- a/main.tex\n+++ b/main.tex\n@@ -12,2 +12,3 @@\n a\n-b\n+c\n+d\n@@ -44,1 +45,1 @@\n-x\n+y\n@@ -50,1 +51,1 @@\n-p\n+q\n';
+  const edit = fileEdit('main.tex', diff, outline);
+  assert.equal(edit.added, 4); assert.equal(edit.removed, 3);
+  assert.deepEqual(edit.places, [
+    { sections: [{ number: '1', title: 'Introduction' }], page: '1', lines: '12–14', added: 2, removed: 1 },
+    { sections: [{ number: '2.1', title: 'A Simple Implementation' }], page: '4', lines: '45–51', added: 2, removed: 2 },
+  ]);
+  assert.match(edit.diff!, /\+d/);
+  // A new file comes as its whole text, and a file outside the paper has no places.
+  const added = fileEdit('notes.md', 'one\ntwo\n', outline, 'add');
+  assert.deepEqual([added.added, added.removed, added.places], [2, 0, undefined]);
+  assert.match(added.diff!, /^@@ -0,0 \+1,2 @@\n\+one\n\+two/);
 });

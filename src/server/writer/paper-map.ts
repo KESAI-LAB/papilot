@@ -98,6 +98,22 @@ function texFiles(root: string) {
   return found;
 }
 
+/** The traced headings as the outline the tools use. */
+export function outlineOf(traced: Traced): Heading[] {
+  const ids = new Map<object, string>();
+  return traced.headings.map((heading, index) => {
+    const id = heading.anchor || `part-${index + 1}`;
+    ids.set(heading, id);
+    const parent = traced.headings.slice(0, index).reverse().find(other => other.level < heading.level);
+    return { id, title: heading.title, number: heading.number, kind: heading.kind, level: heading.level, file: heading.file, line: heading.line, labels: heading.labels,
+      ranges: heading.ranges, parent: parent ? ids.get(parent) : null, page: heading.page, changed: heading.changed };
+  });
+}
+/** Only the outline of the paper in a worktree, from its latest build; empty without one. */
+export function paperOutline(root: string, compiled: CompiledPaper | null): Heading[] {
+  try { const traced = compiled && fs.existsSync(compiled.pdf) ? readTrace(compiled, fs.realpathSync(root)) : null; return traced ? outlineOf(traced) : []; } catch { return []; }
+}
+
 /** Builds the map of the paper in a worktree from its latest build. Never throws. */
 export async function paperMap(root: string, options: { compiled?: CompiledPaper | null; note?: BuildNote | null } = {}): Promise<PaperMap> {
   const lines: string[] = [], compiled = options.compiled ?? null;
@@ -143,14 +159,7 @@ export async function paperMap(root: string, options: { compiled?: CompiledPaper
       lines.push(`Files TeX read (${traced.inputs.length}): ${cap(traced.inputs, 40, file => { const text = read(file); return text == null ? `${file} (gone)` : `${file} (${text.split('\n').length} lines)`; })}`);
       if (traced.bibs.length) lines.push(`Bibliography files: ${traced.bibs.join(', ')}`);
 
-      const ids = new Map<object, string>();
-      result.outline = traced.headings.map((heading, index) => {
-        const id = heading.anchor || `part-${index + 1}`;
-        ids.set(heading, id);
-        const parent = traced.headings.slice(0, index).reverse().find(other => other.level < heading.level);
-        return { id, title: heading.title, number: heading.number, kind: heading.kind, level: heading.level, file: heading.file, line: heading.line, labels: heading.labels,
-          ranges: heading.ranges, parent: parent ? ids.get(parent) : null, page: heading.page, changed: heading.changed };
-      });
+      result.outline = outlineOf(traced);
       if (result.outline.length) {
         const top = Math.min(...result.outline.map(node => node.level));
         lines.push('', 'Outline (each part with its first page, and every file and line range it spans, subsections included):');

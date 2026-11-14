@@ -17,6 +17,8 @@ import { CursorAgent } from './cursor.ts';
 import { GrokAgent } from './grok.ts';
 import { WriterAgent } from './writer/agent.ts';
 import type { CompiledPaper } from './writer/build-map.ts';
+import { fileEdit } from './writer/edits.ts';
+import { paperOutline } from './writer/paper-map.ts';
 import { AGENT_TURN, reviewClient, reviewConnectionError, taskRoute, confirmedReviewResponse, type ReviewClient } from './review.ts';
 import { pageViewDir, VERSION } from './paths.ts';
 import { prepareRepository } from './imports.ts';
@@ -792,7 +794,18 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
         entry.text = noteOptionsSummary(entry.rawText || '');
       }
       if (item.type === 'commandExecution') { entry.type = 'command'; entry.detail = String(item.aggregatedOutput || previous?.detail || '').slice(-40000); }
-      if (item.type === 'fileChange') { entry.type = 'files'; entry.text = (item.changes || []).map((change: any) => change.path).join('\n'); }
+      if (item.type === 'fileChange') {
+        entry.type = 'files'; entry.text = (item.changes || []).map((change: any) => change.path).join('\n');
+        // Each change with its diff and where it is in the paper.
+        const changes = (item.changes || []).filter((change: any) => typeof change?.path === 'string');
+        if (changes.some((change: any) => typeof change.diff === 'string')) {
+          const outline = paperOutline(task.worktree, this.writerBuilds.get(task.id) || this.paperBuild(task));
+          entry.changes = changes.map((change: any) => {
+            const rel = path.isAbsolute(change.path) ? path.relative(task.worktree, change.path).split(path.sep).join('/') : change.path;
+            return fileEdit(rel, typeof change.diff === 'string' ? change.diff : undefined, outline, typeof change.kind === 'string' ? change.kind : change.kind?.type);
+          });
+        } else if (previous?.changes) entry.changes = previous.changes;
+      }
       if (item.type === 'mcpToolCall') { entry.type = 'tool'; entry.text = `${item.server} / ${item.tool}`; }
       if (item.type === 'toolCall') {
         entry.type = 'tool';

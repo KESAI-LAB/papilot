@@ -89,7 +89,11 @@ export interface ContextUsage { tokens: number; window: number; breakdown?: Cont
 export interface ToolCallInfo { kind: string; target?: string; lines?: string; place?: ToolPlace }
 /** Where a read was in the paper: the sections it covered and the PDF pages they print on. */
 export interface ToolPlace { sections: { number: string; title: string }[]; more?: number; partial?: boolean; pages?: number[] }
-export interface TimelineItem { id: string; taskId: string; type: string; text: string; rawText?: string; detail?: string; status?: string; createdAt: number; meta?: MessageMeta; tool?: ToolCallInfo; pages?: PageView[] }
+export interface TimelineItem { id: string; taskId: string; type: string; text: string; rawText?: string; detail?: string; status?: string; createdAt: number; meta?: MessageMeta; tool?: ToolCallInfo; pages?: PageView[]; changes?: FileEdit[] }
+/** A file an agent changed: its diff, and where in the paper the changes are. */
+export interface FileEdit { path: string; diff?: string; added: number; removed: number; places?: EditPlace[] }
+/** Changes within one part of the paper: its sections (innermost last), the page it starts on, and the lines changed. */
+export interface EditPlace { sections: { number: string; title: string }[]; page?: string; lines: string; added: number; removed: number }
 /** A page an agent looked at, kept by Papilot so the chat can show it. */
 export interface PageView { index: number; label: string | null; file: string }
 // A user message can run a skill or carry review feedback; the chat shows

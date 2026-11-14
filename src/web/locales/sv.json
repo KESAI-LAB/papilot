@@ -1414,5 +1414,9 @@
   "Tool results": "Verktygsresultat",
   "Your messages": "Dina meddelanden",
   "{percent}% used": "{percent} % använt",
-  "{tokens} of {window} tokens": "{tokens} av {window} token"
+  "{tokens} of {window} tokens": "{tokens} av {window} token",
+  "{n} file": "{n} fil",
+  "{n} files": "{n} filer",
+  "{n} place in the paper": "{n} ställe i artikeln",
+  "{n} places in the paper": "{n} ställen i artikeln"
 }

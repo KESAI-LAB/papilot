@@ -1414,5 +1414,9 @@
   "Tool results": "ツールの結果",
   "Your messages": "あなたのメッセージ",
   "{percent}% used": "{percent}% 使用",
-  "{tokens} of {window} tokens": "{tokens} / {window} トークン"
+  "{tokens} of {window} tokens": "{tokens} / {window} トークン",
+  "{n} file": "{n} 個のファイル",
+  "{n} files": "{n} 個のファイル",
+  "{n} place in the paper": "論文の {n} 箇所",
+  "{n} places in the paper": "論文の {n} 箇所"
 }

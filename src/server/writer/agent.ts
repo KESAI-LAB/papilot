@@ -363,6 +363,8 @@ export class WriterAgent extends Adapter {
         const details = event.result?.details || {};
         let item: Item = { ...started, status: event.isError ? 'failed' : 'completed' };
         if (started.type === 'fileChange' && (event.isError || !details.changed)) item = { id: started.id, type: 'toolCall', text: `${event.toolName} ${String((started.changes as { path: string }[])[0]?.path || '')}`, status: event.isError ? 'failed' : 'completed' };
+        // An edit carries its diff, which the chat shows.
+        if (item.type === 'fileChange' && typeof details.diff === 'string') item = { ...item, changes: [{ path: String(details.path || (started.changes as { path: string }[])[0]?.path || ''), diff: details.diff }] };
         if (started.type === 'commandExecution') item = { ...item, aggregatedOutput: details.output ?? resultText(event.result), exitCode: details.exitCode ?? null };
         if (started.type === 'dynamicToolCall') item = { ...item, success: !event.isError };
         // A read says which file and lines it ended up reading, and where they are in the paper.
