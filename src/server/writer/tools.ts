@@ -7,7 +7,7 @@ import type { ToolDefinition } from '@mariozechner/pi-coding-agent';
 import { decide, isProse, isText, resolveInside, SKIP_DIRS, toolError, type Action, type WriterMode } from './policy.ts';
 import { outlineLines, paperMap, type BuildNote, type Heading } from './paper-map.ts';
 import { compiledPaper } from './build-map.ts';
-import { lineAt, project, simpleMacros } from './plain-text.ts';
+import { argumentsOf, definitions, documentStart, eachNode, lineAt, literal, parseTex, project, simpleMacros } from './plain-text.ts';
 import { bibKeys, checkBibtex, describeCandidate, fetchBibtex, searchReferences } from './references.ts';
 
 // Papilot Writer's tools. They are about the paper (its outline, sections,
@@ -226,7 +226,7 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
       let pattern: RegExp;
       try { pattern = new RegExp(regex ? query : loose(query), 'gi'); } catch (error) { throw toolError(`Invalid regular expression: ${(error as Error).message}`); }
       for (const [file, source] of map.sources) {
-        const body = /\\begin\s*\{document\}/.exec(source), from = body ? body.index : 0;
+        const from = documentStart(source);
         const view = project(source.slice(from), macros);
         for (const m of view.text.matchAll(pattern)) {
           if (!m[0] || hits.length >= max_results) break;
@@ -246,18 +246,32 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
     promptSnippet: 'find_references: uses of a label, citation key or macro',
     parameters: Type.Object({ name: Type.String({ minLength: 1, description: 'A label (sec:intro), a citation key (smith2020) or a macro (\\method).' }) }),
     async execute({ name }) {
-      const root = fs.realpathSync(cwd), key = name.trim(), macro = key.startsWith('\\'), esc = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const patterns: [string, RegExp][] = macro
-        ? [['definition', new RegExp(`\\\\(?:(?:re)?newcommand|providecommand|DeclareRobustCommand|DeclareMathOperator)\\*?\\s*\\{?${esc}(?![a-zA-Z@])|\\\\def${esc}(?![a-zA-Z@])`)], ['use', new RegExp(`${esc}(?![a-zA-Z@])`)]]
-        : [['label', new RegExp(`\\\\label\\s*\\{${esc}\\}`)], ['reference', new RegExp(`\\\\[a-zA-Z]*ref\\*?\\s*\\{[^}]*(?<![\\w:-])${esc}(?![\\w:-])[^}]*\\}`)],
-          ['citation', new RegExp(`\\\\[a-zA-Z]*cite[a-zA-Z]*\\*?\\s*(?:\\[[^\\]]*\\]\\s*){0,2}\\{[^}]*(?<![\\w:-])${esc}(?![\\w:-])[^}]*\\}`)], ['bib entry', new RegExp(`^\\s*@\\w+\\s*\\{\\s*${esc}\\s*,`)]];
+      const root = fs.realpathSync(cwd), key = name.trim(), macro = key.startsWith('\\') ? key.slice(1) : null;
       const found: string[] = [];
       walk(root, root, 12, (rel, isDir) => {
-        if (isDir || !/\.(tex|bib|sty|cls|ltx)$/i.test(rel)) return;
-        fs.readFileSync(path.join(root, rel), 'utf8').split('\n').forEach((line, index) => {
-          if (/^\s*%/.test(line)) return;
-          const kind = patterns.find(([, pattern]) => pattern.test(line))?.[0];
-          if (kind && found.length < 200) found.push(`${kind}: ${rel}:${index + 1}: ${line.trim().slice(0, 200)}`);
+        const type = isDir ? '' : path.extname(rel).toLowerCase();
+        if (!['.tex', '.bib', '.sty', '.cls', '.ltx'].includes(type)) return;
+        const source = fs.readFileSync(path.join(root, rel), 'utf8'), lines = source.split('\n'), seen = new Set<number>();
+        const add = (kind: string, line: number) => {
+          if (seen.has(line) || found.length >= 200) return;
+          seen.add(line); found.push(`${kind}: ${rel}:${line}: ${lines[line - 1].trim().slice(0, 200)}`);
+        };
+        // A .bib file names its entries @type{key, ...}.
+        if (type === '.bib') {
+          if (!macro) lines.forEach((line, index) => { const open = line.indexOf('{'), at = line.trimStart(); if (at.startsWith('@') && open > 0 && line.slice(open + 1).split(',')[0].trim() === key) add('bib entry', index + 1); });
+          return;
+        }
+        // In LaTeX, the parser tells a command from text and leaves out comments.
+        const keys = (args: Parameters<typeof literal>[0][]) => args.flatMap(arg => literal(arg).split(',').map(part => part.trim()));
+        if (macro) for (const definition of definitions(source)) if (definition.name === macro) add('definition', definition.node.position?.start.line ?? 1);
+        eachNode(parseTex(source).content, (node, siblings, index) => {
+          if (node.type !== 'macro') return;
+          const line = node.position?.start.line ?? 1, command = node.content.toLowerCase();
+          if (macro) { if (node.content === macro) add('use', line); return; }
+          const args = argumentsOf(node, siblings, index);
+          if (node.content === 'label' && keys(args.slice(0, 1)).includes(key)) add('label', line);
+          else if (command.endsWith('ref') && keys(args.slice(0, 1)).includes(key)) add('reference', line);
+          else if (command.includes('cite') && keys(args.slice(-1)).includes(key)) add('citation', line);
         });
       });
       // Definitions first, then uses.

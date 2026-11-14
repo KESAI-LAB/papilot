@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { decide, resolveInside } from '../src/server/writer/policy.ts';
-import { blankComments, project, simpleMacros } from '../src/server/writer/plain-text.ts';
+import { blankComments, contentsEntry, onlyInput, project, simpleMacros, wordCount } from '../src/server/writer/plain-text.ts';
 import { execFileSync } from 'node:child_process';
 import { mapUpdate, paperMap } from '../src/server/writer/paper-map.ts';
 import type { CompiledPaper } from '../src/server/writer/build-map.ts';
@@ -399,4 +399,26 @@ test('an edit is shown as its diff and named by the parts of the paper it change
   const added = fileEdit('notes.md', 'one\ntwo\n', outline, 'add');
   assert.deepEqual([added.added, added.removed, added.places], [2, 0, undefined]);
   assert.match(added.diff!, /^@@ -0,0 \+1,2 @@\n\+one\n\+two/);
+});
+
+test('references, contents and macros are read from LaTeX\'s syntax, not its look', async () => {
+  const dir = paper();
+  fs.appendFileSync(path.join(dir, 'sections', 'method.tex'), String.raw`% \ref{sec:method} in a comment is not a reference
+\verb|\cite{smith2020}| is code. \Cref{sec:intro,sec:method} and \citep[p.~2]{jones,smith2020}.
+\DeclareRobustCommand{\loss}{L} \def\fast{quick} \loss\ is \fast.
+`);
+  const tools = writerTools(host(dir));
+  const found = await call(tools, 'find_references', { name: 'sec:method' });
+  assert.deepEqual(found.split('\n').map(line => line.split(': ').slice(0, 2).join(': ')), ['label: sections/method.tex:1', 'reference: main.tex:12', 'reference: sections/method.tex:7']);
+  const cited = await call(tools, 'find_references', { name: 'smith2020' });
+  assert.deepEqual(cited.split('\n').map(line => line.split(': ').slice(0, 2).join(': ')), ['bib entry: refs.bib:1', 'citation: main.tex:13', 'citation: sections/method.tex:7']);
+  const loss = await call(tools, 'find_references', { name: '\\loss' });
+  assert.deepEqual(loss.split('\n').map(line => line.split(': ').slice(0, 2).join(': ')), ['definition: sections/method.tex:8']);
+  assert.match(await call(tools, 'find_references', { name: '\\fast' }), /^definition: sections\/method\.tex:8/);
+  assert.deepEqual(contentsEntry(String.raw`\protect \numberline {2.1}A \emph {Simple}~Implementation\relax`), { number: '2.1', title: 'A Simple Implementation' });
+  assert.deepEqual(contentsEntry('Introduction'), { number: '', title: 'Introduction' });
+  assert.equal(onlyInput(String.raw`\input{sections/method}`), true);
+  assert.equal(onlyInput(String.raw`\input{a} and text`), false);
+  assert.equal(wordCount(String.raw`We train \emph{a} model~\cite{x} % not this
+on 3 birds.`), 8, 'A citation counts as one word, as it reads: [cite]');
 });

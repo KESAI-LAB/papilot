@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { diffArrays } from 'diff';
-import { blankComments } from './plain-text.ts';
+import { blankComments, contentsEntry, onlyInput } from './plain-text.ts';
 
 // What a build of the paper says about its structure. Every build Papilot
 // runs records how TeX read the paper (engine/src/core/build.ts writes the
@@ -82,10 +82,7 @@ function fields(value: string) {
   return out;
 }
 /** Contents text as TeX expanded it, read as plain text. */
-export function contentsText(text: string) {
-  return text.replace(/\\protect\s*/g, '').replace(/\\(?:xspace|relax|nobreak|ignorespaces|unskip)\b\s*/g, '').replace(/\\(?:nobreakspace|space)\b\s*|~|\\ /g, ' ')
-    .replace(/\\\\\s*(\[[^\]]*\])?/g, ' ').replace(/\\([&%$#_{}])/g, '$1').replace(/\\[a-zA-Z@]+\*?\s*/g, '').replace(/[{}]/g, '').replace(/\s+/g, ' ').trim();
-}
+export const contentsText = (text: string) => contentsEntry(text).title;
 
 /** Reads a build's trace and auxiliary files, by worktree-relative path. Null without a trace. */
 export function readTrace(build: CompiledPaper, worktree: string): Traced | null {
@@ -155,9 +152,7 @@ export function readTrace(build: CompiledPaper, worktree: string): Traced | null
     const at = { file: file.rel, line };
     if (type === 'H') {
       const [list, kind] = [parts[4], parts[5]], text = parts.slice(6).join('|');
-      const numbered = /\\numberline\s*\{((?:[^{}]|\{[^{}]*\})*)\}/.exec(text);
-      const title = contentsText(numbered ? text.slice(0, numbered.index) + text.slice(numbered.index + numbered[0].length) : text);
-      const number = numbered ? contentsText(numbered[1]) : '';
+      const { number, title } = contentsEntry(text);
       if (list === 'toc' && kind in LEVELS) {
         const heading: TracedHeading = { ...at, kind, level: LEVELS[kind], number, title, labels: [], ranges: {} };
         traced.headings.push(heading); tocEvents.push(heading);
@@ -178,7 +173,7 @@ export function readTrace(build: CompiledPaper, worktree: string): Traced | null
 
   // Lines between parts hold no text of their own: blank lines, comments
   // and the \input lines that lead into the next file.
-  const empty = (file: string, line: number) => { const text = (texts.get(file)?.[line - 1] ?? '').trim(); return !text || /^\\(?:input|include)\s*\{[^{}]*\}$/.test(text); };
+  const empty = (file: string, line: number) => { const text = (texts.get(file)?.[line - 1] ?? '').trim(); return !text || onlyInput(text); };
   const trim = (ranges: Record<string, [number, number][]>, heading: TracedHeading) => {
     const kept: Record<string, [number, number][]> = {};
     for (const [file, list] of Object.entries(ranges)) for (let [a, b] of list) {
@@ -221,13 +216,13 @@ export function readTrace(build: CompiledPaper, worktree: string): Traced | null
   };
   readAux(path.join(out, job + '.aux'));
   const aux = auxText.join('\n');
-  const toc = commands(aux, '@writefile', 2).filter(([list]) => list === 'toc').map(([, entry]) => fields(entry.replace(/^\\contentsline\s*/, '')))
+  const toc = commands(aux, '@writefile', 2).filter(([list]) => list === 'toc').map(([, entry]) => fields(entry.slice(entry.indexOf('{'))))
     .filter(entry => entry[0] in LEVELS);
   // The trace and the .aux list the contents in the same order.
   if (toc.length === tocEvents.length) tocEvents.forEach((heading, i) => { heading.page = toc[i][2]; heading.anchor = toc[i][3] || undefined; });
   const numbers = new Map<string, string[]>(), kinds = new Map<string, string>();
   for (const [name, value] of commands(aux, 'newlabel', 2)) {
-    if (name.endsWith('@cref')) kinds.set(name.slice(0, -5), /^\[([^\]]*)\]/.exec(fields(value)[0] || '')?.[1] || '');
+    if (name.endsWith('@cref')) { const kind = fields(value)[0] || ''; kinds.set(name.slice(0, -5), kind.startsWith('[') ? kind.slice(1, kind.indexOf(']')) : ''); }
     else numbers.set(name, fields(value));
   }
   for (const label of traced.labels) {
@@ -236,7 +231,7 @@ export function readTrace(build: CompiledPaper, worktree: string): Traced | null
     label.number = contentsText(value[0] || ''); label.page = value[1];
     const anchor = value[3] || '';
     label.kind = kinds.get(label.name) || anchor.split('.')[0] || undefined;
-    if (value[2] && /^(?:figure|table|algorithm|listing|lstlisting)/.test(label.kind || '')) label.caption = contentsText(value[2]);
+    if (value[2] && ['figure', 'table', 'algorithm', 'listing', 'lstlisting'].some(kind => label.kind?.startsWith(kind))) label.caption = contentsText(value[2]);
     // A label set right after a heading names it.
     const heading = traced.headings.find(item => anchor && item.anchor === anchor)
       || traced.headings.find(item => !item.anchor && item.number === label.number && item.file === label.file && label.line >= item.line && label.line <= item.line + 3);

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { engine } from '../references.ts';
 import { syncView } from '../build-problems.ts';
 import { pdfWords } from '../manuscript.ts';
-import { blankComments, project, simpleMacros } from './plain-text.ts';
+import { blankComments, definitions, project, simpleMacros, wordCount } from './plain-text.ts';
 import { isProse, SKIP_DIRS } from './policy.ts';
 import { diffArrays } from 'diff';
 import { readTrace, type CompiledPaper, type Traced } from './build-map.ts';
@@ -43,13 +43,11 @@ export function reader(root: string) {
     try { return fs.statSync(target).isFile() ? fs.readFileSync(target, 'utf8') : null; } catch { return null; }
   };
 }
-const words = (text: string) => (text.replace(/\\[a-zA-Z@]+\*?(\[[^\]]*\])?/g, ' ').match(/[\p{L}\p{N}]+/gu) || []).length;
 const cap = <T>(items: T[], limit: number, show: (item: T) => string) =>
   items.length > limit ? `${items.slice(0, limit).map(show).join(', ')}, and ${items.length - limit} more` : items.map(show).join(', ');
 const compactWords = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k words` : `${n} words`;
 const time = (at?: number) => at ? new Date(at).toISOString().slice(11, 16) + ' UTC' : 'an earlier session';
 
-const MACRO = /\\(?:(?:re)?newcommand|providecommand|DeclareRobustCommand|NewDocumentCommand|DeclareMathOperator)\*?\s*\{?\\([a-zA-Z@]+)\}?\s*(?:\[(\d)\])?|\\def\\([a-zA-Z@]+)/g;
 
 // The abstract as the PDF prints it: the words inside the boxes SyncTeX
 // places its source lines in. Text TeX skipped (a comment environment, an
@@ -136,21 +134,21 @@ export async function paperMap(root: string, options: { compiled?: CompiledPaper
       result.main = traced.main;
       for (const file of traced.inputs.filter(isProse)) { const text = read(file); if (text != null) result.sources.set(file, text); }
       result.files = traced.inputs; result.bibs = traced.bibs;
-      const macros = simpleMacros([...result.sources.values()].map(blankComments));
+      const macros = simpleMacros([...result.sources.values()]);
 
       lines.push(`Made from the build of ${time(compiled!.builtAt)}${compiled!.pages ? ` (${compiled!.pages} pages)` : ''}: the paper as TeX typeset it, numbered as in the PDF. Line numbers are 1-based.`);
       if (traced.changed.length) lines.push(`Edited since that build: ${cap(traced.changed, 20, file => file)}. Their line numbers are carried over to the current text; parts added or renamed there show after the next build (check_build).`);
       if (traced.missing.length) lines.push(`Gone since that build: ${cap(traced.missing, 20, file => file)}.`);
       lines.push('');
 
-      const title = traced.title?.source ? project(traced.title.source, macros).text.replace(/\s+/g, ' ').trim() : '';
+      const title = traced.title?.source ? project(traced.title.source, macros).text.trim() : '';
       lines.push(title ? `Title (${traced.title!.file}:${traced.title!.line}): ${title}` : 'Title: none (the paper sets no \\title).');
       if (traced.abstract) {
         const { file, start, end } = traced.abstract;
         // The build's own copy of the file, which its PDF was typeset from.
         const snapshot = path.join(compiled!.root, path.posix.relative(compiled!.sourceDir || '', file));
         const text = traced.changed.includes(file) ? null : await printedText(compiled!.pdf, snapshot, start, end);
-        const shown = text ?? project(blankComments((read(file) || '').split('\n').slice(start - 1, end).join('\n')), macros).text.replace(/\s+/g, ' ').trim();
+        const shown = text ?? project(blankComments((read(file) || '').split('\n').slice(start - 1, end).join('\n')), macros).text.trim();
         lines.push(`Abstract (${file}:${start}-${end}${text ? '' : ', from the source'}):`, shown.slice(0, 3000) + (shown.length > 3000 ? ' …' : ''));
       } else lines.push('Abstract: none (no abstract environment).');
       lines.push('');
@@ -175,7 +173,7 @@ export async function paperMap(root: string, options: { compiled?: CompiledPaper
       if (traced.undefinedRefs.length) lines.push(`Undefined references in that build: ${cap(traced.undefinedRefs, 15, key => key)}`);
 
       const defined = new Set<string>();
-      for (const [, text] of result.sources) for (const m of blankComments(text).matchAll(MACRO)) defined.add(`\\${m[1] || m[3]}${m[2] ? `[${m[2]}]` : ''}`);
+      for (const [, text] of result.sources) for (const { name, parameters } of definitions(text)) defined.add(`\\${name}${parameters ? `[${parameters}]` : ''}`);
       if (defined.size) lines.push('', `Macros defined by the paper (${defined.size}): ${cap([...defined], 60, name => name)}`);
 
       try {
@@ -208,8 +206,7 @@ export function outlineLines(nodes: Heading[], maxLevel: number, sources: Map<st
     let size = 0;
     for (const [file, list] of Object.entries(node.ranges || {})) {
       if (!isProse(file)) continue;
-      const text = blankComments(sources.get(file) || '').split('\n');
-      for (const [a, b] of list) size += words(text.slice(a - 1, b).join('\n'));
+      for (const [a, b] of list) size += wordCount(sources.get(file) || '', a, b);
     }
     return `${'  '.repeat(Math.max(0, node.level - base))}- ${node.number ? node.number + ' ' : ''}${node.title}${node.page ? ` (p. ${node.page})` : ''} — ${spans(node)} (${compactWords(size)})${node.labels.length ? ` [${node.labels.join(', ')}]` : ''}${node.changed ? ' (its heading line was edited since the build)' : ''}`;
   });
