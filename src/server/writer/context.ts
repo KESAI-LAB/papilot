@@ -12,8 +12,8 @@ const IMAGE = 1200;
 // Pi's default; Papilot Writer does not change it.
 export const COMPACTION_RESERVE = 16384;
 
-/** The paper map opens each of the author's messages. */
-const MAP = /<paper-map>[\s\S]*?<\/paper-map>/g;
+/** The paper map, or an update to it, opens the author's messages. */
+const MAP = /<paper-map(?:-update)?>[\s\S]*?<\/paper-map(?:-update)?>/g;
 
 type Block = { type: string; text?: string; thinking?: string; name?: string; arguments?: unknown };
 

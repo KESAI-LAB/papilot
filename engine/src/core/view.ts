@@ -42,6 +42,8 @@ export interface ViewResult {
   seconds?: number;
   errors?: string[];
   warnings?: string[];
+  /** With check: where the build is, for Papilot Writer's paper map. */
+  compiled?: { pdf: string; root: string; cwd: string; sourceDir: string };
 }
 // How far from an asked-for line SyncTeX may look for one that printed
 // something (blank lines and comments print nothing).
@@ -147,7 +149,7 @@ export async function view(
   if (request.check) {
     const pageCount = document.countPages();
     document.destroy();
-    return { pages: [], missing: [], targets, pageCount, seconds: build.seconds, errors: build.errors ?? [], warnings: build.warnings };
+    return { pages: [], missing: [], targets, pageCount, seconds: build.seconds, errors: build.errors ?? [], warnings: build.warnings, compiled: { pdf, root: build.root, cwd: build.cwd, sourceDir: project.source_dir || "" } };
   }
   try {
     // MuPDF synthesizes 1, 2, ... when /PageLabels is absent. Those are

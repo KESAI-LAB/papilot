@@ -11,7 +11,8 @@ import { CHARTER, COMPACTION } from './charter.ts';
 import { contextBreakdown } from './context.ts';
 import { fromList, listModels } from './models.ts';
 import { toolError, type WriterMode } from './policy.ts';
-import type { BuildNote } from './paper-map.ts';
+import { mapMessage, mapUpdate, paperMap, type BuildNote } from './paper-map.ts';
+import { compiledPaper } from './build-map.ts';
 import type { Approval, Question, ToolHost } from './tools.ts';
 
 // Papilot Writer: Papilot's own paper-writing agent, built on the Pi agent
@@ -39,6 +40,8 @@ export interface WriterOptions {
 interface Live {
   session: AgentSession; cwd: string; mode: WriterMode; build: BuildNote | null;
   chore: { reason: string } | null; choreChanged: boolean; turn: Turn | null; tools: string[];
+  /** The paper map as last sent, whole or with its updates, so the next turn sends only what changed. */
+  map?: string;
 }
 interface Wait { resolve: (value: any) => void; turn: Turn; kind: 'approval' | 'question' | 'tool'; count?: number }
 
@@ -192,6 +195,17 @@ export class WriterAgent extends Adapter {
     });
   }
 
+  /** This turn's paper map: whole, as an update, or nothing when nothing changed. */
+  private async paperMap(live: Live) {
+    const map = await paperMap(live.cwd, { compiled: await compiledPaper(this.host(live)), note: live.build });
+    // Compaction summarizes old turns away; without a whole map left in the
+    // history, the next one is whole again.
+    const kept = live.map != null && live.session.messages.some((message: any) => message.role === 'user'
+      && (typeof message.content === 'string' ? message.content : JSON.stringify(message.content)).includes('<paper-map>'));
+    const update = kept ? mapUpdate(live.map!, map.text) : null;
+    live.map = map.text;
+    return update === null ? mapMessage(map) : update;
+  }
   private host(live: Live): ToolHost {
     const turn = () => { if (!live.turn) throw toolError('No turn is running.'); return live.turn; };
     return {
@@ -296,10 +310,11 @@ export class WriterAgent extends Adapter {
         if (!mime) throw new Error('This image format is not supported.');
         pictures.push({ type: 'image', data: bytes.toString('base64'), mimeType: mime });
       }
-      // The paper map opens every request; the history keeps it so the
-      // provider's prompt cache stays valid from one turn to the next.
-      const { paperMap, mapMessage } = await import('./paper-map.ts');
-      let prompt = `${mapMessage(await paperMap(live.cwd, live.build))}\n\n${text}`;
+      // The paper map opens the request: whole the first time, then only what
+      // changed. Earlier maps stay in the history, so the provider's prompt
+      // cache stays valid from one turn to the next.
+      const map = await this.paperMap(live);
+      let prompt = map ? `${map}\n\n${text}` : text;
       for (let rounds = 0; !stopped && rounds < 20; rounds++) {
         await session.prompt(prompt, rounds === 0 && pictures.length ? { images: pictures } : undefined);
         // Pi fixes a run's tools when it starts, so entering chore mode ends
@@ -396,3 +411,4 @@ function projectInstructions(cwd: string) {
     try { return fs.statSync(file).isFile() ? [{ path: name, content: fs.readFileSync(file, 'utf8').slice(0, 20000) }] : []; } catch { return []; }
   });
 }
+

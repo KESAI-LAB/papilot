@@ -960,6 +960,12 @@ export class Manuscripts extends EventEmitter {
   /** The PDF pages, counted from 1, where lines of a paper file printed in the
    *  manuscript's latest build, or null without one. A task's text differs
    *  from it only where the task edited, so this places most of what it reads. */
+  /** The paper's latest compiled build, which Papilot Writer maps the paper from. */
+  paperBuild(projectId: string) {
+    const build = this.builds.get(projectId);
+    if (!build?.pdf || !build.root || !fs.existsSync(build.pdf)) return null;
+    return { pdf: build.pdf, root: build.root, sourceDir: build.sourceDir || '', builtAt: build.builtAt, pages: build.pages?.length };
+  }
   async sourcePages(projectId: string, file: string, lines: number[]): Promise<number[] | null> {
     const build = this.builds.get(projectId);
     if (!build?.pdf || !fs.existsSync(build.pdf)) return null;

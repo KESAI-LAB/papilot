@@ -5,7 +5,8 @@ import { createTwoFilesPatch } from 'diff';
 import { Type, type Static, type TSchema } from '@mariozechner/pi-ai';
 import type { ToolDefinition } from '@mariozechner/pi-coding-agent';
 import { decide, isProse, isText, resolveInside, SKIP_DIRS, toolError, type Action, type WriterMode } from './policy.ts';
-import { outlineLines, paper, paperMap, type BuildNote, type Heading } from './paper-map.ts';
+import { outlineLines, paperMap, type BuildNote, type Heading } from './paper-map.ts';
+import { compiledPaper } from './build-map.ts';
 import { lineAt, project, simpleMacros } from './plain-text.ts';
 import { bibKeys, checkBibtex, describeCandidate, fetchBibtex, searchReferences } from './references.ts';
 
@@ -25,7 +26,7 @@ export interface ToolHost {
   ask(questions: Question[], signal?: AbortSignal): Promise<string[]>;
   /** Runs one of Papilot's own tools (the review engine's build and pages). */
   /** callId is the tool call's own id, so what Papilot keeps for it lands on the right chat line. */
-  papilot(tool: 'view_pdf' | 'check_build' | 'source_pages', args: Record<string, unknown>, signal?: AbortSignal, callId?: string): Promise<{ success: boolean; text: string }>;
+  papilot(tool: 'view_pdf' | 'check_build' | 'source_pages' | 'paper_build', args: Record<string, unknown>, signal?: AbortSignal, callId?: string): Promise<{ success: boolean; text: string }>;
   lastBuild(): BuildNote | null;
   recordBuild(note: BuildNote): void;
   /** Chore mode: shell commands, entered with the author's approval for one chore. */
@@ -104,7 +105,7 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
   const placeOf = async (rel: string, start: number, end: number, signal: AbortSignal | undefined, id: string): Promise<Place | null> => {
     if (!isProse(rel)) return null;
     try {
-      const where = sectionsOf((await paperMap(cwd)).outline, rel, start, end);
+      const where = sectionsOf((await mapNow()).outline, rel, start, end);
       const found = await host.papilot('source_pages', { path: rel, lines: samples(start, end) }, signal, `${id}:pages`);
       const pages = found.success ? (JSON.parse(found.text) as number[]) : [];
       if (!where && !pages.length) return null;
@@ -112,20 +113,22 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
     } catch { return null; }
   };
   const { cwd } = host;
+  // The map of the paper as of its latest build.
+  const mapNow = async () => paperMap(cwd, { compiled: await compiledPaper(host), note: host.lastBuild() });
 
   const outline = tool({
     name: 'paper_outline', label: 'Outline',
-    description: 'The paper\'s outline as it is right now, as a nested list: every part with each file and line range it spans (subsections and \\input files included), its size and labels. Use it to go straight to the lines you need instead of searching. With section, only that part and what is inside it.',
-    promptSnippet: 'paper_outline: live nested outline with files and line ranges',
+    description: 'The paper\'s outline as TeX typeset it in the latest build, as a nested list: every part as numbered in the PDF with its first page, each file and line range it spans (subsections and \\input files included), its size and labels. Line numbers are carried over to files edited since that build; parts added since show after check_build. Use it to go straight to the lines you need instead of searching. With section, only that part and what is inside it.',
+    promptSnippet: 'paper_outline: the outline from the latest build, with pages, files and line ranges',
     parameters: Type.Object({ section: Type.Optional(Type.String({ description: 'A section title, number (like 3.2) or label (like sec:method).' })) }),
     async execute({ section }) {
-      const map = await paperMap(cwd, host.lastBuild()), strip = (await paper()).stripComments;
-      if (!map.outline.length) return text(map.main ? `${map.main} has no sectioning commands.` : map.text);
-      if (!section) return text([`Main file: ${map.main}`, ...outlineLines(map.outline, 9, map.sources, strip, Math.min(...map.outline.map(node => node.level)))].join('\n'));
+      const map = await mapNow();
+      if (!map.outline.length) return text(map.main ? `${map.main} has no numbered parts in its table of contents.` : map.text);
+      if (!section) return text([`Main file: ${map.main}`, ...outlineLines(map.outline, 9, map.sources, Math.min(...map.outline.map(node => node.level)))].join('\n'));
       const node = findSection(map.outline, section);
       if (!node) return text(`No section matches "${section}". Parts: ${map.outline.map(n => `${n.number} ${n.title}`).join('; ')}`);
       const index = map.outline.indexOf(node), after = map.outline.slice(index + 1), end = after.findIndex(other => other.level <= node.level);
-      return text(outlineLines([node, ...after.slice(0, end < 0 ? undefined : end)], 9, map.sources, strip, node.level).join('\n'));
+      return text(outlineLines([node, ...after.slice(0, end < 0 ? undefined : end)], 9, map.sources, node.level).join('\n'));
     },
   });
 
@@ -141,7 +144,7 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
     async execute(params, signal, id) {
       let file = params.path, start = params.start_line || 1, end = params.end_line;
       if (params.section) {
-        const map = await paperMap(cwd), node = findSection(map.outline, params.section);
+        const map = await mapNow(), node = findSection(map.outline, params.section);
         if (!node) throw toolError(`No section matches "${params.section}".`);
         const spans = sectionSpans(node);
         if (!spans.length) throw toolError(`The extent of "${params.section}" is unknown; read ${node.file} from line ${node.line}.`);
@@ -218,7 +221,7 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
       regex: Type.Optional(Type.Boolean()), max_results: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
     }),
     async execute({ query, regex, max_results = 40 }) {
-      const map = await paperMap(cwd), macros = simpleMacros([...map.sources.values()]), hits: string[] = [];
+      const map = await mapNow(), macros = simpleMacros([...map.sources.values()]), hits: string[] = [];
       const loose = (value: string) => value.trim().toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*');
       let pattern: RegExp;
       try { pattern = new RegExp(regex ? query : loose(query), 'gi'); } catch (error) { throw toolError(`Invalid regular expression: ${(error as Error).message}`); }
@@ -417,7 +420,7 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
     }),
     async execute({ section, ...params }, signal, id) {
       if (section) {
-        const node = findSection((await paperMap(cwd)).outline, section);
+        const node = findSection((await mapNow()).outline, section);
         if (!node) throw toolError(`No section matches "${section}".`);
         params.locations = [...(params.locations || []), `${node.file}:${node.line}`];
       }

@@ -126,6 +126,7 @@ export async function buildApp(options: AppOptions) {
   // An AI review resumed after a restart compiles its copy here too.
   workspace.prepareReview = (task, worktree) => manuscripts.captureReview(store.project(task.projectId).path, worktree, task.id);
   workspace.sourcePages = (task, file, lines) => manuscripts.sourcePages(task.projectId, file, lines);
+  workspace.paperBuild = task => manuscripts.paperBuild(task.projectId);
   const app = Fastify({ logger: false, bodyLimit: Number.MAX_SAFE_INTEGER });
   const buildSettingsChanged = (projectId: string) => changes.buildSettingsChanged(projectId);
   manuscripts.on('build-settings', buildSettingsChanged);

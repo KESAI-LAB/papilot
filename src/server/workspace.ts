@@ -16,6 +16,7 @@ import { ACP_PROFILES, AcpAgent } from './acp.ts';
 import { CursorAgent } from './cursor.ts';
 import { GrokAgent } from './grok.ts';
 import { WriterAgent } from './writer/agent.ts';
+import type { CompiledPaper } from './writer/build-map.ts';
 import { AGENT_TURN, reviewClient, reviewConnectionError, taskRoute, confirmedReviewResponse, type ReviewClient } from './review.ts';
 import { pageViewDir, VERSION } from './paths.ts';
 import { prepareRepository } from './imports.ts';
@@ -75,6 +76,7 @@ const BUILD_FIX = 'build-fix-';
 export const VIEW_PDF = 'view_pdf';
 // Papilot Writer's build check: the review engine compiles the task worktree.
 export const CHECK_BUILD = 'check_build';
+export const PAPER_BUILD = 'paper_build';
 // Papilot Writer asks where source lines print, to say what it read.
 export const SOURCE_PAGES = 'source_pages';
 export const VIEW_PDF_TOOL = {
@@ -131,6 +133,10 @@ export class Workspace extends EventEmitter {
   prepareReview: (task: Task, worktree: string) => Promise<ReviewSnapshot> = async () => { throw new Error('The PDF snapshot for this review is unavailable. Start a new AI review.'); };
   /** The manuscript pages where lines of a paper file print; app.ts connects the manuscript builds. */
   sourcePages: (task: Task, file: string, lines: number[]) => Promise<number[] | null> = async () => null;
+  /** The paper's latest build in Papilot's preview, which Papilot Writer maps the paper from until it compiles the paper itself. */
+  paperBuild: (task: Task) => CompiledPaper | null = () => null;
+  /** Each Papilot Writer task's latest full build, from check_build. */
+  private writerBuilds = new Map<string, CompiledPaper>();
   private reviewWrites = new Set<string>();
   // Settles when the task's review write in reviewWrite finishes.
   private reviewWriting = new Map<string, Promise<void>>();
@@ -887,13 +893,20 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       try {
         const client = await this.connectReview(this.store.project(task.projectId).path);
         if (!current()) return;
-        const built = await client.post<{ pages: unknown[]; targets: string[]; error?: string; details?: string[]; pageCount?: number; seconds?: number; errors?: string[]; warnings?: string[] }>(`${taskRoute(task.name)}/view`, { check: true }, 30 * 60000);
+        const built = await client.post<{ pages: unknown[]; targets: string[]; error?: string; details?: string[]; pageCount?: number; seconds?: number; errors?: string[]; warnings?: string[]; compiled?: { pdf: string; root: string; sourceDir: string } }>(`${taskRoute(task.name)}/view`, { check: true }, 30 * 60000);
+        // A build of the whole paper is what the paper map is made from next.
+        if (built.compiled && built.targets[0] === 'full') this.writerBuilds.set(task.id, { ...built.compiled, builtAt: Date.now(), pages: built.pageCount });
         const list = (title: string, items: string[] = []) => items.length ? [`${title}:`, ...items.slice(0, 40).map(item => `- ${item}`), ...(items.length > 40 ? [`- … ${items.length - 40} more`] : []), ''] : [];
         if (built.error) { reply(false, [built.error, '', ...list('Errors', built.details)].join('\n').trim()); return; }
         const compiled = built.targets[0] === 'full' ? 'the whole paper' : `only ${built.targets.join(', ')}`;
         reply(true, [`Compiled ${compiled}${built.pageCount ? ` (${built.pageCount} pages)` : ''}${built.seconds ? ` in ${Math.round(built.seconds)} s` : ''}.`, '', ...list('Errors', built.errors), ...list('Warnings', built.warnings),
           ...(built.errors?.length || built.warnings?.length ? [] : ['No errors or warnings.'])].join('\n').trim());
       } catch (error) { reply(false, 'Papilot could not compile the paper: ' + errorText(error)); }
+      return;
+    }
+    if (tool === PAPER_BUILD && agent === 'papilot') {
+      const own = this.writerBuilds.get(task.id);
+      reply(true, JSON.stringify(own && fs.existsSync(own.pdf) ? own : this.paperBuild(task)));
       return;
     }
     if (tool === SOURCE_PAGES && agent === 'papilot') {

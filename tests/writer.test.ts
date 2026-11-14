@@ -5,7 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { decide, resolveInside } from '../src/server/writer/policy.ts';
 import { blankComments, project, simpleMacros } from '../src/server/writer/plain-text.ts';
-import { paperMap } from '../src/server/writer/paper-map.ts';
+import { execFileSync } from 'node:child_process';
+import { mapUpdate, paperMap } from '../src/server/writer/paper-map.ts';
+import type { CompiledPaper } from '../src/server/writer/build-map.ts';
+import { OUTLINE_TRACE } from '../engine/src/core/build.ts';
 import { writerTools, type ToolHost } from '../src/server/writer/tools.ts';
 import { WriterAgent, toolItem } from '../src/server/writer/agent.ts';
 import { claudeSubscription, WriterCredentials } from '../src/server/writer/auth.ts';
@@ -31,7 +34,7 @@ generalizes well.
 \input{sections/method}
 \section{Results}
 See Figure~\ref{fig:missing}.
-\bibliography{refs}
+\bibliographystyle{plain}\bibliography{refs}
 \end{document}
 `);
   fs.writeFileSync(path.join(dir, 'sections', 'method.tex'), String.raw`\section{Method}\label{sec:method}
@@ -44,6 +47,20 @@ The loss is small.
   fs.writeFileSync(path.join(dir, 'data.csv'), 'x,y\n1,2\n');
   return dir;
 }
+
+// Compiles a paper as Papilot's builds do: a snapshot of the sources, built
+// into build/ with the outline trace loaded first.
+let texAvailable: boolean | undefined;
+const hasTeX = () => texAvailable ??= (() => { try { execFileSync('latexmk', ['-v'], { stdio: 'ignore' }); return true; } catch { return false; } })();
+function compile(dir: string): CompiledPaper {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot build ')), root = path.join(folder, 'src');
+  fs.cpSync(dir, root, { recursive: true });
+  fs.writeFileSync(path.join(folder, 'papilot-trace.tex'), OUTLINE_TRACE + '\n');
+  try { execFileSync('latexmk', ['-norc', '-pdf', '-outdir=build', '-jobname=main', '-synctex=1', '-interaction=nonstopmode', '-usepretex=\\input{../papilot-trace.tex}', 'main.tex'], { cwd: root, stdio: 'ignore', timeout: 120000 }); }
+  catch { /* A paper with warnings still has its PDF. */ }
+  return { pdf: path.join(root, 'build', 'main.pdf'), root, sourceDir: '', builtAt: Date.UTC(2026, 10, 15, 9, 30), pages: 1 };
+}
+const built = (compiled: CompiledPaper) => async (tool: string) => tool === 'paper_build' ? { success: true, text: JSON.stringify(compiled) } : { success: true, text: '' };
 
 test('the policy runs paper edits, asks before other changes and refuses to leave the worktree', () => {
   assert.equal(decide('paper', 'read', 'data.csv').tier, 'safe');
@@ -75,17 +92,42 @@ to~fly \cite{a,b}.`;
   assert.equal(source.slice(view.offsets[at], view.offsets[at] + 2), 'to');
 });
 
-test('the paper map pins the title and abstract and outlines every part with its files and lines', async () => {
-  const dir = paper();
-  const map = await paperMap(dir);
+test('the paper map is made from the build: the title TeX stored, the printed abstract and the PDF\'s numbering', { skip: !hasTeX() }, async () => {
+  const dir = paper(), compiled = compile(dir);
+  const map = await paperMap(dir, { compiled });
+  assert.match(map.text, /^Made from the build of 09:30 UTC \(1 pages\)/);
   assert.match(map.text, /^Title \(main\.tex:4\): Learning to Fly$/m);
-  assert.match(map.text, /Abstract \(main\.tex:7-10\):\nWe present FlowNet, a model that learns to fly\./);
-  assert.match(map.text, /^- 1 Introduction — main\.tex:11-14 \(17 words\) \[sec:intro\]$/m);
-  assert.match(map.text, /^- 2 Method — sections\/method\.tex:1-5 /m);
-  assert.match(map.text, /^ {2}- 2\.1 Loss — sections\/method\.tex:3-5/m);
-  assert.match(map.text, /Referenced but never defined: fig:missing \(main\.tex:17\)/);
-  assert.match(map.text, /figure fig:arch sections\/method\.tex:5 "The architecture of the model\."/);
+  assert.match(map.text, /Abstract \(main\.tex:8-9\):\nWe present FlowNet, a model that learns to fly\.$/m);
+  assert.match(map.text, /^Main file: main\.tex \(class article\)$/m);
+  assert.match(map.text, /^Files TeX read \(2\): main\.tex \(20 lines\), sections\/method\.tex \(6 lines\)$/m);
+  assert.match(map.text, /^- 1 Introduction \(p\. 1\) — main\.tex:11-14 \(\d+ words\) \[sec:intro\]$/m);
+  assert.match(map.text, /^- 2 Method \(p\. 1\) — sections\/method\.tex:1-5 \(\d+ words\) \[sec:method\]$/m);
+  assert.match(map.text, /^ {2}- 2\.1 Loss \(p\. 1\) — sections\/method\.tex:3-5 /m);
+  assert.match(map.text, /^- 3 Results \(p\. 1\) — main\.tex:16-18 /m);
+  assert.match(map.text, /^Undefined references in that build: fig:missing$/m);
+  assert.match(map.text, /^- figure 1 \(p\. 1\) fig:arch sections\/method\.tex:5 "The architecture of the model\."$/m);
   assert.match(map.text, /\\method, \\vect\[1\]/);
+  assert.match(map.text, /^References: 1 entry in refs\.bib, 1 cited\.$/m);
+  // Edits after the build keep its structure, with the lines carried over.
+  fs.writeFileSync(path.join(dir, 'sections', 'method.tex'), '% Notes\n% more notes\n' + fs.readFileSync(path.join(dir, 'sections', 'method.tex'), 'utf8'));
+  const later = await paperMap(dir, { compiled });
+  assert.match(later.text, /^Edited since that build: sections\/method\.tex\./m);
+  assert.match(later.text, /^- 2 Method \(p\. 1\) — sections\/method\.tex:3-7 /m);
+  assert.match(later.text, /^ {2}- 2\.1 Loss \(p\. 1\) — sections\/method\.tex:5-7 /m);
+  // Without a build there is no outline to guess at.
+  const none = await paperMap(dir);
+  assert.match(none.text, /^The paper has not been compiled yet, so there is no map of its sections\./);
+  assert.equal(none.outline.length, 0);
+});
+
+test('after the first map, a turn brings only what changed in it', () => {
+  const map = 'Title (main.tex:4): Fly\n\n- 1 Introduction (p. 1)\n- 2 Method (p. 2)\n- 3 Results (p. 3)\n- 4 Discussion (p. 4)';
+  assert.equal(mapUpdate(map, map), '');
+  const update = mapUpdate(map, map.replace('2 Method (p. 2)', '2 Approach (p. 2)'))!;
+  assert.match(update, /^<paper-map-update>/);
+  assert.match(update, /^- - 2 Method \(p\. 2\)\n\+ - 2 Approach \(p\. 2\)$/m);
+  assert.doesNotMatch(update, /Introduction/);
+  assert.equal(mapUpdate(map, 'Something else entirely\nand more'), null, 'A map that mostly changed is sent whole');
 });
 
 function host(dir: string, overrides: Partial<ToolHost> = {}): ToolHost & { approvals: string[] } {
@@ -101,13 +143,13 @@ const call = async (tools: ReturnType<typeof writerTools>, name: string, params:
   return result.content.map(part => part.type === 'text' ? part.text : '[image]').join('\n');
 };
 
-test('the paper tools find text, outline sections and edit LaTeX without asking', async () => {
-  const dir = paper(), h = host(dir), tools = writerTools(h);
+test('the paper tools find text, outline sections and edit LaTeX without asking', { skip: !hasTeX() }, async () => {
+  const dir = paper(), h = host(dir, { papilot: built(compile(paper())) }), tools = writerTools(h);
   assert.deepEqual(tools.map(tool => tool.name).filter(name => ['run_command', 'enter_chore_mode', 'search_text'].includes(name)), ['search_text', 'enter_chore_mode', 'run_command']);
   const found = await call(tools, 'search_text', { query: 'FlowNet is fast' });
   assert.match(found, /^main\.tex:12: ….*FlowNet is fast\./m);
   assert.match(await call(tools, 'search_text', { query: 'section [ref] and in [cite], it generalizes' }), /main\.tex:12-14/);
-  assert.match(await call(tools, 'paper_outline', { section: 'sec:method' }), /^- 2 Method — sections\/method\.tex:1-5 .*\n {2}- 2\.1 Loss/);
+  assert.match(await call(tools, 'paper_outline', { section: 'sec:method' }), /^- 2 Method \(p\. 1\) — sections\/method\.tex:1-5 .*\n {2}- 2\.1 Loss/);
   assert.match(await call(tools, 'read_file', { section: 'Loss' }), /sections\/method\.tex:3-5/);
   assert.match(await call(tools, 'find_references', { name: 'sec:method' }), /label: sections\/method\.tex:1.*\nreference: main\.tex:12/s);
   const diff = await call(tools, 'edit_file', { path: 'sections/method.tex', edits: [{ old_text: 'The loss is small.', new_text: 'The loss is tiny.' }] });
@@ -149,8 +191,8 @@ test('tool calls show as file changes, commands, page views or named tools', () 
   assert.equal(toolItem('4', 'search_text', { query: 'flow' }).text, 'Search text flow');
 });
 
-test('Papilot Writer runs a turn on Pi: map first, approvals through Papilot, chore mode within the turn', { timeout: 30000 }, async () => {
-  const dir = paper(), data = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot writer data '));
+test('Papilot Writer runs a turn on Pi: map first, approvals through Papilot, chore mode within the turn', { timeout: 60000, skip: !hasTeX() }, async () => {
+  const dir = paper(), compiled = compile(dir), data = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot writer data '));
   const ai = await import('@mariozechner/pi-ai'), { AuthStorage } = await import('@mariozechner/pi-coding-agent');
   const faux = ai.registerFauxProvider({ provider: 'faux', models: [{ id: 'writer', reasoning: false }] });
   const prompts: string[] = [];
@@ -161,6 +203,7 @@ test('Papilot Writer runs a turn on Pi: map first, approvals through Papilot, ch
     context => { prompts.push(JSON.stringify(context.messages.at(-1))); return ai.fauxAssistantMessage(ai.fauxToolCall('run_command', { command: 'echo chore-done' }), { stopReason: 'toolUse' }); },
     ai.fauxAssistantMessage(ai.fauxToolCall('exit_chore_mode', { summary: 'Counted.' }), { stopReason: 'toolUse' }),
     ai.fauxAssistantMessage('Made the loss tiny.'),
+    context => { prompts.push(JSON.stringify(context.messages.at(-1))); return ai.fauxAssistantMessage('It reads well.'); },
   ]);
   try {
     // Refreshing the registry would drop the faux provider's registration.
@@ -168,7 +211,11 @@ test('Papilot Writer runs a turn on Pi: map first, approvals through Papilot, ch
     const agent = new Writer({ dir: data, auth: AuthStorage.inMemory({ faux: { type: 'api_key', key: 'test' } }) });
     const notes: any[] = [], requests: any[] = [];
     agent.on('notification', note => notes.push(note));
-    agent.on('request', request => { requests.push(request); setImmediate(() => agent.respond(request.id, { decision: 'accept' })); });
+    agent.on('request', request => {
+      // Papilot answers where the latest build is.
+      if (request.method === 'item/tool/call' && request.params.tool === 'paper_build') { setImmediate(() => agent.respond(request.id, { success: true, contentItems: [{ type: 'inputText', text: JSON.stringify(compiled) }] })); return; }
+      requests.push(request); setImmediate(() => agent.respond(request.id, { decision: 'accept' }));
+    });
     await agent.start();
     const { thread } = await agent.request('thread/start', { cwd: dir, developerInstructions: 'Task instructions.' });
     const done = new Promise<any>(resolve => agent.on('notification', note => { if (note.method === 'turn/completed') resolve(note.params.turn); }));
@@ -186,6 +233,12 @@ test('Papilot Writer runs a turn on Pi: map first, approvals through Papilot, ch
     assert.match(completed.find(item => item.type === 'commandExecution').aggregatedOutput, /chore-done/);
     assert.equal(completed.at(-1).text, 'Made the loss tiny.');
     assert.ok(fs.existsSync(path.join(data, 'sessions', `${thread.id}.jsonl`)), 'the session is kept for resuming');
+    // The next turn brings only what changed in the map: the edited file.
+    const again = new Promise<any>(resolve => agent.on('notification', note => { if (note.method === 'turn/completed') resolve(note.params.turn); }));
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Does it read well?' }], model: 'faux/writer' });
+    assert.equal((await again).status, 'completed');
+    assert.doesNotMatch(prompts[2], /<paper-map>/);
+    assert.match(prompts[2], /<paper-map-update>[\s\S]*\+ Edited since that build: sections\/method\.tex\.[\s\S]*Does it read well\?/);
     agent.close();
   } finally { faux.unregister(); }
 });
@@ -254,19 +307,19 @@ test('tool calls read as sentences and a run of them as a summary of what happen
   assert.equal(toolSentence({ id: '9', taskId: 't', createdAt: 0, type: 'tool', text: 'server / tool' }), null, 'Other agents keep their own text');
 });
 
-test('a read names the sections it covered and the pages they print on', async () => {
+test('a read names the sections it covered and the pages they print on', { skip: !hasTeX() }, async () => {
   const { sectionsOf } = await import('../src/server/writer/tools.ts');
   const { toolSentence, toolNote, toolSummary } = await import('../src/web/tool-calls.ts');
-  const dir = paper(), outline = (await paperMap(dir)).outline;
+  const dir = paper(), compiled = compile(dir), outline = (await paperMap(dir, { compiled })).outline;
   assert.deepEqual(sectionsOf(outline, 'sections/method.tex', 1, 5), { sections: [{ number: '2', title: 'Method' }] }, 'A section read whole is named at its highest level');
   assert.deepEqual(sectionsOf(outline, 'sections/method.tex', 4, 4), { sections: [{ number: '2.1', title: 'Loss' }], partial: true }, 'Part of a section names the innermost one');
   assert.equal(sectionsOf(outline, 'refs.bib', 1, 3), null);
   // The pages come from SyncTeX through Papilot; the read reports both.
   const asked: any[] = [];
-  const tools = writerTools(host(dir, { papilot: async (tool, args) => { asked.push([tool, args]); return { success: true, text: '[4,5]' }; } }));
+  const tools = writerTools(host(dir, { papilot: async (tool, args) => { asked.push([tool, args]); return tool === 'paper_build' ? built(compiled)(tool) : { success: true, text: '[4,5]' }; } }));
   const read = tools.find(item => item.name === 'read_file')!;
   const result: any = await read.execute('call', { path: 'sections/method.tex', start_line: 3, end_line: 5 }, undefined, undefined, undefined as never);
-  assert.equal(asked[0][0], 'source_pages');
+  assert.ok(asked.some(([tool]) => tool === 'source_pages'));
   assert.deepEqual(result.details.place, { sections: [{ number: '2.1', title: 'Loss' }], pages: [4, 5] });
   const item = { id: 'r', taskId: 't', createdAt: 0, type: 'tool', text: '', tool: { kind: 'read', target: 'sections/method.tex', lines: '3-5', place: result.details.place } };
   assert.equal(toolSentence(item), 'Read §2.1 Loss');
@@ -301,21 +354,30 @@ test('The context breakdown names what fills the window and adds up to what the 
   assert.equal(full.find(part => part.id === 'free')?.tokens, 0);
 });
 
-test('The paper map pins the live title and abstract, not ones commented out', async () => {
+test('the paper map leaves out what TeX skipped: comments, a comment environment and a switched-off part', { skip: !hasTeX() }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot writer title '));
   fs.writeFileSync(path.join(dir, 'main.tex'), String.raw`\documentclass{article}
+\usepackage{verbatim}
 % \title{An Old Working Title}
-%\begin{abstract}Draft abstract.\end{abstract}
 \title{The Real Title}
 \begin{document}
 \begin{abstract}
 We cut errors by 50\% overall. % not this
+\begin{comment}
+A draft sentence.
+\end{comment}
 \end{abstract}
+\iffalse
+\section{Hidden}
+\fi
+\section{Shown}
+Text.
 \end{document}
 `);
-  const map = await paperMap(dir);
+  const map = await paperMap(dir, { compiled: compile(dir) });
   assert.match(map.text, /^Title \(main\.tex:4\): The Real Title$/m);
-  assert.match(map.text, /^Abstract \(main\.tex:6-8\):$/m);
-  assert.doesNotMatch(map.text, /Old Working Title|Draft abstract|not this/);
+  assert.match(map.text, /^Abstract \(main\.tex:7-10\):\nWe cut errors by 50% overall\.$/m);
+  assert.match(map.text, /^- 1 Shown \(p\. 1\) — main\.tex:15-16 /m);
+  assert.doesNotMatch(map.text, /Old Working Title|draft sentence|not this|Hidden/);
   assert.equal(blankComments('a\\% b % c\n\\\\% d'), 'a\\% b    \n\\\\   ', 'An escaped % stays; one after \\\\ starts a comment');
 });
