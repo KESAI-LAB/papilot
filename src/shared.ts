@@ -51,6 +51,8 @@ export interface Task {
   delivery?: { mode: 'workspace' | 'commit' | 'branch'; accepted: string; branch?: string; commit?: string; pending?: boolean } | null;
   id: string; projectId: string; name: string; title: string; instructions: string;
   titleSource?: 'prompt' | 'generated' | 'manual'; titleRevision?: number; titleGeneration?: 'pending' | 'failed' | null;
+  /** How full the agent's context window was after its latest reply. */
+  context?: ContextUsage | null;
   worktree: string; threadId: string | null; turnId: string | null; agent?: AgentId; model: string | null; effort?: string | null; serviceTier?: string;
   // The agent's thread was started with Papilot's view_pdf tool.
   viewPdf?: boolean;
@@ -79,7 +81,14 @@ export function taskFinished(task: Task) {
 // reviewRound is 0 while awaiting a result, null when no changes were produced,
 // or the published round. Older runs omit it.
 export interface Run { id: string; taskId: string; requestKey: string; prompt: string; attachments?: Attachment[]; feedbackCursor?: number; status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'uncertain'; createdAt: number; finishedAt: number | null; reviewRound?: number | null; noteRounds?: Record<number, number>; noteOptionsRequested?: boolean; noteOptions?: PreparedNoteOptions[] }
-export interface TimelineItem { id: string; taskId: string; type: string; text: string; rawText?: string; detail?: string; status?: string; createdAt: number; meta?: MessageMeta }
+export interface ContextUsage { tokens: number; window: number }
+/** What a tool call did, when the agent says so: the chat words, groups and marks it by kind. */
+export interface ToolCallInfo { kind: string; target?: string; lines?: string; place?: ToolPlace }
+/** Where a read was in the paper: the sections it covered and the PDF pages they print on. */
+export interface ToolPlace { sections: { number: string; title: string }[]; more?: number; partial?: boolean; pages?: number[] }
+export interface TimelineItem { id: string; taskId: string; type: string; text: string; rawText?: string; detail?: string; status?: string; createdAt: number; meta?: MessageMeta; tool?: ToolCallInfo; pages?: PageView[] }
+/** A page an agent looked at, kept by Papilot so the chat can show it. */
+export interface PageView { index: number; label: string | null; file: string }
 // A user message can run a skill or carry review feedback; the chat shows
 // those as what they are rather than as the prompt the agent receives.
 // Papilot itself sends the agent a build its own edits broke.

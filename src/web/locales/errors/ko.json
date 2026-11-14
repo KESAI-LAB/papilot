@@ -293,5 +293,6 @@
   "This provider has no sign-in here.": "이 제공업체는 여기에서 로그인할 수 없습니다.",
   "This sign-in has ended. Start it again.": "이 로그인은 종료되었습니다. 다시 시작하세요.",
   "This sign-in is not waiting for a code.": "이 로그인은 코드를 기다리고 있지 않습니다.",
-  "Sign-in cancelled.": "로그인이 취소되었습니다."
+  "Sign-in cancelled.": "로그인이 취소되었습니다.",
+  "This page is no longer available.": "이 페이지는 더 이상 사용할 수 없습니다."
 }

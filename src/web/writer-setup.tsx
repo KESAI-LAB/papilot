@@ -46,6 +46,7 @@ export function WriterSetup({ writer, online }: { writer: (route: string, body?:
         {login.instructions && <p className="writer-login-instructions">{login.instructions}</p>}
         <div className="runtime-setup-actions">
           {login.url && <a className="button compact" href={login.url} target="_blank" rel="noopener noreferrer">{t('Open sign-in page')}<Icon name="external" size={12}/></a>}
+          {login.url && <CopyLink url={login.url}/>}
           <button type="button" className="button secondary compact" onClick={() => void act(login.id, `/logins/${login.id}/cancel`)}>{t('Cancel')}</button>
         </div>
         {provider.id === 'openai-codex' && <form className="writer-key" onSubmit={event => { event.preventDefault(); void act(login.id, `/logins/${login.id}/code`, { code }).then(ok => { if (ok) setCode(''); }); }}>
@@ -64,4 +65,22 @@ export function WriterSetup({ writer, online }: { writer: (route: string, body?:
     <p className="runtime-agent-note">{t('Claude works with an Anthropic API key only. Papilot keeps these credentials in its own data folder, separate from any Pi installation.')}</p>
     {error && <p className="runtime-agent-error" role="alert">{error}</p>}
   </section>;
+}
+
+// For signing in from another browser or device, where opening the page here does not help.
+function CopyLink({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { if (!copied) return; const timer = setTimeout(() => setCopied(false), 1600); return () => clearTimeout(timer); }, [copied]);
+  async function copy() {
+    let ok = false;
+    try { await navigator.clipboard.writeText(url); ok = true; }
+    catch {
+      const area = document.createElement('textarea');
+      area.value = url; area.style.position = 'fixed'; area.style.opacity = '0';
+      document.body.append(area); area.select();
+      try { ok = document.execCommand('copy'); } finally { area.remove(); }
+    }
+    setCopied(ok);
+  }
+  return <button type="button" className="button secondary compact" onClick={() => void copy()}><Icon name={copied ? 'check' : 'copy'} size={12}/>{copied ? t('Copied') : t('Copy link')}</button>;
 }

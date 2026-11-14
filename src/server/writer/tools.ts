@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { createTwoFilesPatch } from 'diff';
 import { Type, type Static, type TSchema } from '@mariozechner/pi-ai';
 import type { ToolDefinition } from '@mariozechner/pi-coding-agent';
-import { decide, isText, resolveInside, SKIP_DIRS, toolError, type Action, type WriterMode } from './policy.ts';
+import { decide, isProse, isText, resolveInside, SKIP_DIRS, toolError, type Action, type WriterMode } from './policy.ts';
 import { outlineLines, paper, paperMap, type BuildNote, type Heading } from './paper-map.ts';
 import { lineAt, project, simpleMacros } from './plain-text.ts';
 import { bibKeys, checkBibtex, describeCandidate, fetchBibtex, searchReferences } from './references.ts';
@@ -24,7 +24,8 @@ export interface ToolHost {
   approve(request: Approval, signal?: AbortSignal): Promise<boolean>;
   ask(questions: Question[], signal?: AbortSignal): Promise<string[]>;
   /** Runs one of Papilot's own tools (the review engine's build and pages). */
-  papilot(tool: 'view_pdf' | 'check_build', args: Record<string, unknown>, signal?: AbortSignal): Promise<{ success: boolean; text: string }>;
+  /** callId is the tool call's own id, so what Papilot keeps for it lands on the right chat line. */
+  papilot(tool: 'view_pdf' | 'check_build' | 'source_pages', args: Record<string, unknown>, signal?: AbortSignal, callId?: string): Promise<{ success: boolean; text: string }>;
   lastBuild(): BuildNote | null;
   recordBuild(note: BuildNote): void;
   /** Chore mode: shell commands, entered with the author's approval for one chore. */
@@ -40,10 +41,10 @@ const text = (value: string, details: Record<string, unknown> = {}) => ({ conten
 const clip = (value: string, limit = MAX_OUTPUT) => value.length > limit ? `${value.slice(0, limit)}\n… (${value.length - limit} more characters not shown)` : value;
 const numbered = (lines: string[], first: number) => lines.map((line, index) => `${String(first + index).padStart(5)}  ${line}`).join('\n');
 
-function tool<T extends TSchema>(definition: { name: string; label: string; description: string; promptSnippet: string; parameters: T; execute: (params: Static<T>, signal: AbortSignal | undefined) => Promise<ReturnType<typeof text> | { content: any[]; details: unknown }> }): ToolDefinition {
+function tool<T extends TSchema>(definition: { name: string; label: string; description: string; promptSnippet: string; parameters: T; execute: (params: Static<T>, signal: AbortSignal | undefined, id: string) => Promise<ReturnType<typeof text> | { content: any[]; details: unknown }> }): ToolDefinition {
   return {
     name: definition.name, label: definition.label, description: definition.description, promptSnippet: definition.promptSnippet, parameters: definition.parameters,
-    execute: (_id, params, signal) => definition.execute(params as Static<T>, signal),
+    execute: (id, params, signal) => definition.execute(params as Static<T>, signal, id),
   } as ToolDefinition;
 }
 
@@ -72,6 +73,21 @@ function walk(root: string, start: string, depth: number, visit: (rel: string, i
   go(start, 0);
 }
 
+/** Where lines of a file are in the paper: the sections they cover and the pages they print on. */
+export interface Place { sections: { number: string; title: string }[]; more?: number; partial?: boolean; pages?: number[] }
+export function sectionsOf(outline: Heading[], file: string, start: number, end: number): Omit<Place, 'pages'> | null {
+  const spans = (node: Heading) => node.ranges?.[file] || [];
+  const overlaps = outline.filter(node => spans(node).some(([a, b]) => a <= end && b >= start));
+  if (!overlaps.length) return null;
+  // Sections read whole are named at their highest level; otherwise the innermost section read in part.
+  const whole = overlaps.filter(node => spans(node).every(([a, b]) => a >= start && b <= end));
+  const top = whole.filter(node => !whole.some(other => other.id === node.parent));
+  const named = top.length ? top : [overlaps.reduce((deepest, node) => node.level >= deepest.level ? node : deepest)];
+  return { sections: named.slice(0, 3).map(node => ({ number: node.number, title: node.title })), ...(named.length > 3 ? { more: named.length - 3 } : {}), ...(top.length ? {} : { partial: true }) };
+}
+// A handful of lines across a range, enough for SyncTeX to find its pages.
+const samples = (start: number, end: number) => [...new Set(Array.from({ length: 6 }, (_, i) => Math.round(start + (end - start) * i / 5)))];
+
 export function findSection(outline: Heading[], selector: string) {
   const wanted = selector.trim().toLowerCase().replace(/^(?:section|§)\s*/, '');
   return outline.find(node => node.labels.some(label => label.toLowerCase() === wanted))
@@ -84,6 +100,17 @@ const sectionSpans = (node: Heading): { file: string; start: number; end: number
   Object.entries(node.ranges || {}).flatMap(([file, list]) => list.map(([start, end]) => ({ file, start, end })));
 
 export function writerTools(host: ToolHost): ToolDefinition[] {
+  // Where a read was in the paper, for the chat; a read outside the paper's text has no place.
+  const placeOf = async (rel: string, start: number, end: number, signal: AbortSignal | undefined, id: string): Promise<Place | null> => {
+    if (!isProse(rel)) return null;
+    try {
+      const where = sectionsOf((await paperMap(cwd)).outline, rel, start, end);
+      const found = await host.papilot('source_pages', { path: rel, lines: samples(start, end) }, signal, `${id}:pages`);
+      const pages = found.success ? (JSON.parse(found.text) as number[]) : [];
+      if (!where && !pages.length) return null;
+      return { ...(where || { sections: [] }), ...(pages.length ? { pages: [pages[0], pages[pages.length - 1]] } : {}) };
+    } catch { return null; }
+  };
   const { cwd } = host;
 
   const outline = tool({
@@ -111,7 +138,7 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
       section: Type.Optional(Type.String({ description: 'A section title, number or label, instead of path.' })),
       start_line: Type.Optional(Type.Integer({ minimum: 1 })), end_line: Type.Optional(Type.Integer({ minimum: 1 })),
     }),
-    async execute(params) {
+    async execute(params, signal, id) {
       let file = params.path, start = params.start_line || 1, end = params.end_line;
       if (params.section) {
         const map = await paperMap(cwd), node = findSection(map.outline, params.section);
@@ -141,7 +168,7 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
       const last = Math.min(lines.length, end || lines.length, start + MAX_LINES - 1);
       if (start > lines.length) return text(`${rel} has only ${lines.length} lines.`);
       const more = last < (end || lines.length) ? `\n… continue with start_line ${last + 1} (the file has ${lines.length} lines).` : '';
-      return text(`${rel}:${start}-${last} of ${lines.length}\n${numbered(lines.slice(start - 1, last), start)}${more}`, { path: rel });
+      return text(`${rel}:${start}-${last} of ${lines.length}\n${numbered(lines.slice(start - 1, last), start)}${more}`, { path: rel, lines: `${start}-${last}`, place: await placeOf(rel, start, last, signal, id) });
     },
   });
 
@@ -388,13 +415,13 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
       section: Type.Optional(Type.String({ description: 'A section title, number or label: shows the page where it starts.' })),
       accepted: Type.Optional(Type.Boolean()),
     }),
-    async execute({ section, ...params }, signal) {
+    async execute({ section, ...params }, signal, id) {
       if (section) {
         const node = findSection((await paperMap(cwd)).outline, section);
         if (!node) throw toolError(`No section matches "${section}".`);
         params.locations = [...(params.locations || []), `${node.file}:${node.line}`];
       }
-      const result = await host.papilot('view_pdf', params, signal);
+      const result = await host.papilot('view_pdf', params, signal, id);
       if (!result.success) throw toolError(result.text);
       const files = [...result.text.matchAll(/: (\S+\.png)$/gm)].map(m => m[1]).filter(file => fs.existsSync(file)).slice(0, 4);
       const note = result.text.split('\n').filter(line => !/Open the page files|view_image/.test(line)).join('\n');

@@ -36,6 +36,7 @@ import { keepDialogFocus } from './focus.ts';
 import { DeleteTaskDialog } from './task-dialog.tsx';
 import { ActionMenu } from './action-menu.tsx';
 import { Icon } from './icons.tsx';
+import { toolIcon, toolNote, toolSentence, toolSummary } from './tool-calls.ts';
 import { UpdateNotice, versionLabel } from './update-notice.tsx';
 import { chooseDirectory, DesktopWindowChrome, nativeFolders } from './desktop-chrome.tsx';
 import { MainFileDialog } from './main-file-dialog.tsx';
@@ -283,31 +284,40 @@ function UserMessage({ item, agent }: { item: TimelineItem; agent: string }) {
 }
 
 // Memoized: polling and typing re-render the thread, and unchanged items can skip it.
-const TimelineEntry = memo(function TimelineEntry({ item, agent, root }: { item: TimelineItem; agent: string; root: string }) {
+// The pages an agent looked at, small enough to glance at; each opens full size.
+function PageStrip({ items }: { items: TimelineItem[] }) {
+  const pages = items.flatMap(item => (item.pages || []).map(page => ({ ...page, url: `/api/tasks/${encodeURIComponent(item.taskId)}/pages/${encodeURIComponent(page.file)}` })));
+  if (!pages.length) return null;
+  return <div className="tool-pages">{pages.map(page => {
+    const name = page.label ? t('p. {page}', { page: page.label }) : t('PDF page {page}', { page: page.index });
+    return <a key={page.url} href={page.url} target="_blank" rel="noopener noreferrer" title={name}><img src={page.url} alt={name} loading="lazy"/><span>{name}</span></a>;
+  })}</div>;
+}
+
+const TimelineEntry = memo(function TimelineEntry({ item, agent, root, pages = true }: { item: TimelineItem; agent: string; root: string; pages?: boolean }) {
   // Memoized, so it follows a language change itself rather than through App.
   useLanguage();
   if (PlaygroundProgress && item.type === 'demo-progress') return <Suspense fallback={null}><PlaygroundProgress item={item}/></Suspense>;
   if (item.type === 'user') return <UserMessage item={item} agent={agent}/>;
   if (item.type === 'assistant') return <article className="message assistant" aria-label={`${agent}, ${time(item.createdAt)}`}><div className="message-body markdown"><Markdown text={item.text}/></div><div className="message-actions"><CopyButton text={item.text}/><time dateTime={new Date(item.createdAt).toISOString()}>{time(item.createdAt)}</time></div></article>;
   const files = item.type === 'files' ? editedFiles(item, root) : [];
-  const label = item.type === 'command' ? shellCommand(item.text) || t('Run command') : item.type === 'files' ? (files.length === 1 ? t('Edited {file}', { file: files[0] }) : t('Edited {n} files', { n: files.length })) : item.type === 'pdf' ? (item.text ? t('Viewed the PDF: {places}', { places: item.text }) : t('Viewed the PDF')) : item.text || t('Run tool');
+  const label = item.type === 'command' ? shellCommand(item.text) || t('Run command') : item.type === 'files' ? (files.length === 1 ? t('Edited {file}', { file: files[0] }) : t('Edited {n} files', { n: files.length })) : item.type === 'pdf' ? (item.text ? t('Viewed the PDF: {places}', { places: item.text }) : t('Viewed the PDF')) : toolSentence(item) || item.text || t('Run tool');
   const detail = item.type === 'files' ? files.join('\n') : item.detail;
+  const note = toolNote(item);
   const state = toolState(item);
-  return <details className={'tool-item ' + state}><summary><Icon name={item.type === 'command' ? 'terminal' : item.type === 'files' ? 'diff' : item.type === 'pdf' ? 'pdf' : 'tool'} size={14}/><span className="tool-label">{label}</span>{state === 'running' ? <span className="spinner" aria-label={t('Running')}/> : state && <span className="tool-status">{item.status === 'declined' ? t('Declined') : t('Failed')}</span>}</summary>{detail && <pre>{detail}</pre>}</details>;
+  const row = <details className={'tool-item ' + state} data-kind={item.type === 'tool' ? item.tool?.kind || 'tool' : item.type}><summary><Icon name={toolIcon(item)} size={14}/><span className="tool-label">{label}{note && <span className="tool-note">{note}</span>}</span>{state === 'running' ? <span className="spinner" aria-label={t('Running')}/> : state && <span className="tool-status">{item.status === 'declined' ? t('Declined') : t('Failed')}</span>}</summary>{detail && <pre>{detail}</pre>}</details>;
+  return pages && item.pages?.length ? <>{row}<PageStrip items={[item]}/></> : row;
 });
 
 // Consecutive commands, edits and tool calls fold into one line that opens to the list.
 function ToolGroup({ items, agent, root }: { items: TimelineItem[]; agent: string; root: string }) {
   // The thread reuses its elements, so the summary follows a language change itself.
   useLanguage();
-  const commands = items.filter(item => item.type === 'command').length, edits = items.filter(item => item.type === 'files');
-  const pdfs = items.filter(item => item.type === 'pdf').length;
-  const files = [...new Set(edits.flatMap(item => editedFiles(item, root)))], tools = items.length - commands - edits.length - pdfs;
+  const summary = toolSummary(items, item => editedFiles(item, root));
   const running = items.some(item => toolState(item) === 'running'), failed = items.filter(item => toolState(item) === 'failed').length;
-  const parts = [commands ? tn(commands, 'ran {n} command', 'ran {n} commands') : '', files.length ? (files.length === 1 ? t('edited {file}', { file: files[0] }) : t('edited {n} files', { n: files.length })) : '', pdfs ? t('viewed the PDF') : '', tools ? tn(tools, 'used {n} tool', 'used {n} tools') : ''].filter(Boolean).join(t(', '));
-  return <details className="tool-group"><summary><Icon name={commands ? 'terminal' : files.length ? 'diff' : 'tool'} size={14}/><span className="tool-group-label">{parts[0].toUpperCase() + parts.slice(1)}</span>{running ? <span className="spinner" aria-label={t('Running')}/> : failed ? <span className="tool-status">{t('{n} failed', { n: failed })}</span> : null}<Icon name="chevronDown" size={13}/></summary>
-    <div className="tool-group-items">{items.map(item => <TimelineEntry key={item.id} item={item} agent={agent} root={root}/>)}</div>
-  </details>;
+  return <><details className="tool-group"><summary><Icon name={summary.icon} size={14}/><span className="tool-group-label">{summary.text}</span>{running ? <span className="spinner" aria-label={t('Running')}/> : failed ? <span className="tool-status">{t('{n} failed', { n: failed })}</span> : null}<Icon name="chevronDown" size={13}/></summary>
+    <div className="tool-group-items">{items.map(item => <TimelineEntry key={item.id} item={item} agent={agent} root={root} pages={false}/>)}</div>
+  </details><PageStrip items={items}/></>;
 }
 
 function timelineEntries(items: TimelineItem[]) {
@@ -404,12 +414,26 @@ function Activity({ source, onRevealQuote, task, runtime, reconnecting, onReconn
             permissions={<TaskPermissionOptions task={task} runtime={runtime} disabled={sending || blocked || savingModel} save={permissions => api<Task>(`/tasks/${task.id}/permissions`, { permissions })} onSaved={onTaskSaved} onSaving={setSavingPermissions} refresh={refresh} reportError={reportError}/>}/>
         </div>}
         action={<div className="composer-actions">
+          <ContextMeter usage={task.context}/>
           {active && <button type="button" className="send-button stop" aria-label={t('Pause task')} title={t('Pause {agent}', { agent: agentName(task) })} disabled={pausing} aria-busy={pausing} onClick={pause}><Icon name="stop" size={18}/></button>}
           {(!active || draft.trim() || skill || files.entries.length || notes.notes.length || feedbackCount || sending) && <button aria-label={t('Send instructions')} title={t('Send (Enter) · New line (Shift+Enter)')} disabled={!canSend || files.blocked || sending || savingModel || savingPermissions || blocked || Boolean(task.preparation)} className="send-button" type="submit"><Icon name="arrowUp" size={18}/></button>}
         </div>}/>
       {hint && <p className="composer-hint" role="status">{hint}</p>}
     </div>
   </section>;
+}
+
+// How full the agent's context window is, as a small ring beside Send.
+function ContextMeter({ usage }: { usage?: { tokens: number; window: number } | null }) {
+  if (!usage?.window) return null;
+  const share = Math.min(1, usage.tokens / usage.window), percent = Math.round(share * 100);
+  const compact = (n: number) => new Intl.NumberFormat(locale(), { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+  const text = t('Context {percent}% full: {tokens} of {window} tokens', { percent, tokens: compact(usage.tokens), window: compact(usage.window) });
+  const r = 8, length = 2 * Math.PI * r;
+  return <span className={'context-meter' + (share >= 0.9 ? ' critical' : share >= 0.75 ? ' warning' : '')} role="img" aria-label={text} title={text}>
+    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r={r}/><circle className="context-meter-fill" cx="10" cy="10" r={r} strokeDasharray={`${share * length} ${length}`} transform="rotate(-90 10 10)"/></svg>
+    <span className="context-meter-value">{percent}%</span>
+  </span>;
 }
 
 // Shorten an absolute repository path to its last folders for menus.

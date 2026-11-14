@@ -293,5 +293,6 @@
   "This provider has no sign-in here.": "此提供商在这里没有登录方式。",
   "This sign-in has ended. Start it again.": "此次登录已结束，请重新开始。",
   "This sign-in is not waiting for a code.": "此次登录未在等待验证码。",
-  "Sign-in cancelled.": "已取消登录。"
+  "Sign-in cancelled.": "已取消登录。",
+  "This page is no longer available.": "此页面已不可用。"
 }

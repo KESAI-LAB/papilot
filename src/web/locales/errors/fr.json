@@ -293,5 +293,6 @@
   "This provider has no sign-in here.": "Ce fournisseur n’a pas de connexion ici.",
   "This sign-in has ended. Start it again.": "Cette connexion est terminée. Recommencez-la.",
   "This sign-in is not waiting for a code.": "Cette connexion n’attend pas de code.",
-  "Sign-in cancelled.": "Connexion annulée."
+  "Sign-in cancelled.": "Connexion annulée.",
+  "This page is no longer available.": "Cette page n’est plus disponible."
 }

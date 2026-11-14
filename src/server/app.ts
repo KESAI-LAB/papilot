@@ -32,7 +32,7 @@ import { Diagnostics } from './diagnostics.ts';
 import { attachmentIds } from './attachments.ts';
 import { MAX_ATTACHMENT_BYTES } from '../shared.ts';
 import { PaperImports, openFolder } from './imports.ts';
-import { DATA } from './paths.ts';
+import { DATA, pageViewDir } from './paths.ts';
 import { registerAiReviewRoutes } from './ai-review-routes.ts';
 import { detectLatex } from './latex-installation.ts';
 import { systemRequirements } from './system-requirements.ts';
@@ -125,6 +125,7 @@ export async function buildApp(options: AppOptions) {
   workspace.indirectChanges = changes.indirectChanges = indirectChanges;
   // An AI review resumed after a restart compiles its copy here too.
   workspace.prepareReview = (task, worktree) => manuscripts.captureReview(store.project(task.projectId).path, worktree, task.id);
+  workspace.sourcePages = (task, file, lines) => manuscripts.sourcePages(task.projectId, file, lines);
   const app = Fastify({ logger: false, bodyLimit: Number.MAX_SAFE_INTEGER });
   const buildSettingsChanged = (projectId: string) => changes.buildSettingsChanged(projectId);
   manuscripts.on('build-settings', buildSettingsChanged);
@@ -550,6 +551,12 @@ export async function buildApp(options: AppOptions) {
   app.post<{ Params: { id: string } }>('/api/tasks/:id/archive', task, request => workspace.archiveTask(request.params.id, (request.body as any)?.archived, (request.body as any)?.finished === true));
   app.post<{ Params: { id: string } }>('/api/tasks/:id/interrupt', task, request => workspace.interrupt(request.params.id).then(() => ({ ok: true })));
   // Deleting a task that is already gone succeeds, so a lost response can be retried; a hidden one answers the same.
+  // A page an agent looked at, as the chat shows it with that tool call.
+  app.get<{ Params: { id: string; file: string } }>('/api/tasks/:id/pages/:file', task, (request, reply) => {
+    const dir = pageViewDir(store.task(request.params.id).id), file = request.params.file;
+    if (!/^[\w-]{1,100}-\d\.png$/.test(file) || !fs.existsSync(path.join(dir, file))) return reply.code(404).send({ error: 'This page is no longer available.' });
+    return reply.type('image/png').header('Cache-Control', 'private, max-age=31536000, immutable').sendFile(file, dir, { cacheControl: false });
+  });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/delete', { config: { resource: { task: 'id' } } }, request => {
     if ((request.body as any)?.confirm !== true) throw new Error('Confirm permanent task deletion before continuing.');
     return workspace.deleteTask(request.params.id);

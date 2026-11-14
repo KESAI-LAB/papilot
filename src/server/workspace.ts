@@ -17,7 +17,7 @@ import { CursorAgent } from './cursor.ts';
 import { GrokAgent } from './grok.ts';
 import { WriterAgent } from './writer/agent.ts';
 import { AGENT_TURN, reviewClient, reviewConnectionError, taskRoute, confirmedReviewResponse, type ReviewClient } from './review.ts';
-import { VERSION } from './paths.ts';
+import { pageViewDir, VERSION } from './paths.ts';
 import { prepareRepository } from './imports.ts';
 import { moveLegacyStates } from './state.ts';
 import { REFS } from '../../engine/src/core/git.ts';
@@ -32,7 +32,7 @@ import { notesInstructions, reviewNotesInstructions, summarizeNotes } from '../n
 import { canonicalGroup, groupsWithoutInstructions, parseGroupInstructions, type GroupInstructions } from '../note-groups.ts';
 import { commitChanges, conflictMarkers, gitCommit, gitRemote, gitStatus, mergeConflicts, mergeInProgress } from './manuscript.ts';
 import { AGENT_IDS, isTaskReviewNote } from '../shared.ts';
-import type { Task, TaskPermissions, Run, TimelineItem, PendingRequest, RuntimeStatus, Snapshot, PendingReview, PendingBuild, AgentModel, Usage, AgentId, MessageMeta, FeedbackSummary, BuildFailure, Annotation, NoteSummary, TaskReconciliation, TaskCommitReview } from '../shared.ts';
+import type { Task, TaskPermissions, Run, TimelineItem, PendingRequest, RuntimeStatus, Snapshot, PendingReview, PendingBuild, AgentModel, Usage, AgentId, MessageMeta, FeedbackSummary, BuildFailure, Annotation, NoteSummary, TaskReconciliation, TaskCommitReview, PageView, ToolPlace } from '../shared.ts';
 
 const execute = promisify(execFile);
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -75,6 +75,8 @@ const BUILD_FIX = 'build-fix-';
 export const VIEW_PDF = 'view_pdf';
 // Papilot Writer's build check: the review engine compiles the task worktree.
 export const CHECK_BUILD = 'check_build';
+// Papilot Writer asks where source lines print, to say what it read.
+export const SOURCE_PAGES = 'source_pages';
 export const VIEW_PDF_TOOL = {
   type: 'function', name: VIEW_PDF,
   description: 'Compile the paper in your task worktree as it is now and draw typeset pages as PNG files. Ask for the pages where source lines are typeset (locations, such as "main/chapters/intro.tex:42") or for page numbers as printed on the pages. The result lists each page\'s file: open the ones you need with your image viewer (view_image) to see them. Set accepted to true to draw the author\'s accepted text, before your edits, instead. Only the chapters needed are compiled when the paper allows it, but this can still take a minute or more.',
@@ -127,6 +129,8 @@ export class Workspace extends EventEmitter {
   // request passed; one resumed after a restart uses prepareReview.
   private reviewCopies = new Map<string, (worktree: string) => Promise<ReviewSnapshot>>();
   prepareReview: (task: Task, worktree: string) => Promise<ReviewSnapshot> = async () => { throw new Error('The PDF snapshot for this review is unavailable. Start a new AI review.'); };
+  /** The manuscript pages where lines of a paper file print; app.ts connects the manuscript builds. */
+  sourcePages: (task: Task, file: string, lines: number[]) => Promise<number[] | null> = async () => null;
   private reviewWrites = new Set<string>();
   // Settles when the task's review write in reviewWrite finishes.
   private reviewWriting = new Map<string, Promise<void>>();
@@ -755,6 +759,15 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     if (!task || task.status === 'deleting') return;
     const eventTurn = p.turnId || p.turn?.id;
     if (eventTurn && task.turnId && eventTurn !== task.turnId) return;
+    if (method === 'thread/tokenUsage/updated') {
+      // The latest request's tokens are what the context holds now.
+      const usage = p.tokenUsage || {}, tokens = Number(usage.last?.totalTokens ?? usage.last?.total_tokens), window = Number(usage.modelContextWindow ?? usage.model_context_window);
+      if (tokens > 0 && window > 0) {
+        const previous = task.context;
+        if (!previous || previous.tokens !== tokens || previous.window !== window) this.store.updateTask(task.id, { context: { tokens: Math.round(tokens), window: Math.round(window) } });
+      }
+      return;
+    }
     if (method === 'item/agentMessage/delta') { if (task.mode !== 'review') this.appendDelta(task, p, 'assistant'); }
     else if (method === 'item/commandExecution/outputDelta') this.appendDelta(task, p, 'command');
     else if ((method === 'item/started' || method === 'item/completed') && p.item) {
@@ -771,12 +784,17 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       if (item.type === 'commandExecution') { entry.type = 'command'; entry.detail = String(item.aggregatedOutput || previous?.detail || '').slice(-40000); }
       if (item.type === 'fileChange') { entry.type = 'files'; entry.text = (item.changes || []).map((change: any) => change.path).join('\n'); }
       if (item.type === 'mcpToolCall') { entry.type = 'tool'; entry.text = `${item.server} / ${item.tool}`; }
-      if (item.type === 'toolCall') entry.type = 'tool';
+      if (item.type === 'toolCall') {
+        entry.type = 'tool';
+        if (typeof item.kind === 'string') entry.tool = { kind: item.kind, ...(item.target ? { target: String(item.target) } : {}), ...(item.lines ? { lines: String(item.lines) } : {}), ...(item.place && typeof item.place === 'object' ? { place: item.place as ToolPlace } : {}) };
+      }
       if (item.type === 'dynamicToolCall') {
         if (item.tool !== VIEW_PDF) { entry.type = 'tool'; entry.text = item.tool || ''; }
         else { entry.type = 'pdf'; entry.text = viewedPlaces(item.arguments); }
         if (item.success === false) entry.status = 'failed';
       }
+      const pages = previous?.pages || this.pendingPages.get(id);
+      if (pages) { entry.pages = pages; this.pendingPages.delete(id); }
       if (entry.text || entry.detail || entry.rawText) this.store.saveItem(entry);
       if (method === 'item/completed' && item.type === 'fileChange' && task.mode !== 'review') this.prefetch(task);
     } else if (method === 'serverRequest/resolved') {
@@ -874,6 +892,12 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       } catch (error) { reply(false, 'Papilot could not compile the paper: ' + errorText(error)); }
       return;
     }
+    if (tool === SOURCE_PAGES && agent === 'papilot') {
+      const lines = Array.isArray(args?.lines) ? args.lines.filter((line: unknown) => Number.isSafeInteger(line) && (line as number) > 0) : [];
+      const pages = typeof args?.path === 'string' && lines.length ? await this.sourcePages(task, args.path, lines).catch(() => null) : null;
+      reply(Boolean(pages), JSON.stringify(pages || []));
+      return;
+    }
     if (tool !== VIEW_PDF) { reply(false, `Papilot has no tool named ${tool}.`); return; }
     const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
     try {
@@ -882,6 +906,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       const shown = await client.post<{ pages: { index: number; label: string | null; shows: string[]; file: string }[]; missing: string[]; targets: string[]; error?: string; details?: string[] }>(
         `${taskRoute(task.name)}/view`, { locations: strings(args?.locations), pages: strings(args?.pages), ...(args?.accepted === true ? { accepted: true } : {}) }, 30 * 60000);
       if (shown.error) { reply(false, [shown.error, ...(shown.details || [])].join('\n')); return; }
+      this.keepPages(task, message.params, shown.pages);
       const compiled = shown.targets[0] === 'full' ? 'the whole paper' : `only ${shown.targets.join(', ')}, so page positions differ from the full PDF while printed page numbers match`;
       reply(true, [
         `${args?.accepted === true ? 'The accepted text' : 'Your worktree'} was compiled (${compiled}).`,
@@ -890,6 +915,25 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
         ...(shown.pages.length ? ['Open the page files you need with your image viewer (view_image).'] : []),
       ].join('\n'));
     } catch (error) { reply(false, 'Papilot could not show the pages: ' + errorText(error)); }
+  }
+  // The review engine deletes drawn pages after a few hours; the chat keeps
+  // its own copy of the pages an agent looked at, shown with that call.
+  private pendingPages = new Map<string, PageView[]>();
+  private keepPages(task: Task, params: any, pages: { index: number; label: string | null; file: string }[]) {
+    const callId = String(params?.callId || ''), turnId = String(params?.turnId || task.turnId || '');
+    if (!/^[\w-]{1,100}$/.test(callId) || !pages.length) return;
+    try {
+      const dir = pageViewDir(task.id);
+      fs.mkdirSync(dir, { recursive: true });
+      const kept = pages.slice(0, 6).map((page, index) => {
+        const file = `${callId}-${index}.png`;
+        fs.copyFileSync(page.file, path.join(dir, file));
+        return { index: page.index, label: page.label, file };
+      });
+      const id = `${task.id}:${turnId}:${callId}`, item = this.store.item(task.id, id);
+      if (item) this.store.saveItem({ ...item, pages: kept });
+      else { this.pendingPages.set(id, kept); if (this.pendingPages.size > 64) this.pendingPages.delete(this.pendingPages.keys().next().value!); }
+    } catch (error) { console.error('Keeping viewed pages:', errorText(error)); }
   }
   answer(id: string, input: { decision?: string; answers?: Record<string, string> }) {
     const request = this.requests.get(id); if (!request) throw new Error('This request has ended or the connection has restarted.');
@@ -1588,6 +1632,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       if (unprepared) for (const { taskId: _, ...note } of this.store.annotations(task.projectId).filter(note => note.taskId === taskId)) this.store.saveAnnotation(note);
       this.reviewCopies.delete(taskId); this.announced.delete(taskId);
       this.attachments.removeTask(taskId);
+      fs.rmSync(pageViewDir(taskId), { recursive: true, force: true });
       this.store.deleteTask(taskId);
       return { ok: true };
     } catch (error) {

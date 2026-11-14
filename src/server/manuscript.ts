@@ -16,7 +16,7 @@ import type { Annotation, BuildProblem, BuildProgress, BuildRepairResult, GitDif
 import { ignorePattern } from '../commit.ts';
 import { PdfReader } from './pdf-reader.ts';
 import { annotatePdf, type ExportNote } from './annotated-pdf.ts';
-import { collectProblems, countProblems, locateProblems, scrubLog, sortProblems, type StoredProblem } from './build-problems.ts';
+import { collectProblems, countProblems, locateProblems, scrubLog, sortProblems, syncView, type StoredProblem } from './build-problems.ts';
 import { parseLatexRepair } from './latex-repair.ts';
 // Where a note comes from in the source, worked out in the PDF reader's worker.
 export { anchor, followLines, parseSynctex, settleLines, sourceExcerpt, type Anchor } from './note-location.ts';
@@ -957,6 +957,24 @@ export class Manuscripts extends EventEmitter {
     return pending;
   }
 
+  /** The PDF pages, counted from 1, where lines of a paper file printed in the
+   *  manuscript's latest build, or null without one. A task's text differs
+   *  from it only where the task edited, so this places most of what it reads. */
+  async sourcePages(projectId: string, file: string, lines: number[]): Promise<number[] | null> {
+    const build = this.builds.get(projectId);
+    if (!build?.pdf || !fs.existsSync(build.pdf)) return null;
+    const relative = path.posix.relative(build.sourceDir || '', file.split(path.sep).join('/'));
+    if (relative.startsWith('..')) return [];
+    const input = path.join(build.root || path.dirname(build.pdf), relative), pages = new Set<number>();
+    // A blank or preamble line prints nothing; the next few lines stand in for it.
+    await Promise.all(lines.slice(0, 12).map(async line => {
+      for (let next = line; next < line + 4; next++) {
+        const boxes = await syncView(build.pdf!, input, next);
+        if (boxes.length) { for (const box of boxes) pages.add(box.page + 1); return; }
+      }
+    }));
+    return [...pages].sort((a, b) => a - b);
+  }
   pdf(projectId: string, key: string) {
     const shown = this.shownBuild(projectId, key);
     if (!shown) throw Object.assign(new Error('This manuscript preview is out of date. Refresh it and try again.'), { statusCode: 404 });

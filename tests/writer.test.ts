@@ -162,7 +162,8 @@ test('Papilot Writer runs a turn on Pi: map first, approvals through Papilot, ch
     ai.fauxAssistantMessage('Made the loss tiny.'),
   ]);
   try {
-    class Writer extends WriterAgent { available() { return [faux.getModel()] as never; } }
+    // Refreshing the registry would drop the faux provider's registration.
+    class Writer extends WriterAgent { available() { return [faux.getModel()] as never; } async refreshModels() {} }
     const agent = new Writer({ dir: data, auth: AuthStorage.inMemory({ faux: { type: 'api_key', key: 'test' } }) });
     const notes: any[] = [], requests: any[] = [];
     agent.on('notification', note => notes.push(note));
@@ -186,4 +187,87 @@ test('Papilot Writer runs a turn on Pi: map first, approvals through Papilot, ch
     assert.ok(fs.existsSync(path.join(data, 'sessions', `${thread.id}.jsonl`)), 'the session is kept for resuming');
     agent.close();
   } finally { faux.unregister(); }
+});
+
+test('models come from each provider\'s own list, with Pi\'s entries only as templates', async () => {
+  const ai = await import('@mariozechner/pi-ai');
+  const { listModels, fromList } = await import('../src/server/writer/models.ts');
+  const builtins = ai.getModels('openai-codex') as any[];
+  const token = ['x', Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'acct-1' } })).toString('base64url'), 'y'].join('.');
+  let seen: { url: string; headers: any } | null = null;
+  const fetcher = async (url: string, init?: RequestInit) => {
+    seen = { url, headers: init?.headers };
+    return new Response(JSON.stringify({ models: [
+      { slug: 'gpt-6-mini', display_name: 'GPT-6 Mini', priority: 2, visibility: 'list', supported_reasoning_levels: [{ effort: 'low' }, { effort: 'high' }] },
+      { slug: 'gpt-6-astra', display_name: 'GPT-6-Astra', priority: 1, visibility: 'list', context_window: 400000 },
+      { slug: 'internal-eval', priority: 0, visibility: 'hide' },
+    ] }));
+  };
+  const listed = await listModels('openai-codex', token, builtins[0], fetcher, '0.164.0');
+  assert.match(seen!.url, /\/codex\/models\?client_version=0\.164\.0$/);
+  assert.equal(seen!.headers['chatgpt-account-id'], 'acct-1');
+  assert.deepEqual(listed!.map(entry => entry.id), ['gpt-6-astra', 'gpt-6-mini'], 'Hidden models are left out; the backend\'s order is kept');
+  const models = fromList(listed!, builtins);
+  assert.equal(models[0].name, 'GPT-6-Astra');
+  assert.equal(models[0].contextWindow, 400000);
+  assert.equal(models[0].api, builtins[0].api, 'Request settings come from a built-in entry');
+  assert.equal(models[0].baseUrl, builtins[0].baseUrl);
+  assert.deepEqual(models[0].cost, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, 'An unknown model has no made-up prices');
+});
+
+test('Papilot Writer lists the provider\'s models and falls back to Pi\'s entries when the list is unavailable', async () => {
+  const { AuthStorage } = await import('@mariozechner/pi-coding-agent');
+  let online = true;
+  const fetcher = async (url: string) => {
+    if (!online) throw new Error('offline');
+    assert.equal(url, 'https://api.openai.com/v1/models');
+    return new Response(JSON.stringify({ data: [{ id: 'gpt-6' }, { id: 'text-embedding-3-large' }, { id: 'gpt-realtime' }, { id: 'gpt-5.4' }] }));
+  };
+  const listed = new WriterAgent({ dir: fs.mkdtempSync(path.join(os.tmpdir(), 'papilot writer models ')), auth: AuthStorage.inMemory({ openai: { type: 'api_key', key: 'sk-test' } }), env: {}, fetch: fetcher });
+  await listed.start();
+  const ids = (await listed.request('model/list')).data.map((model: any) => model.model);
+  assert.deepEqual([...ids].sort(), ['openai/gpt-5.4', 'openai/gpt-6']);
+  online = false;
+  const offline = new WriterAgent({ dir: fs.mkdtempSync(path.join(os.tmpdir(), 'papilot writer models ')), auth: AuthStorage.inMemory({ openai: { type: 'api_key', key: 'sk-test' } }), env: {}, fetch: fetcher });
+  await offline.start();
+  const fallback = (await offline.request('model/list')).data.map((model: any) => model.model);
+  assert.ok(fallback.length > 2 && fallback.every((id: string) => id.startsWith('openai/')), 'Pi\'s built-in entries stand in');
+});
+
+test('tool calls read as sentences and a run of them as a summary of what happened', async () => {
+  const { toolSentence, toolSummary, toolIcon } = await import('../src/web/tool-calls.ts');
+  const tool = (id: string, name: string, args: Record<string, unknown>) => {
+    const item = toolItem(id, name, args) as any;
+    return { id, taskId: 't', createdAt: 0, type: 'tool', text: item.text, tool: { kind: item.kind, target: item.target, ...(item.lines ? { lines: item.lines } : {}) } };
+  };
+  const read = tool('2', 'read_file', { path: 'paper.tex', start_line: 1, end_line: 362 });
+  assert.equal(toolSentence(read), 'Read paper.tex, lines 1–362');
+  assert.equal(toolIcon(read), 'paper');
+  const items = [tool('1', 'list_files', {}), read, tool('3', 'read_file', { path: 'sections/intro.tex' }), tool('4', 'read_file', { path: 'paper.tex', start_line: 363 }),
+    tool('5', 'search_text', { query: 'flow' }), tool('6', 'search_source', { pattern: '\\cite' }), { id: '7', taskId: 't', createdAt: 0, type: 'command', text: 'make' }];
+  const summary = toolSummary(items, () => []);
+  assert.equal(summary.text, 'Listed the files, read 2 files, searched 2 times, ran 1 command');
+  assert.equal(summary.icon, 'paper', 'The icon follows what the run did most');
+  assert.equal(toolSummary([tool('8', 'read_file', { path: 'macros.tex' })], () => []).text, 'Read macros.tex');
+  assert.equal(toolSentence({ id: '9', taskId: 't', createdAt: 0, type: 'tool', text: 'server / tool' }), null, 'Other agents keep their own text');
+});
+
+test('a read names the sections it covered and the pages they print on', async () => {
+  const { sectionsOf } = await import('../src/server/writer/tools.ts');
+  const { toolSentence, toolNote, toolSummary } = await import('../src/web/tool-calls.ts');
+  const dir = paper(), outline = (await paperMap(dir)).outline;
+  assert.deepEqual(sectionsOf(outline, 'sections/method.tex', 1, 5), { sections: [{ number: '2', title: 'Method' }] }, 'A section read whole is named at its highest level');
+  assert.deepEqual(sectionsOf(outline, 'sections/method.tex', 4, 4), { sections: [{ number: '2.1', title: 'Loss' }], partial: true }, 'Part of a section names the innermost one');
+  assert.equal(sectionsOf(outline, 'refs.bib', 1, 3), null);
+  // The pages come from SyncTeX through Papilot; the read reports both.
+  const asked: any[] = [];
+  const tools = writerTools(host(dir, { papilot: async (tool, args) => { asked.push([tool, args]); return { success: true, text: '[4,5]' }; } }));
+  const read = tools.find(item => item.name === 'read_file')!;
+  const result: any = await read.execute('call', { path: 'sections/method.tex', start_line: 3, end_line: 5 }, undefined, undefined, undefined as never);
+  assert.equal(asked[0][0], 'source_pages');
+  assert.deepEqual(result.details.place, { sections: [{ number: '2.1', title: 'Loss' }], pages: [4, 5] });
+  const item = { id: 'r', taskId: 't', createdAt: 0, type: 'tool', text: '', tool: { kind: 'read', target: 'sections/method.tex', lines: '3-5', place: result.details.place } };
+  assert.equal(toolSentence(item), 'Read §2.1 Loss');
+  assert.equal(toolNote(item), 'pages 4–5 · sections/method.tex, lines 3–5');
+  assert.equal(toolSummary([item, { ...item, id: 's', tool: { ...item.tool, target: 'main.tex', place: { sections: [], pages: [2, 2] } } }], () => []).text, 'Read 2 files on pages 2–5');
 });

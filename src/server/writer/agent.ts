@@ -8,6 +8,7 @@ import { Adapter, type Item, type Thread, type Turn } from '../agents.ts';
 import { imageType } from '../attachments.ts';
 import { AUTH_FILE, WRITER_DIR, WriterCredentials } from './auth.ts';
 import { CHARTER, COMPACTION } from './charter.ts';
+import { fromList, listModels } from './models.ts';
 import { toolError, type WriterMode } from './policy.ts';
 import type { BuildNote } from './paper-map.ts';
 import type { Approval, Question, ToolHost } from './tools.ts';
@@ -49,6 +50,14 @@ const PROVIDER_ORDER = Object.keys(DEFAULT_MODELS);
 const CHORE_TOOLS = new Set(['run_command']);
 const FILE_TOOLS = new Set(['edit_file', 'write_file', 'move_file', 'delete_file', 'add_reference']);
 const PER_PROVIDER = 30;
+// How long a provider's model list is trusted before it is fetched again.
+const CATALOG_TTL = 10 * 60 * 1000;
+// The Codex backend lists the models a client of this version can use; Papilot bundles this Codex.
+const CODEX_CLIENT_VERSION = (() => {
+  try { const pkg = JSON.parse(fs.readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')); return String(pkg.dependencies?.['@openai/codex'] || pkg.devDependencies?.['@openai/codex'] || '').replace(/^[^\d]*/, '') || '0.164.0'; }
+  catch { return '0.164.0'; }
+})();
+interface Listing { models: Model<Api>[]; efforts: Map<string, string[]>; at: number }
 export const modelId = (model: Pick<Model<Api>, 'provider' | 'id'>) => `${model.provider}/${model.id}`;
 
 export class WriterAgent extends Adapter {
@@ -59,6 +68,9 @@ export class WriterAgent extends Adapter {
   private registry?: ModelRegistry;
   credentials?: WriterCredentials;
   private live = new Map<string, Live>();
+  // Each provider's own model list, when it could be fetched.
+  private catalog = new Map<string, Listing>();
+  private listing?: Promise<void>;
   private waits = new Map<string, Wait>();
   private dir: string;
   constructor(private options: WriterOptions = {}) { super(); this.dir = options.dir || WRITER_DIR; }
@@ -75,7 +87,7 @@ export class WriterAgent extends Adapter {
     this.storage = this.options.auth || sdk.AuthStorage.create(this.options.dir ? path.join(this.dir, 'auth.json') : AUTH_FILE);
     // Built-in models only: no models.json, so a Pi setup cannot add providers.
     this.registry = sdk.ModelRegistry.inMemory(this.storage);
-    this.credentials = new WriterCredentials(this.storage, this.options.env || process.env, () => this.emit('credentials'));
+    this.credentials = new WriterCredentials(this.storage, this.options.env || process.env, () => { this.catalog.clear(); this.emit('credentials'); });
     this.options.setup?.(this.registry, ai);
   }
 
@@ -97,9 +109,38 @@ export class WriterAgent extends Adapter {
     const usable = this.registry.getAvailable().filter(model => this.credentials!.usable(model.provider));
     const providers = [...new Set(usable.map(model => model.provider))].sort((a, b) => (PROVIDER_ORDER.indexOf(a) + 1 || 99) - (PROVIDER_ORDER.indexOf(b) + 1 || 99));
     return providers.flatMap(provider => {
-      const models = usable.filter(model => model.provider === provider), preferred = models.find(model => model.id === DEFAULT_MODELS[provider]);
-      return [...(preferred ? [preferred] : []), ...models.filter(model => model !== preferred).reverse()].slice(0, PER_PROVIDER);
+      const listed = this.catalog.get(provider)?.models;
+      // A provider's own list is already in its order of preference.
+      const models = listed || usable.filter(model => model.provider === provider).reverse();
+      // The Codex backend ranks its list; other lists come in no useful order.
+      const preferred = provider === 'openai-codex' && listed ? listed[0] : models.find(model => model.id === DEFAULT_MODELS[provider]);
+      return [...(preferred ? [preferred] : []), ...models.filter(model => model !== preferred)].slice(0, PER_PROVIDER);
     });
+  }
+  /** Fetches the model list of each configured provider whose list is missing or old. */
+  async refreshModels() {
+    await this.load();
+    this.listing ||= (async () => {
+      const registry = this.registry!, fetcher = this.options.fetch || fetch;
+      registry.refresh();
+      const usable = registry.getAvailable().filter(model => this.credentials!.usable(model.provider));
+      await Promise.all([...new Set(usable.map(model => model.provider))].map(async provider => {
+        const cached = this.catalog.get(provider);
+        if (cached && Date.now() - cached.at < CATALOG_TTL) return;
+        const builtins = usable.filter(model => model.provider === provider);
+        try {
+          const token = await registry.getApiKeyForProvider(provider);
+          const listed = token ? await listModels(provider, token, builtins[0], fetcher, CODEX_CLIENT_VERSION) : null;
+          const models = listed ? fromList(listed, builtins) : [];
+          if (models.length) this.catalog.set(provider, { models, efforts: new Map(listed!.filter(entry => entry.efforts?.length).map(entry => [entry.id, entry.efforts!])), at: Date.now() });
+          else this.catalog.delete(provider);
+        } catch {
+          // Offline or refused: keep the last list, or fall back to Pi's built-in entries.
+          if (cached) cached.at = Date.now() - CATALOG_TTL + 60000;
+        }
+      }));
+    })().finally(() => { this.listing = undefined; });
+    await this.listing;
   }
   private defaultModel() { return this.available()[0]; }
   protected account() {
@@ -107,10 +148,12 @@ export class WriterAgent extends Adapter {
     if (!configured.length || !this.defaultModel()) return { account: null, requiresOpenaiAuth: true, reason: 'Papilot Writer needs a model provider. Sign in with ChatGPT or GitHub Copilot, or add an API key, in Settings → Agents → Papilot Writer.' };
     return { account: { type: configured.map(provider => provider.name).join(', ') }, requiresOpenaiAuth: false };
   }
-  protected models() {
+  protected async models() {
+    await this.refreshModels();
     const fallback = this.defaultModel();
     return { data: this.available().map(model => {
-      const efforts = model.reasoning ? this.ai!.getSupportedThinkingLevels(model).filter(level => level !== 'off') : [];
+      const listed = this.catalog.get(model.provider)?.efforts.get(model.id);
+      const efforts = listed || (model.reasoning ? this.ai!.getSupportedThinkingLevels(model).filter(level => level !== 'off') : []);
       return {
         model: modelId(model), displayName: `${model.name} · ${this.registry!.getProviderDisplayName(model.provider)}`, isDefault: model === fallback,
         supportedReasoningEfforts: efforts.map(reasoningEffort => ({ reasoningEffort })), defaultReasoningEffort: efforts.includes('medium') ? 'medium' : efforts[0] || null,
@@ -156,7 +199,7 @@ export class WriterAgent extends Adapter {
         { reason: `${request.title}. ${request.reason}`, command: request.kind === 'command' ? request.command : request.title }, false, signal),
       ask: (questions: Question[], signal) => this.send<string[]>(turn(), 'question', 'item/tool/requestUserInput',
         { questions: questions.map((q, index) => ({ id: String(index), header: q.header || 'Question', question: q.question, options: q.options, isOther: true })) }, [], signal, questions.length),
-      papilot: (tool, args, signal) => this.send(turn(), 'tool', 'item/tool/call', { callId: randomUUID(), tool, arguments: args }, { success: false, text: 'The turn stopped before Papilot answered.' }, signal),
+      papilot: (tool, args, signal, callId) => this.send(turn(), 'tool', 'item/tool/call', { callId: callId || randomUUID(), tool, arguments: args }, { success: false, text: 'The turn stopped before Papilot answered.' }, signal),
       lastBuild: () => live.build,
       recordBuild: note => { live.build = note; },
       chore: () => live.chore,
@@ -207,7 +250,7 @@ export class WriterAgent extends Adapter {
     const { writerTools } = await import('./tools.ts');
     const tools: ToolDefinition[] = writerTools(this.host(live));
     live.tools = tools.map(tool => tool.name);
-    const model = this.resolve(thread.model);
+    const model = await this.resolve(thread.model);
     const { session } = await sdk.createAgentSession({
       cwd: thread.cwd, agentDir: this.dir, authStorage: this.storage, modelRegistry: this.registry, ...(model ? { model } : {}),
       tools: live.tools, customTools: tools, resourceLoader: loader, sessionManager, settingsManager,
@@ -217,7 +260,8 @@ export class WriterAgent extends Adapter {
     this.live.set(threadId, live);
     return live;
   }
-  private resolve(id: string | null) {
+  private async resolve(id: string | null) {
+    await this.refreshModels();
     const available = this.available();
     return (id && available.find(model => modelId(model) === id)) || available[0];
   }
@@ -233,7 +277,7 @@ export class WriterAgent extends Adapter {
     };
     try {
       await this.load();
-      const model = this.resolve(thread.model);
+      const model = await this.resolve(thread.model);
       if (!model) throw new Error(String(this.account().reason || 'Papilot Writer has no model available.'));
       live = await this.open(turn.threadId, thread);
       if (stopped) return;
@@ -289,6 +333,8 @@ export class WriterAgent extends Adapter {
         const final = event.message.content.filter(part => part.type === 'text').map(part => (part as { text: string }).text).join('') || text;
         if (final.trim()) this.item(turn, { id: `${turn.id}:text:${message}`, type: 'agentMessage', text: final });
         if (event.message.stopReason === 'error') fail(event.message.errorMessage || 'The model provider returned an error.');
+        const usage = session.getContextUsage();
+        if (usage?.tokens) this.notify('thread/tokenUsage/updated', { threadId: turn.threadId, turnId: turn.id, tokenUsage: { last: { totalTokens: usage.tokens }, modelContextWindow: usage.contextWindow } });
       } else if (event.type === 'tool_execution_start') {
         const item = toolItem(event.toolCallId, event.toolName, event.args || {});
         shown.set(event.toolCallId, item);
@@ -300,6 +346,8 @@ export class WriterAgent extends Adapter {
         if (started.type === 'fileChange' && (event.isError || !details.changed)) item = { id: started.id, type: 'toolCall', text: `${event.toolName} ${String((started.changes as { path: string }[])[0]?.path || '')}`, status: event.isError ? 'failed' : 'completed' };
         if (started.type === 'commandExecution') item = { ...item, aggregatedOutput: details.output ?? resultText(event.result), exitCode: details.exitCode ?? null };
         if (started.type === 'dynamicToolCall') item = { ...item, success: !event.isError };
+        // A read says which file and lines it ended up reading, and where they are in the paper.
+        if (started.kind === 'read' && !event.isError) item = { ...item, ...(details.path ? { target: details.path } : {}), ...(details.lines ? { lines: details.lines } : {}), ...(details.place ? { place: details.place } : {}) };
         this.item(turn, item);
       } else if (event.type === 'auto_retry_start') {
         this.item(turn, { id: `${turn.id}:retry:${event.attempt}`, type: 'toolCall', text: `Retrying after a provider error (${event.attempt}/${event.maxAttempts}): ${event.errorMessage.slice(0, 160)}`, status: 'completed' });
@@ -327,10 +375,15 @@ export function toolItem(id: string, name: string, args: Record<string, any>): I
   if (name === 'view_pages') return { id, type: 'dynamicToolCall', tool: 'view_pdf', arguments: args, status: 'inProgress' };
   const label: Record<string, string> = { paper_outline: 'Outline', read_file: 'Read', search_text: 'Search text', search_source: 'Search source', find_references: 'Find references', list_files: 'List files',
     check_build: 'Compile', lookup_reference: 'Look up reference', read_webpage: 'Read webpage', ask_author: 'Ask the author', enter_chore_mode: 'Enter chore mode', exit_chore_mode: 'End chore mode' };
-  const target = args.section || args.path || args.query || args.pattern || args.name || args.url || args.chore || args.summary || '';
-  const where = args.path && args.start_line ? `:${args.start_line}${args.end_line ? `-${args.end_line}` : ''}` : '';
-  return { id, type: 'toolCall', text: `${label[name] || name}${target ? ` ${String(target).slice(0, 200)}${where}` : ''}`, status: 'inProgress' };
+  const target = String(args.section || args.path || args.query || args.pattern || args.name || args.url || args.chore || '').slice(0, 200);
+  const lines = !args.section && args.start_line ? `${args.start_line}${args.end_line ? `-${args.end_line}` : ''}` : '';
+  // text is the plain fallback; kind and target let the chat word and group the call.
+  return { id, type: 'toolCall', text: `${label[name] || name}${target ? ` ${target}${lines ? `:${lines}` : ''}` : ''}`, status: 'inProgress',
+    ...(TOOL_KINDS[name] ? { kind: TOOL_KINDS[name], target, ...(lines ? { lines } : {}) } : {}) };
 }
+// The kinds of Writer tool call the chat words, groups and gives an icon.
+const TOOL_KINDS: Record<string, string> = { paper_outline: 'outline', read_file: 'read', search_text: 'search', search_source: 'search', find_references: 'references', list_files: 'list',
+  check_build: 'build', lookup_reference: 'lookup', read_webpage: 'web', ask_author: 'ask', enter_chore_mode: 'chore', exit_chore_mode: 'chore-end' };
 
 // The paper's own agent instructions, from the top of the worktree only.
 function projectInstructions(cwd: string) {

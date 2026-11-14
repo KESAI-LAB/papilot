@@ -264,7 +264,7 @@ export function placementOrder(problems: Pick<BuildProblem, 'severity'>[], limit
 }
 
 // The boxes one source line printed, as `synctex view` lists them.
-const syncView = (pdf: string, file: string, line: number) =>
+export const syncView = (pdf: string, file: string, line: number) =>
   exec('synctex', ['view', '-i', `${line}:0:${file}`, '-o', pdf], { timeout: 10000 }).then(result => parseSynctexView(result.stdout), () => [] as SyncBox[]);
 
 // The box around what source lines printed on one page, in page points.
