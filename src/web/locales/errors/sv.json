@@ -294,5 +294,6 @@
   "This sign-in has ended. Start it again.": "Den här inloggningen har avslutats. Starta den igen.",
   "This sign-in is not waiting for a code.": "Den här inloggningen väntar inte på någon kod.",
   "Sign-in cancelled.": "Inloggningen avbröts.",
-  "This page is no longer available.": "Den här sidan är inte längre tillgänglig."
+  "This page is no longer available.": "Den här sidan är inte längre tillgänglig.",
+  "That page is not in the PDF.": "Den sidan finns inte i PDF:en."
 }

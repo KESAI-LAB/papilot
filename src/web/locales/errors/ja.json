@@ -294,5 +294,6 @@
   "This sign-in has ended. Start it again.": "このサインインは終了しました。もう一度開始してください。",
   "This sign-in is not waiting for a code.": "このサインインはコードを待っていません。",
   "Sign-in cancelled.": "サインインをキャンセルしました。",
-  "This page is no longer available.": "このページはもう利用できません。"
+  "This page is no longer available.": "このページはもう利用できません。",
+  "That page is not in the PDF.": "そのページは PDF にありません。"
 }

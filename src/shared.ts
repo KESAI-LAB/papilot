@@ -100,7 +100,9 @@ export interface PageView { index: number; label: string | null; file: string }
 // those as what they are rather than as the prompt the agent receives.
 // Papilot itself sends the agent a build its own edits broke.
 export interface NoteAnchor { sources: { file: string; lines: [number, number] }[]; round?: number }
-export interface NoteSummary { group?: NoteGroup; kind?: MarkKind; stamp?: string; where: string; quote: string; comment: string; id?: string; anchor?: NoteAnchor }
+// paper: where a note made in the task's PDF reader was, so its page can be
+// shown to the agent; context: what the agent is told beyond its location.
+export interface NoteSummary { group?: NoteGroup; kind?: MarkKind; stamp?: string; where: string; quote: string; comment: string; id?: string; anchor?: NoteAnchor; context?: string[]; paper?: { page: number; rects: [number, number, number, number][]; round?: number; key?: string; build?: string } }
 export interface NoteChange { round: number; stop: number; units: string[]; state: 'pending' | 'accepted' | 'rejected' | 'commented' | 'mixed'; match: 'source' | 'quote' }
 export interface NoteResult { key: string; itemId: string; index: number; note: NoteSummary; round: number | null; state: 'waiting' | 'unmatched' | 'matched'; changes: NoteChange[] }
 export interface NoteOption { id: string; label: string; reason?: string; previewError?: string; edits: { unit: string; text: string }[] }

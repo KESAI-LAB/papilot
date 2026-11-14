@@ -294,5 +294,6 @@
   "This sign-in has ended. Start it again.": "此次登入已結束，請重新開始。",
   "This sign-in is not waiting for a code.": "此次登入未在等待代碼。",
   "Sign-in cancelled.": "已取消登入。",
-  "This page is no longer available.": "此頁面已無法使用。"
+  "This page is no longer available.": "此頁面已無法使用。",
+  "That page is not in the PDF.": "PDF 中沒有這一頁。"
 }

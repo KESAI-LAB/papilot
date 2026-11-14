@@ -1,4 +1,5 @@
 import type { ReviewSnapshot } from './ai-review.ts';
+import { markedPage } from './note-pages.ts';
 import type { Project as BuildProject } from '../../engine/src/core/config.ts';
 import type { BuildInfo } from '../../engine/src/types.ts';
 import { ReviewSnapshots } from './review-snapshot.ts';
@@ -995,6 +996,11 @@ export class Manuscripts extends EventEmitter {
     return { pdf, root: shown.root || path.dirname(pdf), sourceDir: shown.sourceDir || '' };
   }
 
+  /** A page of a PDF as a PNG, with a commented passage marked on it. */
+  async notePage(pdf: string, page: number, rects: Rect[]) {
+    const { mupdf } = await engine();
+    return markedPage(mupdf, pdf, page, rects);
+  }
   // The PDF with the paper's notes drawn on it, to share with people outside Papilot.
   async annotatedPdf(projectId: string, key: string, notes: ExportNote[]) {
     const pdf = this.pdf(projectId, key), { mupdf } = await engine();
@@ -1019,6 +1025,14 @@ export class Manuscripts extends EventEmitter {
   // The pages may be those of an earlier pass or build than the latest: the
   // place is found in the PDF that was marked, then followed to the file as it
   // is now.
+  /** The PDF of a build in the paper's build cache, or null once it is gone. */
+  async buildPdf(root: string, key: string) {
+    const { loadProject } = await engine(), project = loadProject(root);
+    try {
+      const info = JSON.parse(await fs.promises.readFile(path.join(project.state, 'cache/builds', key, 'result.json'), 'utf8'));
+      return typeof info.pdf === 'string' && fs.existsSync(info.pdf) ? info.pdf as string : null;
+    } catch { return null; }
+  }
   /** Where a mark on a page of any build of the paper is in the source, in
    *  `working`'s files: a task's PDF of its decisions, located in its worktree. */
   async locateBuild(root: string, key: string, page: number, rect: Rect, rects: Rect[], selected: string, working: string) {
@@ -1029,6 +1043,11 @@ export class Manuscripts extends EventEmitter {
     catch { throw Object.assign(new Error('This PDF is no longer available.'), { statusCode: 404 }); }
     if (typeof info.pdf !== 'string' || typeof info.root !== 'string') throw Object.assign(new Error('This PDF is no longer available.'), { statusCode: 404 });
     return this.pdfReader.locate({ pdf: info.pdf, page, rect, rects, selected, root: info.root, sourceDir: project.source_dir || '', working });
+  }
+  /** Where a mark on a manuscript preview PDF is, followed into `working`'s files. */
+  async locateShown(projectId: string, key: string, page: number, rect: Rect, rects: Rect[], selected: string, working: string) {
+    const { pdf, root, sourceDir } = this.compiled(projectId, key);
+    return this.pdfReader.locate({ pdf, page, rect, rects, selected, root, sourceDir, working });
   }
   async locate(projectId: string, key: string, page: number, rect: Rect, rects: Rect[] = [], selected = '') {
     const pdf = this.pdf(projectId, key), build = this.shownBuild(projectId, key)!;

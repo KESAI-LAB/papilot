@@ -820,7 +820,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Comment": {
-    "revision": "4e701db3560db3b0421205677b1b7eb638a08697e56be3f45efaf515c1b2c770",
+    "revision": "b41aae4b67221c1aac389f74d29749013a21477ff25626441dfe760077a7f935",
     "textHash": "53c3678984343179a6556163c593c6a4d905e2c8fad1966143f6a0785248f1bc",
     "model": "codex-reviewed"
   },
@@ -2905,7 +2905,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Paper": {
-    "revision": "2e1767834aeec3f1499b8f150bba815cb3f41d9f1a0f55dedbf91d17664c3c29",
+    "revision": "b155321a2aeeb075ff84ed89b6b4b058c64383e038442c55070f650e90c87bae",
     "textHash": "b0d6ba2fe42b0002145d77abbcbae9701976f43c7b79318e41e7b440eddcaaa0",
     "model": "gemini-4-argon-medium"
   },
@@ -4980,7 +4980,7 @@
     "model": "gemini-4-argon-medium"
   },
   "What should change here?": {
-    "revision": "257015b9c69ba4ebc0b0580efb7b77e535d8abba7489fb22726a97d19fb89f41",
+    "revision": "a9be971a75319c8d2d8066cd1ba235e89d682ff83877cc9ba39b4cc3db976c02",
     "textHash": "aae7da75d9a89f2747fbeb558e08b7df515575ea6d43e42f06eed3869dd6dc99",
     "model": "codex-reviewed"
   },

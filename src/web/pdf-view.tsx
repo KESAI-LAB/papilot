@@ -38,6 +38,8 @@ export type { OutlineItem } from '../../engine/src/web/pdf-reader.ts';
 // a place already in view is marked without moving the pages.
 export interface PdfHandle { goTo: (item: OutlineItem) => void; goToNote: (note: Annotation) => void; showPlace: (page: number, rect: Rect, options?: { keep?: boolean }) => void; focus: () => void; fitWidth: () => void }
 // A touch selection also has its ends: the edge of its first and last word, with that line's top and bottom.
+// A passage quoted in an unsent chat message, numbered as in the message.
+export interface PdfComment { id: string; page: number; rects: Rect[]; number: number }
 interface Selection { page: number; rects: Rect[]; quote: string; handles?: { from: [number, number, number]; to: [number, number, number] } }
 // What a tool marks: selected text, a region, or a point (a small box quoted
 // by the line at or beside it, with the word clicked and the words before it
@@ -203,6 +205,11 @@ export const PdfView = forwardRef<PdfHandle, {
   /** Offers the source tool; a click or drag with it names a passage, on the PDF named `key`. */
   onSource?: (target: Target, key?: string) => void;
   passage?: PdfPassage;
+  /** In a read-only reader: offers "Comment" beside a selection; the comment,
+   *  written in a popover there, goes to the chat with the passage. */
+  onComment?: (target: Target, comment: string, key?: string) => void;
+  /** Passages commented on in the chat's unsent message, kept marked. */
+  comments?: PdfComment[];
 }>(function PdfView(props, ref) {
   const latest = useRef(props); latest.current = props;
   const root = useRef<HTMLDivElement>(null), container = useRef<HTMLDivElement>(null), inner = useRef<HTMLDivElement>(null), findInput = useRef<HTMLInputElement>(null);
@@ -784,6 +791,7 @@ export const PdfView = forwardRef<PdfHandle, {
   }
   async function saveNewNote(comment: string, action: 'keep' | 'close' | 'quote') {
     if (!editing) return false;
+    if (!markable && latest.current.onComment) { latest.current.onComment(editing, comment, shownRef.current.key); setEditing(null); return true; }
     setNoteBusy(true); setNoteError('');
     try {
       await latest.current.onCreate(editing.page, editing.rect, editing.rects, editing.quote, comment, undefined, { reveal: action === 'keep', quote: action === 'quote', ...(editing.point ? { kind: 'point' as const } : {}), key: shownRef.current.key });
@@ -889,6 +897,10 @@ export const PdfView = forwardRef<PdfHandle, {
       {wheel?.target.page === number - 1 && (wheel.target.point ? <div className="note-point draft" style={center(wheel.target.rect)}/>
         : (wheel.target.rects.length ? wheel.target.rects : [wheel.target.rect]).map((rect, index) => <div key={index} className={(wheel.target.rects.length ? 'note-mark' : 'note-box') + ' draft'} style={percent(rect)}/>))}
       {draft?.page === number - 1 && <div className="note-box draft" style={percent(draft.rect)}/>}
+      {props.comments?.filter(comment => comment.page === number - 1).map(comment => <Fragment key={comment.id}>
+        {comment.rects.map((rect, index) => <div key={index} className="pdf-comment-mark" data-comment={comment.id} style={percent(rect)}/>)}
+        <span className="pdf-comment-tag" style={{ left: `${comment.rects[0][0] * 100}%`, top: `${comment.rects[0][1] * 100}%` }} aria-hidden>{comment.number}</span>
+      </Fragment>)}
       {props.passage?.page === number - 1 && props.passage.marks.map((rect, index) => <div key={index} className="source-mark" style={percent(rect)}/>)}
       {flash?.page === number - 1 && <div key={flash.id} className="problem-flash" style={percent(flash.rect)}/>}
       {selection?.handles && selection.page === number - 1 && !editing && <>
@@ -896,6 +908,7 @@ export const PdfView = forwardRef<PdfHandle, {
         {(['from', 'to'] as const).map(end => { const [x, top, bottom] = selection.handles![end]; return <span key={end} className="select-handle" data-end={end} style={{ left: `${x * 100}%`, top: `${top * 100}%`, height: `${(bottom - top) * 100}%` }}/>; })}
       </>}
       {markable && selection?.page === number - 1 && !editing && (active === 'select' || active === 'note' || selection.handles) && <button type="button" className={'add-note' + (selection.handles ? ' touch' : '')} aria-label={pillTool === 'delete' ? t('Delete') : pillTool === 'magic' ? t('Quick notes') : pillGroup ? t('Add to {group}', { group: groupName(pillGroup) }) : t('Add note')} style={{ left: `${selection.rects[selection.rects.length - 1][2] * 100}%`, top: `${selection.rects[selection.rects.length - 1][3] * 100}%` }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => { if (pillTool) mark(selected(selection)); else startNote(); }}>{pillTool === 'delete' ? <><Icon name="toolStrike" size={14}/>{t('Delete')}</> : pillTool === 'magic' ? <><Icon name="toolMagic" size={14}/>{t('Quick notes')}</> : <><Icon name="pencil" size={14}/><GroupAction group={pillGroup}/></>}</button>}
+      {!markable && props.onComment && selection?.page === number - 1 && <button type="button" className={'add-note' + (selection.handles ? ' touch' : '')} aria-label={t('Comment')} style={{ left: `${selection.rects[selection.rects.length - 1][2] * 100}%`, top: `${selection.rects[selection.rects.length - 1][3] * 100}%` }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => openCard(selected(selection))}><Icon name="chat" size={14}/>{t('Comment')}</button>}
       {/* Beside "Add note", the Select tool also offers the passage's LaTeX. */}
       {markable && props.onSource && selection?.page === number - 1 && !selection.handles && !editing && active === 'select' && <button type="button" className="add-source" aria-label={t('Edit source')} title={t('Edit source')} style={{ left: `${selection.rects[selection.rects.length - 1][2] * 100}%`, top: `${selection.rects[selection.rects.length - 1][3] * 100}%` }} onPointerDown={e => e.preventDefault()} onMouseDown={e => e.preventDefault()} onClick={() => { const target = selected(selection); clearSelection(); props.onSource!(target, shownRef.current.key); }}><Icon name="toolSource" size={15}/></button>}
       {editing?.page === number - 1 && <>
