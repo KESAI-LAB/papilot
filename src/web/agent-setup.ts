@@ -15,6 +15,12 @@ export function agentSetup(id: AgentId) {
     steps: [t('Create a Cursor API key in the Cursor dashboard, or configure the Cursor SDK login on this host.'), t('Provide CURSOR_API_KEY to the process or service that starts Papilot, then restart Papilot. The SDK is installed automatically when used.')],
     existing: t('An environment variable set in a new terminal does not reach an already running server. Restart Papilot with the credentials; Reconnect alone cannot change its environment.'),
   };
+  if (id === 'papilot') return {
+    summary: t('Papilot Writer needs a model provider.'),
+    reason: t('Papilot Writer is built into Papilot. It runs on a model from your ChatGPT or GitHub Copilot subscription, or from a provider API key.'),
+    steps: [t('Sign in with a subscription or add an API key in Settings → Agents → Papilot Writer.')],
+    existing: t('Keys set in the environment that starts Papilot are used as well. Restart Papilot after changing its environment.'),
+  };
   if (id === 'glm') return {
     summary: t('No GLM API key was found.'),
     reason: t('The last connection attempt found neither ZHIPU_API_KEY nor ZAI_API_KEY in the Papilot server environment. A Claude login or a GLM website login does not supply these keys.'),

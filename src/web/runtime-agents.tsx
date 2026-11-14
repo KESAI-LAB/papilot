@@ -9,9 +9,12 @@ import { agentSetup } from './agent-setup.ts';
 import { RuntimeModels } from './runtime-models.tsx';
 import { ActionMenu } from './action-menu.tsx';
 import { RuntimeCardGrid } from './runtime-card-grid.tsx';
+import { WriterSetup } from './writer-setup.tsx';
+import type { WriterAuth } from '../shared.ts';
 
 function connectionInfo(id: AgentId) {
   const descriptions = {
+    papilot: t('Built into Papilot and based on Pi. Signs in with ChatGPT or GitHub Copilot, or uses an API key.'),
     codex: t('Uses the local Codex CLI and its saved login.'),
     claude: t('Uses Claude Code when installed, or the Claude Agent SDK with API credentials.'),
     cursor: t('Uses the Cursor SDK with CURSOR_API_KEY. Papilot installs the SDK on first use.'),
@@ -24,7 +27,7 @@ function connectionInfo(id: AgentId) {
     qwen: t('Uses Qwen Code and its saved login through ACP.'),
     opencode: t('Uses OpenCode with the providers and models you have connected.'),
   };
-  const commands = { codex: window.papilotDesktop ? 'codex login' : 'papilot codex login', claude: 'claude auth login', cursor: 'CURSOR_API_KEY', copilot: 'copilot login', grok: 'grok login', antigravity: 'agy', kimi: 'kimi login', glm: 'ZHIPU_API_KEY / ZAI_API_KEY', deepseek: 'dsh web', qwen: 'qwen', opencode: 'opencode auth login' };
+  const commands = { papilot: '', codex: window.papilotDesktop ? 'codex login' : 'papilot codex login', claude: 'claude auth login', cursor: 'CURSOR_API_KEY', copilot: 'copilot login', grok: 'grok login', antigravity: 'agy', kimi: 'kimi login', glm: 'ZHIPU_API_KEY / ZAI_API_KEY', deepseek: 'dsh web', qwen: 'qwen', opencode: 'opencode auth login' };
   return { description: descriptions[id], command: commands[id], key: id === 'cursor' || id === 'glm' };
 }
 
@@ -36,7 +39,7 @@ function agentAvailability(online: boolean, runtime?: RuntimeStatus) {
   return runtime.error ? 'unavailable' : 'connecting';
 }
 
-export function RuntimeAgents({ online, runtimes, report, busy, checkFailed, checkAgain, reconnect }: { online: boolean; runtimes: Partial<Record<AgentId, RuntimeStatus>>; report: DiagnosticReport | null; busy: boolean; checkFailed: boolean; checkAgain: () => void; reconnect: () => Promise<void> }) {
+export function RuntimeAgents({ online, runtimes, report, busy, checkFailed, checkAgain, reconnect, writer }: { online: boolean; runtimes: Partial<Record<AgentId, RuntimeStatus>>; report: DiagnosticReport | null; busy: boolean; checkFailed: boolean; checkAgain: () => void; reconnect: () => Promise<void>; writer?: (route: string, body?: unknown) => Promise<WriterAuth> }) {
   const [selected, setSelected] = useState<AgentId | null>(null);
   const cards = useRef<Partial<Record<AgentId, HTMLButtonElement | null>>>({});
   const [reconnecting, setReconnecting] = useState(false), [reconnectError, setReconnectError] = useState(false);
@@ -64,7 +67,7 @@ export function RuntimeAgents({ online, runtimes, report, busy, checkFailed, che
     ...agents.map(({ id, availability }) => {
         return <li key={id} className="diagnostic-agent-card" data-agent={id} data-availability={availability}>
           <button type="button" className="diagnostic-agent-button" ref={element => { cards.current[id] = element; }} aria-label={t('{agent} details', { agent: AGENT_NAMES[id] })} aria-expanded={selected === id} aria-controls={selected === id ? 'runtime-agent-detail' : undefined} title={availability === 'missing' ? agentSetup(id).reason : t('View installation, account, and usage')} onClick={() => selected === id ? close() : setSelected(id)} onKeyDown={event => { if (event.key === 'Escape' && selected === id) { event.preventDefault(); event.stopPropagation(); close(); } }}>
-            <div className="diagnostic-agent-heading"><BrandIcon name={id} size={28}/><h4>{AGENT_NAMES[id]}</h4></div>
+            <div className="diagnostic-agent-heading"><BrandIcon name={id} size={28}/><h4>{AGENT_NAMES[id]}{id === 'papilot' && <small className="diagnostic-agent-subtitle">{t('Based on Pi')}</small>}</h4></div>
             <div className="diagnostic-agent-footer"><span className={'diagnostic-availability ' + availability}><Icon name={icons[availability]} size={13}/>{labels[availability]}</span><span className="diagnostic-agent-chevron"><Icon name={selected === id ? 'chevronUp' : 'chevronDown'} size={14}/></span></div>
           </button>
         </li>;
@@ -86,6 +89,11 @@ export function RuntimeAgents({ online, runtimes, report, busy, checkFailed, che
         {current && <span className="runtime-agent-account" aria-label={t('Account')}>{runtime.account || t('Signed in')}</span>}
         <button type="button" className="icon-button" aria-label={t('Close agent details')} onClick={close}><Icon name="close" size={16}/></button>
       </header>
+      {selected === 'papilot' ? <>
+        <p className="runtime-agent-note">{setup.description}</p>
+        {current && <div className="runtime-agent-overview"><RuntimeModels key={selected} models={runtime.models} connected/></div>}
+        {writer ? <WriterSetup writer={writer} online={online}/> : <p className="runtime-agent-note">{t('Connect to view account, models, and usage.')}</p>}
+      </> : <>
       {blocked && guidance && <section className="runtime-agent-help" aria-label={t('Set up this agent')}>
         <p className="runtime-agent-reason" title={runtime?.error || undefined}>{state === 'missing' ? checked?.ok ? t('The latest configuration check found this agent. Reconnect to refresh its live status.') : guidance.summary : state === 'signin' ? t('Sign in on the Papilot host to continue.') : runtime?.error || t('The agent could not connect. Check its setup and try again.')}</p>
         {state === 'missing' && !checked?.ok && <p>{guidance.steps[0]}</p>}
@@ -115,6 +123,7 @@ export function RuntimeAgents({ online, runtimes, report, busy, checkFailed, che
           <div className="runtime-setup-actions"><button type="button" className="button secondary compact" disabled={busy || !online} onClick={checkAgain}><Icon name="refresh" size={13}/>{busy ? t('Checking…') : t('Check again')}</button>{!blocked && setupGuide}</div>
         </div>
       </details>
+      </>}
     </section>;
   const selectedIndex = agents.findIndex(agent => agent.id === selected);
   return <section aria-label={t('Agents')}>

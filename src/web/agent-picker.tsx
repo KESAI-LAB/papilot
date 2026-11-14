@@ -40,6 +40,19 @@ export function NoAgentNotice({ reconnecting, onReconnect, onAdd }: { reconnecti
   </div>;
 }
 
+// Shown to authors who chose another agent before Papilot Writer existed:
+// their choice stays, and this suggests trying the built-in agent once.
+export function WriterSuggestion({ ready, onUse, onSetUp, onDismiss }: { ready: boolean; onUse: () => void; onSetUp: () => void; onDismiss: () => void }) {
+  return <div className="agent-connection writer-suggestion" data-state="info">
+    <div className="agent-connection-message" role="note"><BrandIcon name="papilot" size={16}/><span>{t('Try Papilot Writer, the paper-writing agent built into Papilot. Your current agent stays the default until you switch.')}</span></div>
+    <div className="agent-connection-actions">
+      {ready ? <button type="button" className="button primary compact" onClick={onUse}>{t('Use Papilot Writer')}</button>
+        : <button type="button" className="button primary compact" onClick={onSetUp}>{t('Set up Papilot Writer')}</button>}
+      <button type="button" className="button secondary compact" onClick={onDismiss}>{t('Not now')}</button>
+    </div>
+  </div>;
+}
+
 // Recent agent and model choices, newest first, shown above the full list.
 const RECENT = 'papilot:recent-models';
 function readRecent(): { agent: AgentId; model: string }[] {

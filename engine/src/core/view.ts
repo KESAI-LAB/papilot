@@ -17,6 +17,8 @@ export interface ViewRequest {
   locations?: string[];
   pages?: string[];
   accepted?: boolean;
+  /** Only compile and report problems, drawing no pages (Papilot Writer's check_build). */
+  check?: boolean;
 }
 export interface ViewedPage {
   /** The page's position in the PDF that was built, from 1. */
@@ -35,6 +37,11 @@ export interface ViewResult {
   targets: string[];
   error?: string;
   details?: string[];
+  /** With check: the built PDF's page count, the build time and its problems. */
+  pageCount?: number;
+  seconds?: number;
+  errors?: string[];
+  warnings?: string[];
 }
 // How far from an asked-for line SyncTeX may look for one that printed
 // something (blank lines and comments print nothing).
@@ -102,7 +109,7 @@ export async function view(
       location(app, task.worktree, l),
     ),
     labels = (request.pages ?? []).map((p) => p.trim()).filter(Boolean);
-  if (!locations.length && !labels.length)
+  if (!locations.length && !labels.length && !request.check)
     throw new Error("Ask for at least one source location or page number.");
   const after = await app.tasks.snapshotAsync(task),
     before = task.accepted,
@@ -137,6 +144,11 @@ export async function view(
   }
   const pdf = build.pdf,
     document = mupdf.Document.openDocument(fs.readFileSync(pdf), "application/pdf");
+  if (request.check) {
+    const pageCount = document.countPages();
+    document.destroy();
+    return { pages: [], missing: [], targets, pageCount, seconds: build.seconds, errors: build.errors ?? [], warnings: build.warnings };
+  }
   try {
     // MuPDF synthesizes 1, 2, ... when /PageLabels is absent. Those are
     // physical positions, not the printed numbers (front matter may be i, ii).

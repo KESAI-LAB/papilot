@@ -66,7 +66,11 @@ function writableDirectory(target) {
   } catch { return false; }
 }
 function installedModule(name, directory = root) {
-  try { return createRequire(path.join(directory, 'package.json')).resolve(name); } catch { return null; }
+  const require = createRequire(path.join(directory, 'package.json'));
+  try { return require.resolve(name); } catch {}
+  // An import-only package (no "require" export) is installed when its folder is on the lookup path.
+  for (const folder of require.resolve.paths(name) || []) if (fs.existsSync(path.join(folder, name, 'package.json'))) return path.join(folder, name);
+  return null;
 }
 
 export async function doctor(args) {

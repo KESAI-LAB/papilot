@@ -10,6 +10,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { registerFrontend } from './frontend.ts';
 import type { Store } from './store.ts';
 import type { Workspace } from './workspace.ts';
+import { WriterAgent } from './writer/agent.ts';
 import { AGENT_TURN, reviewClient, retryReviewRead, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson, confirmedReviewResponse, annotateReviewState, taskRoute } from './review.ts';
 import { fullPaperPdf, nextPaperPass, paperPassPdf, retainedPaperPdf } from './pdf.ts';
 import { type ChangeAction, Changes } from './changes.ts';
@@ -286,6 +287,23 @@ export async function buildApp(options: AppOptions) {
     });
   });
   app.post('/api/reconnect', async request => { await workspace.connect(); return workspace.snapshot().runtime; });
+  // Papilot Writer's model providers: subscription sign-ins and API keys.
+  const writer = async () => {
+    const runtime = workspace.agents.papilot as WriterAgent;
+    if (!(runtime instanceof WriterAgent)) throw Object.assign(new Error('Papilot Writer is not available.'), { statusCode: 404 });
+    await runtime.preload();
+    return runtime.credentials!;
+  };
+  app.get('/api/writer/auth', async () => (await writer()).status());
+  app.post('/api/writer/keys', async request => { const body = (request.body || {}) as any, credentials = await writer(); credentials.setKey(string(body.provider, 'Provider', 64), string(body.key, 'API key', 4096)); return credentials.status(); });
+  app.post<{ Params: { provider: string } }>('/api/writer/providers/:provider/remove', async request => { const credentials = await writer(); credentials.remove(request.params.provider); return credentials.status(); });
+  app.post('/api/writer/logins', async request => {
+    const body = (request.body || {}) as any, credentials = await writer();
+    const enterprise = typeof body.enterprise === 'string' ? body.enterprise.trim().slice(0, 200) : '';
+    return { id: credentials.login(string(body.provider, 'Provider', 64), enterprise), ...credentials.status() };
+  });
+  app.post<{ Params: { id: string } }>('/api/writer/logins/:id/code', async request => { const credentials = await writer(); credentials.input(request.params.id, string((request.body as any)?.code, 'Code', 4096)); return credentials.status(); });
+  app.post<{ Params: { id: string } }>('/api/writer/logins/:id/cancel', async request => { const credentials = await writer(); credentials.cancel(request.params.id); return credentials.status(); });
   // Codex names reasoning efforts with short lowercase words (low, medium, xhigh).
   const agent = (value: unknown): AgentId => isAgentId(value) ? value : 'codex';
   const effort = (value: unknown) => typeof value === 'string' && /^[a-z]{1,16}$/.test(value) ? value : undefined;

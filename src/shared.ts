@@ -104,10 +104,15 @@ export interface BuildFailure { error: string; details: string[]; log?: string }
 export interface FeedbackSummary { round: number | null; accepted: number; rejected: number; undone: number; comments: { where: string; text: string }[]; buildError?: boolean }
 export interface Skill { output?: 'annotations'; id: string; name: string; description: string; hint: string; icon?: SkillIcon; source: 'builtin' | 'user' | 'paper' }
 export interface PendingRequest { id: string; taskId: string; method: string; params: Record<string, any>; createdAt: number }
-export type AgentId = 'codex' | 'claude' | 'antigravity' | 'kimi' | 'cursor' | 'copilot' | 'grok' | 'opencode' | 'qwen' | 'glm' | 'deepseek';
+export type AgentId = 'papilot' | 'codex' | 'claude' | 'antigravity' | 'kimi' | 'cursor' | 'copilot' | 'grok' | 'opencode' | 'qwen' | 'glm' | 'deepseek';
 // Every agent Papilot can drive, in menu order. Only the ones found on the host are offered.
-export const AGENT_IDS: AgentId[] = ['codex', 'claude', 'cursor', 'copilot', 'grok', 'antigravity', 'kimi', 'glm', 'deepseek', 'qwen', 'opencode'];
-export const AGENT_NAMES: Record<AgentId, string> = { codex: 'Codex', claude: 'Claude', cursor: 'Cursor', copilot: 'Copilot', grok: 'Grok', antigravity: 'Antigravity', kimi: 'Kimi', glm: 'GLM', deepseek: 'DeepSeek', qwen: 'Qwen', opencode: 'OpenCode' };
+export const AGENT_IDS: AgentId[] = ['papilot', 'codex', 'claude', 'cursor', 'copilot', 'grok', 'antigravity', 'kimi', 'glm', 'deepseek', 'qwen', 'opencode'];
+export const AGENT_NAMES: Record<AgentId, string> = { papilot: 'Papilot Writer', codex: 'Codex', claude: 'Claude', cursor: 'Cursor', copilot: 'Copilot', grok: 'Grok', antigravity: 'Antigravity', kimi: 'Kimi', glm: 'GLM', deepseek: 'DeepSeek', qwen: 'Qwen', opencode: 'OpenCode' };
+// Papilot Writer's providers: subscriptions it signs in to, and API keys
+// stored by Papilot or read from the environment.
+export interface WriterProvider { id: string; name: string; kind: 'login' | 'key'; env?: string; configured: boolean; source: 'stored' | 'environment' | null }
+export interface WriterLogin { id: string; provider: string; name: string; status: 'waiting' | 'done' | 'failed' | 'cancelled'; url: string | null; instructions: string | null; error: string | null; startedAt: number }
+export interface WriterAuth { providers: WriterProvider[]; logins: WriterLogin[] }
 export const isAgentId = (value: unknown): value is AgentId => AGENT_IDS.includes(value as AgentId);
 export interface AgentModel { id: string; name: string; isDefault: boolean; efforts: string[]; defaultEffort: string | null; fastMode?: { serviceTier: string; description: string } }
 // The account's included usage: rolling windows (minutes long, reset time in ms) and credits.

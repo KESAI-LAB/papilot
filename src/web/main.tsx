@@ -72,7 +72,7 @@ import { notificationState, notify, notifying, subscribeNotifications, taskAlert
 import { Markdown } from './markdown.tsx';
 import { ComparisonProgress } from './comparison-progress.tsx';
 import logo from './logo.svg';
-import { AgentConnectionNotice, AgentPicker, NoAgentNotice } from './agent-picker.tsx';
+import { AgentConnectionNotice, AgentPicker, NoAgentNotice, WriterSuggestion } from './agent-picker.tsx';
 import { taskEffort } from './task-effort.ts';
 import { PermissionOptions, TaskPermissionOptions } from './task-permissions.tsx';
 import { type TaskPermissions } from '../shared.ts';
@@ -1395,6 +1395,11 @@ function App() {
       setAgentChoice(agentChoice); browserStorage.setItem('papilot:agent', agentChoice);
     }
   }, [savedAgent, settled, agentChoice, offered]);
+  // Authors who already picked another agent keep it; Papilot Writer is suggested once.
+  const [writerDismissed, setWriterDismissed] = useState(() => browserStorage.getItem('papilot:writer-suggestion') === 'dismissed');
+  const dismissWriter = () => { setWriterDismissed(true); browserStorage.setItem('papilot:writer-suggestion', 'dismissed'); };
+  const writerReady = Boolean(runtimes.papilot?.connected && runtimes.papilot.authenticated);
+  const suggestWriter = !writerDismissed && !missingAgent && savedAgent !== null && agentChoice !== 'papilot' && offered.includes('papilot');
   const effectivePermissions = runtimes[agentChoice]?.permissionOptions?.some(option => option.value === newPermissions) ? newPermissions : 'workspace';
   const models = runtimes[agentChoice]?.models || [], pref = agentPrefs[agentChoice];
   const chosenModel = models.length && !models.some(m => m.id === pref.model) ? '' : pref.model;
@@ -1955,6 +1960,7 @@ function App() {
     {!noteSelection.selected.length && <div className="new-task-welcome"><img src={logo} alt=""/><h2>{t('What are we revising next?')}</h2></div>}
     {newSkill?.output !== 'annotations' && attachments}
     {missingAgent && <NoAgentNotice reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')} onAdd={() => setSettings('agents')}/>}
+    {suggestWriter && <WriterSuggestion ready={writerReady} onUse={() => { chooseModel('papilot', runtimes.papilot?.models.find(model => model.isDefault)?.id || ''); dismissWriter(); }} onSetUp={() => setSettings('agents')} onDismiss={dismissWriter}/>}
     <Composer attachments={newSkill?.output === 'annotations' ? undefined : newFiles.draft} upload={(file, signal) => uploadAttachment(project!.id, file, signal)} imageHint={agentChoice === 'antigravity' && newFiles.files.some(file => file.mime.startsWith('image/'))} autoFocus inputRef={newTaskInput} label={t('Describe the revision')} value={newDraft} onChange={setNewDraft} readOnly={creating} onSubmit={() => void createTask()} placeholder={noteSelection.selected.length ? t('Add overall instructions (optional)') : t('Describe the revision')}
       skills={projectSkills} skill={newSkill} onSkill={setNewSkill}
       footer={attach => <div className="composer-options">
@@ -2059,7 +2065,7 @@ function App() {
       : <div className="home"><div className="home-inner"><img className="home-logo" src={logo} alt=""/><h1>{t('Add your first paper')}</h1><button className="button primary" onClick={() => openProject()}><Icon name={nativeFolders ? 'folder' : 'plus'} size={16}/>{nativeFolders ? t('Open a folder') : t('Add paper')}</button></div></div>}
     </main>
     {error && !modal && <div role="alert" className="toast"><Icon name="alert" size={16}/><span>{error}</span><button className="icon-button" aria-label={t('Dismiss error')} onClick={() => setError('')}><Icon name="close" size={14}/></button></div>}
-    {settings && <SettingsDialog requirements={isPlayground ? undefined : { state: requirements, online }} modelDefaults={{ agents: offered.map(id => ({ value: id, label: AGENT_LABELS[id], runtime: runtimes[id] })), agent: agentChoice, model: chosenModel, effort: agent.effort, onSelect: chooseModel, onEffort: effort => remember({ effort }) }} updates={!isPlayground ? api : undefined} initialPage={settings} theme={theme.theme} onTheme={theme.setTheme} resolved={theme.resolved} appearance={theme.appearance} onAppearance={theme.setAppearance} onClose={() => setSettings(false)} diagnostics={!isPlayground ? { online, runtimes, project, check: checkDiagnostics, latex: detectLatexInstallation, reconnect: async () => { await api('/reconnect', {}); await refresh(true); } } : undefined} skills={!isPlayground ? { project, api, onChanged: () => setSkillsRevision(value => value + 1) } : undefined}/>}
+    {settings && <SettingsDialog requirements={isPlayground ? undefined : { state: requirements, online }} modelDefaults={{ agents: offered.map(id => ({ value: id, label: AGENT_LABELS[id], runtime: runtimes[id] })), agent: agentChoice, model: chosenModel, effort: agent.effort, onSelect: chooseModel, onEffort: effort => remember({ effort }) }} updates={!isPlayground ? api : undefined} initialPage={settings} theme={theme.theme} onTheme={theme.setTheme} resolved={theme.resolved} appearance={theme.appearance} onAppearance={theme.setAppearance} onClose={() => setSettings(false)} diagnostics={!isPlayground ? { online, runtimes, project, check: checkDiagnostics, latex: detectLatexInstallation, reconnect: async () => { await api('/reconnect', {}); await refresh(true); }, writer: (route: string, body?: unknown) => api('/writer' + route, body) } : undefined} skills={!isPlayground ? { project, api, onChanged: () => setSkillsRevision(value => value + 1) } : undefined}/>}
     {deleteTarget && <DeleteTaskDialog task={state?.tasks.find(t => t.id === deleteTarget.id) || deleteTarget} submit={() => api('/tasks/' + deleteTarget.id + '/delete', { confirm: true })} onClose={() => setDeleteTarget(null)} onDeleted={() => taskDeleted(deleteTarget.id)} refresh={() => void refresh(true)}/>}
     {editingPaper && <PaperDialog key={editingPaper.id} paper={editingPaper} onClose={() => setEditingPaper(null)} save={async form => {
       const paper = editingPaper, pathChanged = form.path !== paper.path;

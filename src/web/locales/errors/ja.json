@@ -284,5 +284,14 @@
   "Wait for the task and review actions to finish before applying changes.": "変更を適用する前に、タスクとレビューの操作が完了するまでお待ちください。",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "パスの変更や削除を行う前に、この論文の PDF ビルドが完了するまでお待ちください。",
   "ZIP links and special files are not supported.": "ZIP 内のリンクおよび特殊ファイルはサポートされていません。",
-  "npm is unavailable to Papilot.": "Papilot から npm を利用できません。"
+  "npm is unavailable to Papilot.": "Papilot から npm を利用できません。",
+  "Papilot Writer is not available.": "Papilot Writer は利用できません。",
+  "This provider does not take an API key here.": "このプロバイダーはここでは API キーを受け付けません。",
+  "Paste the API key exactly as the provider shows it.": "プロバイダーに表示されたとおりに API キーを貼り付けてください。",
+  "This is a Claude subscription token. Papilot Writer can use Claude only with an Anthropic API key.": "これは Claude のサブスクリプショントークンです。Papilot Writer は Anthropic の API キーでのみ Claude を使用できます。",
+  "Unknown provider.": "不明なプロバイダーです。",
+  "This provider has no sign-in here.": "このプロバイダーにはここでのサインインがありません。",
+  "This sign-in has ended. Start it again.": "このサインインは終了しました。もう一度開始してください。",
+  "This sign-in is not waiting for a code.": "このサインインはコードを待っていません。",
+  "Sign-in cancelled.": "サインインをキャンセルしました。"
 }

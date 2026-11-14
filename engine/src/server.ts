@@ -454,7 +454,7 @@ export function createServer(app: App) {
     // The task's typeset pages as images, for its agent to look at.
     server.post<{ Params: { name: string }; Body: ViewRequest }>(
       "/api/tasks/:name/view",
-      { schema: { body: { ...objectSchema, additionalProperties: false, properties: { locations: { type: "array", items: { type: "string", maxLength: 1000 } }, pages: { type: "array", items: { type: "string", maxLength: 40 } }, accepted: { type: "boolean" } } } } },
+      { schema: { body: { ...objectSchema, additionalProperties: false, properties: { locations: { type: "array", items: { type: "string", maxLength: 1000 } }, pages: { type: "array", items: { type: "string", maxLength: 40 } }, accepted: { type: "boolean" }, check: { type: "boolean" } } } } },
       (request) => view(app, request.params.name, request.body),
     );
     server.post<{ Params: { name: string }; Body: { keepCurrent?: boolean; mode?: "workspace" | "commit"; message?: string; confirmation?: string } }>(
