@@ -501,6 +501,36 @@ test('selected comments carry host-derived section context into any agent reques
   } finally { await f.close(); }
 });
 
+test('a comment reanchored during section lookup cannot send stale ancestry and can retry', async () => {
+  const f = await fixture();
+  try {
+    const note: Annotation = { id: 'moving-note', projectId: 'thesis', key: 'old-pdf', page: 1, rect: [0.1, 0.2, 0.4, 0.3], quote: 'A claim.', comment: 'Clarify.', source: { file: 'main.tex', lines: [12, 14] }, createdAt: 1 };
+    const moved: Annotation = { ...note, key: 'new-pdf', page: 5, source: { file: 'results.tex', lines: [70, 72] } };
+    f.store.saveAnnotation(note);
+    let reanchor = true;
+    f.manuscripts.noteSections = async () => {
+      if (reanchor) {
+        reanchor = false;
+        f.store.saveAnnotation(moved);
+        return { sections: [], contexts: { [note.id]: ['Section: 1 Introduction'] }, unplaced: 0 };
+      }
+      return { sections: [], contexts: { [note.id]: ['Section: 3 Results'] }, unplaced: 0 };
+    };
+    const id = 'section-race-task-001', payload = { id, projectId: 'thesis', title: 'Revise comments', instructions: 'Clarify.', annotations: [note.id] };
+    const refused = await f.local.inject({ method: 'POST', url: '/api/tasks', headers: f.as, payload });
+    assert.equal(refused.statusCode, 400);
+    assert.match(refused.json().error, /Refresh the manuscript/);
+    assert.equal(f.store.findTask(id), undefined);
+    assert.deepEqual(f.store.annotation('thesis', note.id), moved, 'the unsent note keeps its updated location');
+    const retried = await f.local.inject({ method: 'POST', url: '/api/tasks', headers: f.as, payload });
+    assert.equal(retried.statusCode, 200, retried.body);
+    const sent = f.store.items(id)[0].meta!.notes![0];
+    assert.deepEqual(sent.context, ['Section: 3 Results']);
+    assert.match(sent.where, /Page 6 · results.tex lines 70–72/);
+    assert.doesNotMatch(f.store.runByKey('initial-' + id)!.prompt, /Introduction/);
+  } finally { await f.close(); }
+});
+
 test('review marking tools keep deletion, replacement and quick-note intent through the messages API', async () => {
   const f = await fixture();
   try {

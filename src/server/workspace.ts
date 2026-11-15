@@ -114,6 +114,9 @@ const commitInstructions = 'You write Git commit messages for the repository of 
 const mergeInstructions = 'You resolve Git merge conflicts in the repository of a LaTeX paper. Edit only the files listed as conflicted, and in each one remove every conflict marker (<<<<<<<, ||||||| , =======, >>>>>>>) so that the text reads as one coherent version. Keep the changes from both sides wherever they are compatible; where both sides rewrote the same passage, combine their intent, and where they truly contradict each other, prefer the version that is more complete and correct and say so. Keep the LaTeX valid: balanced environments and braces, labels, references and citations. You may read any file to understand the context. Do not edit other files, and do not run Git commands that change the repository, such as add, commit, merge, checkout, reset, restore or stash: the author reviews the result and commits the merge.';
 const blankRuntime = (): RuntimeStatus => ({ connected: false, authenticated: false, account: null, error: null, models: [] });
 
+export interface TaskNoteContext { note: Annotation; context: string[] }
+const noteLocation = (note: Annotation) => JSON.stringify([note.key, note.page, note.rect, note.rects, note.source]);
+
 export class Workspace extends EventEmitter {
   // Each task runs on one agent; `runtime` is Codex's status, kept for older clients.
   runtimes = Object.fromEntries(AGENTS.map(id => [id, blankRuntime()])) as Record<AgentId, RuntimeStatus>;
@@ -388,7 +391,7 @@ export class Workspace extends EventEmitter {
   // and attachments claimed, and is then prepared in the background (see
   // prepareTask). An AI review passes prepareReview, which reads the PDF of
   // the new task's manuscript copy.
-  async createTask(input: { permissions?: TaskPermissions; prepareReview?: (worktree: string) => Promise<ReviewSnapshot>; projectId: string; title: string; instructions: string; skill?: string; annotations?: string[]; noteContexts?: Record<string, string[]>; groupInstructions?: GroupInstructions; attachments?: string[]; agent?: AgentId; model?: string; effort?: string; serviceTier?: string; id: string }) {
+  async createTask(input: { permissions?: TaskPermissions; prepareReview?: (worktree: string) => Promise<ReviewSnapshot>; projectId: string; title: string; instructions: string; skill?: string; annotations?: string[]; noteContexts?: Record<string, TaskNoteContext>; groupInstructions?: GroupInstructions; attachments?: string[]; agent?: AgentId; model?: string; effort?: string; serviceTier?: string; id: string }) {
     if (!/^[\w-]{16,64}$/.test(input.id)) throw new Error('Invalid task ID.');
     if (this.store.taskDeleted(input.id)) throw new Error('This task was deleted. Create a new task instead.');
     // A retried request returns its task, preparing it again if that failed;
@@ -416,7 +419,11 @@ export class Workspace extends EventEmitter {
     const notes = [...new Set(input.annotations || [])].map(id => {
         const note = available.get(id);
       if (!note) throw new Error(this.annotationSending(id) ? 'A selected PDF note is already being sent. Wait for that task to finish creating.' : 'A selected PDF note is no longer available. Refresh the manuscript and try again.');
-        return input.noteContexts?.[id] ? { ...note, context: input.noteContexts[id] } : note;
+        const scoped = input.noteContexts?.[id];
+        // Section lookup yields to manuscript reanchoring. Its ancestry must
+        // describe the same PDF/source location we are about to send.
+        if (scoped && noteLocation(scoped.note) !== noteLocation(note)) throw new Error('A selected PDF note is no longer available. Refresh the manuscript and try again.');
+        return scoped ? { ...note, context: scoped.context } : note;
       });
       const groupInstructions = parseGroupInstructions(input.groupInstructions);
       const selectedGroups = new Set(notes.flatMap(note => note.group ? [canonicalGroup(note.group)] : []));

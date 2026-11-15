@@ -9,7 +9,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { registerFrontend } from './frontend.ts';
 import type { Store } from './store.ts';
-import type { Workspace } from './workspace.ts';
+import type { TaskNoteContext, Workspace } from './workspace.ts';
 import { WriterAgent } from './writer/agent.ts';
 import { AGENT_TURN, reviewClient, retryReviewRead, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson, confirmedReviewResponse, annotateReviewState, taskRoute } from './review.ts';
 import { fullPaperPdf, nextPaperPass, paperPassPdf, retainedPaperPdf } from './pdf.ts';
@@ -374,10 +374,13 @@ export async function buildApp(options: AppOptions) {
     // Derive context on the host from the PDF/source snapshot; clients only
     // submit note IDs. Preserve each mark's own build, including older marks.
     const selectedNotes = store.annotations(projectId).filter(note => annotations?.includes(note.id));
-    const noteContexts: Record<string, string[]> = {};
+    const noteContexts: Record<string, TaskNoteContext> = {};
     for (const key of new Set(selectedNotes.map(note => note.key))) {
       const scope = await manuscripts.noteSections(projectId, key, selectedNotes.filter(note => note.key === key)).catch(() => null);
-      if (scope) Object.assign(noteContexts, scope.contexts);
+      if (scope) for (const note of selectedNotes.filter(note => note.key === key)) {
+        const context = scope.contexts[note.id];
+        if (context) noteContexts[note.id] = { note, context };
+      }
     }
     return workspace.createTask({ id, projectId, noteContexts, ...(reviewing ? { prepareReview: (worktree: string) => manuscripts.captureReview(store.project(projectId).path, worktree, id) } : {}), title: string(b.title, 'Task title', 120), permissions: b.permissions, instructions: skill || annotations?.length || attachments.length ? optional(b.instructions, 'Instructions') : string(b.instructions, 'Instructions'), skill, annotations, groupInstructions, attachments, agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64) });
   });
