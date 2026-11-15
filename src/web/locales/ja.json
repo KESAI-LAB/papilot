@@ -1,4 +1,6 @@
 {
+  "API key": "API キー",
+  "Sign in with a subscription or add an API key.": "サブスクリプションでサインインするか、API キーを追加します。",
   "Diagnosing the compilation failure…": "コンパイルエラーを診断しています…",
   "Prepare source repair…": "ソース修正タスクを準備…",
   "Submit a repair task to approve changes to project files.": "修正タスクを送信して、プロジェクトファイルの変更を承認します。",

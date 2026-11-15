@@ -1,4 +1,6 @@
 {
+  "API key": "API-nyckel",
+  "Sign in with a subscription or add an API key.": "Logga in med ett abonnemang eller lägg till en API-nyckel.",
   "Diagnosing the compilation failure…": "Undersöker kompileringsfelet…",
   "Prepare source repair…": "Förbered en uppgift för att rätta källfilerna…",
   "Submit a repair task to approve changes to project files.": "Skicka uppgiften för att godkänna ändringar i projektfilerna.",

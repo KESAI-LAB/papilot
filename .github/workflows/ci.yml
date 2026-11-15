@@ -263,6 +263,9 @@ jobs:
       - name: settings-layout
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-settings-layout.mjs
+      - name: writer-setup
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-writer-setup.mjs
       - name: skill-library
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-skill-library.mjs
