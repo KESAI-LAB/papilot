@@ -33,6 +33,7 @@ import { Diagnostics } from './diagnostics.ts';
 import { attachmentIds } from './attachments.ts';
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from '../shared.ts';
 import { PaperImports, openFolder } from './imports.ts';
+import { PaperCreations } from './create-paper.ts';
 import { DATA, pageViewDir } from './paths.ts';
 import { registerAiReviewRoutes } from './ai-review-routes.ts';
 import { detectLatex } from './latex-installation.ts';
@@ -40,6 +41,7 @@ import { systemRequirements } from './system-requirements.ts';
 import { findExecutable } from '../../bin/agent-paths.mjs';
 
 const importsByWorkspace = new WeakMap<Workspace, PaperImports>();
+const creationsByWorkspace = new WeakMap<Workspace, PaperCreations>();
 // A review write's reply does not wait for the task's summary to be read
 // again: that runs right after it, once at a time per task, and once more
 // for writes that arrive meanwhile. The review page's reads of the task wait
@@ -131,7 +133,9 @@ export async function buildApp(options: AppOptions) {
   const diagnostics = options.diagnostics || new Diagnostics();
   let imports = importsByWorkspace.get(workspace);
   if (!imports) { imports = new PaperImports(manuscripts, DATA, root => Boolean(workspace.projectByPath(root))); importsByWorkspace.set(workspace, imports); }
-  workspace.importsBusy = () => imports!.busy;
+  let creations = creationsByWorkspace.get(workspace);
+  if (!creations) { creations = new PaperCreations(DATA); creationsByWorkspace.set(workspace, creations); }
+  workspace.importsBusy = () => imports!.busy || creations!.busy;
   // Whether rounds list what each edit changes elsewhere, such as the uses of
   // a macro: the choice in Settings, off by default, since finding
   // which combination reproduces a change needs additional compilations.
@@ -325,6 +329,8 @@ export async function buildApp(options: AppOptions) {
   const agent = (value: unknown): AgentId => isAgentId(value) ? value : 'codex';
   const effort = (value: unknown) => typeof value === 'string' && /^[a-z]{1,16}$/.test(value) ? value : undefined;
   const string = (value: unknown, name: string, max?: number) => { if (typeof value !== 'string' || !value.trim()) throw new Error(`${name} is required.`); if (max !== undefined && value.length > max) throw new Error(`${name} is required and must be no longer than ${max} characters.`); return value.trim(); };
+  app.get('/api/projects/create-defaults', () => creations!.defaults());
+  app.post('/api/projects/create', request => creations!.create((request.body || {}) as any, (root, name) => workspace.addProject(root, name)));
   app.post('/api/projects/open', request => openFolder((request.body || {}) as any, root => workspace.projectByPath(root), (root, name) => workspace.addProject(root, name)));
   app.post('/api/imports', { bodyLimit: 90 * 1024 * 1024 }, request => imports!.create((request.body || {}) as any));
   app.get<{ Params: { id: string } }>('/api/imports/:id', request => imports!.get(request.params.id));
