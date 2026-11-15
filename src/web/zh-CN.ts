@@ -355,8 +355,6 @@ export const zhCN: Record<string, string> = {
   'This PDF has no bookmarks.': '此 PDF 没有书签。', 'Contents will appear when the PDF is ready.': 'PDF 就绪后会显示目录。',
   'You are offline. Your draft is kept in this browser.': '你已离线。草稿保存在此浏览器中。',
   'Agent settings': '智能体设置', 'Add skill': '添加技能', 'Fast': '快速', 'Fast mode': '快速模式',
-  'Region note': '区域批注',
-  'or select text to annotate': '或选中文字批注',
   'Edit note': '编辑批注', 'Edit note {n}': '编辑批注 {n}', 'Edit note {n}: {comment}': '编辑批注 {n}：{comment}',
   'Next turn': '下轮生效',
   'Save': '保存', 'Saving…': '正在保存…',
