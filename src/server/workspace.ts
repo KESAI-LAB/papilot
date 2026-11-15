@@ -906,7 +906,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       try {
         const client = await this.connectReview(this.store.project(task.projectId).path);
         if (!current()) return;
-        const built = await client.post<{ pages: unknown[]; targets: string[]; error?: string; details?: string[]; pageCount?: number; seconds?: number; errors?: string[]; warnings?: string[]; compiled?: { pdf: string; root: string; sourceDir: string } }>(`${taskRoute(task.name)}/view`, { check: true }, 30 * 60000);
+        const built = await client.post<{ pages: unknown[]; targets: string[]; error?: string; details?: string[]; pageCount?: number; seconds?: number; errors?: string[]; warnings?: string[]; compiled?: { pdf: string; root: string; sourceDir: string } }>(`${taskRoute(task.name)}/view`, { check: true, full: true }, 30 * 60000);
         // A build of the whole paper is what the paper map is made from next.
         if (built.compiled && built.targets[0] === 'full') this.writerBuilds.set(task.id, { ...built.compiled, builtAt: Date.now(), pages: built.pageCount });
         const list = (title: string, items: string[] = []) => items.length ? [`${title}:`, ...items.slice(0, 40).map(item => `- ${item}`), ...(items.length > 40 ? [`- … ${items.length - 40} more`] : []), ''] : [];

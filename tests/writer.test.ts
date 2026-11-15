@@ -14,6 +14,7 @@ import { WriterAgent, toolItem } from '../src/server/writer/agent.ts';
 import { claudeSubscription, WriterCredentials } from '../src/server/writer/auth.ts';
 import { contextBreakdown, COMPACTION_RESERVE } from '../src/server/writer/context.ts';
 import { fileEdit } from '../src/server/writer/edits.ts';
+import { killTree } from '../bin/agent-paths.mjs';
 
 function paper() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot writer 中文 '));
@@ -139,8 +140,8 @@ function host(dir: string, overrides: Partial<ToolHost> = {}): ToolHost & { appr
     ...overrides,
   };
 }
-const call = async (tools: ReturnType<typeof writerTools>, name: string, params: unknown) => {
-  const result = await tools.find(tool => tool.name === name)!.execute('id', params as never, undefined, undefined, undefined as never);
+const call = async (tools: ReturnType<typeof writerTools>, name: string, params: unknown, signal?: AbortSignal) => {
+  const result = await tools.find(tool => tool.name === name)!.execute('id', params as never, signal, undefined, undefined as never);
   return result.content.map(part => part.type === 'text' ? part.text : '[image]').join('\n');
 };
 
@@ -169,6 +170,55 @@ test('changing data asks first, a declined change is not made, and commands need
   await assert.rejects(call(writerTools(h), 'run_command', { command: 'echo hi' }), /only in chore mode/);
   const readOnly = writerTools(host(dir, { mode: () => 'read-only' })).map(tool => tool.name);
   assert.ok(readOnly.includes('search_text') && !readOnly.includes('edit_file') && !readOnly.includes('run_command'));
+});
+
+for (const scenario of ['timeout', 'cancel', 'cancel without pipes']) test(`chore commands stop their descendants on ${scenario}`, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot command ')), stop = new AbortController();
+  const tools = writerTools(host(dir, { chore: () => ({ reason: 'Test cancellation' }) }));
+  const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  fs.writeFileSync(path.join(dir, 'child.cjs'), `
+    const fs = require('node:fs');
+    process.on('SIGTERM', () => {});
+    fs.writeFileSync('child.pid', String(process.pid));
+    setInterval(() => fs.appendFileSync('writes', 'x'), 20);
+  `);
+  fs.writeFileSync(path.join(dir, 'parent.cjs'), `
+    require('node:fs').writeFileSync('parent.pid', String(process.pid));
+    require('node:child_process').spawn(process.execPath, ['child.cjs'], { stdio: ${JSON.stringify(scenario === 'cancel without pipes' ? 'ignore' : 'inherit')} });
+    setInterval(() => {}, 1000);
+  `);
+  try {
+    const result = call(tools, 'run_command', { command: `"${process.execPath}" parent.cjs`, timeout_seconds: scenario === 'timeout' ? 2 : 60 }, stop.signal);
+    const bounded = Promise.race([result, new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new Error('The command did not stop its descendants')), 8000); })]);
+    // The descendant installs a SIGTERM handler before the cancellation lands.
+    for (let i = 0; i < 200 && !fs.existsSync(path.join(dir, 'writes')); i++) await wait(10);
+    assert.ok(fs.existsSync(path.join(dir, 'writes')), 'The descendant started writing');
+    if (scenario !== 'timeout') stop.abort();
+    const output = await bounded;
+    if (scenario === 'timeout') assert.match(output, /stopped after 2 s/);
+    // Descendants with closed output pipes must also stop before the tool returns.
+    await wait(100);
+    const writes = fs.readFileSync(path.join(dir, 'writes'), 'utf8');
+    await wait(150);
+    assert.equal(fs.readFileSync(path.join(dir, 'writes'), 'utf8'), writes);
+  } finally {
+    clearTimeout(deadline); stop.abort();
+    for (const file of ['parent.pid', 'child.pid']) {
+      if (fs.existsSync(path.join(dir, file))) killTree(Number(fs.readFileSync(path.join(dir, file), 'utf8')), 'SIGKILL');
+    }
+    await wait(100);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a chore command cancelled before it starts does not write to the worktree', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot cancelled command '));
+  try {
+    const tools = writerTools(host(dir, { chore: () => ({ reason: 'Already cancelled' }) }));
+    await assert.rejects(call(tools, 'run_command', { command: 'echo changed > changed.txt' }, AbortSignal.abort()), { name: 'AbortError' });
+    assert.equal(fs.existsSync(path.join(dir, 'changed.txt')), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('Claude subscription tokens are refused and credentials stay in Papilot', async () => {

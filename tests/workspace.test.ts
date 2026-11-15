@@ -2060,6 +2060,30 @@ test('a build the agent broke goes back to it once, and its instructions name wh
   } finally { f.close(); }
 });
 
+test('Writer check_build requests the whole paper and replaces the map build', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot writer map '));
+  const compiled = { pdf: path.join(dir, 'main.pdf'), root: dir, sourceDir: 'paper' };
+  fs.writeFileSync(compiled.pdf, 'PDF fixture');
+  const f = fixture(async (_method, route, body: any) => route.endsWith('/view')
+    ? { targets: body.full ? ['full'] : ['sections/method'], compiled, pageCount: 4 } : summary);
+  try {
+    f.store.updateTask(f.task.id, { agent: 'papilot', turnId: 'writer-turn' });
+    const task = f.store.task(f.task.id), workspace = f.workspace as any;
+    workspace.agents.papilot = f.codex;
+    f.codex.ready = true;
+    workspace.active.set(task.id, { id: 'writer-run' });
+    const call = (tool: string) => workspace.toolCall(task, { id: tool, params: { tool, arguments: {} } }, f.codex);
+    await call('check_build');
+    assert.deepEqual(f.calls.find(call => call.route.endsWith('/view'))?.body, { check: true, full: true });
+    assert.match((f.codex.replies[0].result as any).contentItems[0].text, /Compiled the whole paper \(4 pages\)/);
+    await call('paper_build');
+    const map = JSON.parse((f.codex.replies[1].result as any).contentItems[0].text);
+    assert.equal(map.pdf, compiled.pdf);
+    assert.equal(map.pages, 4);
+    assert.ok(map.builtAt > 0);
+  } finally { f.close(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('Codex threads get the view_pdf tool, which Papilot answers with typeset pages', async () => {
   const views: unknown[] = [];
   const f = fixture(async (_method, route, body) => {

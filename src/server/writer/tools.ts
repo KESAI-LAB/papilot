@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { killTree } from '../../../bin/agent-paths.mjs';
 import { createTwoFilesPatch } from 'diff';
 import { Type, type Static, type TSchema } from '@mariozechner/pi-ai';
 import type { ToolDefinition } from '@mariozechner/pi-coding-agent';
@@ -365,17 +366,34 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
     async execute({ command: line, timeout_seconds = 300 }, signal) {
       if (!host.chore()) throw toolError('Shell commands run only in chore mode. Call enter_chore_mode first.');
       if (host.mode() === 'read-only') throw toolError('This task is read-only.');
+      signal?.throwIfAborted();
       const result = await new Promise<{ code: number | null; output: string }>((resolve, reject) => {
         const shell = process.platform === 'win32' ? { file: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', line] } : { file: '/bin/sh', args: ['-c', line] };
-        const child = spawn(shell.file, shell.args, { cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+        const child = spawn(shell.file, shell.args, { cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32' });
         let output = '';
         const take = (chunk: Buffer) => { output += chunk.toString(); if (output.length > 4 * MAX_OUTPUT) output = output.slice(-2 * MAX_OUTPUT); };
         child.stdout.on('data', take); child.stderr.on('data', take);
-        const stop = () => child.kill('SIGTERM');
+        let stopping = false, force: ReturnType<typeof setTimeout> | undefined;
+        const stop = () => {
+          if (stopping) return;
+          stopping = true;
+          clearTimeout(timer);
+          if (!child.pid) return;
+          killTree(child.pid);
+          // The shell can exit before its descendants close their output pipes.
+          // Signal the group again even after the shell has exited.
+          force = setTimeout(() => killTree(child.pid!, 'SIGKILL'), 1000);
+        };
         const timer = setTimeout(() => { output += `\n(stopped after ${timeout_seconds} s)`; stop(); }, timeout_seconds * 1000);
+        const cleanup = () => { clearTimeout(timer); clearTimeout(force); signal?.removeEventListener('abort', stop); };
         signal?.addEventListener('abort', stop, { once: true });
-        child.on('error', reject);
-        child.on('close', code => { clearTimeout(timer); signal?.removeEventListener('abort', stop); resolve({ code, output }); });
+        child.on('error', error => { cleanup(); reject(error); });
+        child.on('close', code => {
+          // A descendant may have closed its pipes but still be writing files.
+          if (stopping && child.pid) killTree(child.pid, 'SIGKILL');
+          cleanup(); resolve({ code, output });
+        });
+        if (signal?.aborted) stop();
       });
       const output = result.output.length > MAX_OUTPUT ? `…${result.output.slice(-MAX_OUTPUT)}` : result.output;
       return text(`Exit code ${result.code ?? 'none'}\n${output}`, { command: line, exitCode: result.code, output, changed: true });

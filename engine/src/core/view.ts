@@ -19,6 +19,8 @@ export interface ViewRequest {
   accepted?: boolean;
   /** Only compile and report problems, drawing no pages (Papilot Writer's check_build). */
   check?: boolean;
+  /** Compile every chapter, so the paper map includes the whole current outline. */
+  full?: boolean;
 }
 export interface ViewedPage {
   /** The page's position in the PDF that was built, from 1. */
@@ -116,7 +118,7 @@ export async function view(
   const after = await app.tasks.snapshotAsync(task),
     before = task.accepted,
     builder = new Builder(project, app.repo),
-    targets = await builder.planAsync(before, after, [
+    targets = request.full ? ["full"] : await builder.planAsync(before, after, [
       ...new Set([
         ...(await app.repo.changedFilesAsync(before, after)),
         ...locations.map((l) => l.file),
