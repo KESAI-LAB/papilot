@@ -115,3 +115,89 @@ An independent passage in the final section.
     assert.deepEqual(result.contexts.first, ['Section: 1 First']);
   } finally { await reader.stop(); fs.rmSync(folder, { recursive: true, force: true }); }
 });
+
+
+test('bookmark fallback reads columns before y and gives cross-subsection marks their common parent', () => {
+  const headings: SectionHeading[] = [
+    { id: 'parent', title: '1 Parent', level: 1, position: { page: 0, top: 0.1, left: 0.1 } },
+    { id: 'left', title: '1.1 Left', level: 2, position: { page: 0, top: 0.25, left: 0.1 } },
+    { id: 'right', title: '1.2 Right', level: 2, position: { page: 0, top: 0.25, left: 0.55 } },
+  ];
+  const result = groupSectionNotes([
+    note('left'), note('right', { rect: [0.55, 0.5, 0.8, 0.52] }),
+    note('continuation', { rect: [0.55, 0.15, 0.8, 0.17] }),
+    note('crossing', { rects: [[0.1, 0.7, 0.3, 0.72], [0.55, 0.3, 0.8, 0.32]] }),
+    note('unlocated-wide-region', { rect: [0.1, 0.6, 0.8, 0.62] }),
+  ], 'pdf', headings, new Map([[0, { gutter: 0.5, spanning: [] }]]));
+  assert.deepEqual(result.sections.map(section => section.notes), [['left', 'right', 'continuation', 'crossing'], ['left', 'continuation'], ['right']]);
+  assert.deepEqual(result.contexts.crossing, ['Section: 1 Parent']);
+  assert.equal(result.unplaced, 1, 'An arbitrary region spanning a gutter has no verifiable reading position');
+});
+
+test('full-width bands separate the reading order of two-column blocks', () => {
+  const headings: SectionHeading[] = [
+    { id: 'first', title: 'First', level: 1, position: { page: 0, top: 0.1, left: 0.1 } },
+    { id: 'wide', title: 'Wide heading', level: 1, position: { page: 0, top: 0.45, left: 0.1 } },
+    { id: 'next', title: 'Next', level: 1, position: { page: 0, top: 0.55, left: 0.55 } },
+  ];
+  const result = groupSectionNotes([
+    note('above', { rect: [0.55, 0.3, 0.8, 0.32] }),
+    note('below-left', { rect: [0.1, 0.7, 0.3, 0.72] }),
+    note('below-right', { rect: [0.55, 0.7, 0.8, 0.72] }),
+  ], 'pdf', headings, new Map([[0, { gutter: 0.5, spanning: [[0.44, 0.48]] }]]));
+  assert.deepEqual(result.sections.map(section => section.notes), [['above'], ['below-left'], ['below-right']]);
+});
+
+test('real two-column PDFs without source maps keep left comments and right continuations in their sections', { timeout: 120000 }, async t => {
+  const { execFileSync } = await import('node:child_process');
+  try { execFileSync('latexmk', ['-v'], { stdio: 'ignore' }); } catch { t.skip('latexmk is unavailable'); return; }
+  const fs = await import('node:fs'), os = await import('node:os');
+  const { PdfDocument } = await import('../engine/src/render/pdf.ts');
+  const { OUTLINE_TRACE } = await import('../engine/src/core/build.ts');
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-note-columns-')), reader = new PdfReader();
+  const mark = (document: InstanceType<typeof PdfDocument>, id: string, text: string) => {
+    const page = document.page(0), line = page.lines.find(line => line.text.includes(text));
+    assert.ok(line, 'Fixture contains ' + text);
+    const rect = [(line.rect[0] - page.bounds[0]) / page.width, (line.rect[1] - page.bounds[1]) / page.height, (line.rect[2] - page.bounds[0]) / page.width, (line.rect[3] - page.bounds[1]) / page.height] as Annotation['rect'];
+    return note(id, { rect, rects: [rect], quote: line.text });
+  };
+  try {
+    for (const variant of ['same-height', 'continuation', 'duplicate-title'] as const) {
+      const root = path.join(folder, variant); fs.mkdirSync(root);
+      const first = variant === 'duplicate-title' ? 'Summary' : 'First', second = variant === 'duplicate-title' ? 'Summary' : 'Second';
+      const middle = variant === 'continuation' ? String.raw`\subsection{Nested}
+The nested passage belongs to the left subsection.
+\newpage
+A continuation belongs to the same nested subsection.
+\vspace*{1in}
+
+` : '\\newpage\n';
+      fs.writeFileSync(path.join(root, 'main.tex'), String.raw`\documentclass[twocolumn]{article}
+\usepackage{hyperref}
+\begin{document}
+\section{${first}}
+This text belongs in the first section.
+\vspace*{2in}
+
+A distinctive lower passage still in the first section.
+${middle}\section{${second}}
+A separate right passage belongs to the second section.
+\end{document}
+`);
+      fs.writeFileSync(path.join(root, 'trace.tex'), OUTLINE_TRACE);
+      execFileSync('latexmk', ['-norc', '-pdf', '-outdir=build', '-jobname=main', '-synctex=0', '-interaction=nonstopmode', ...(variant === 'duplicate-title' ? ['-usepretex=\\input{trace.tex}'] : []), 'main.tex'], { cwd: root, stdio: 'ignore', timeout: 120000 });
+      const compiled = { pdf: path.join(root, 'build/main.pdf'), root, sourceDir: '' };
+      assert.equal(fs.existsSync(path.join(root, 'build/main.synctex.gz')), false, 'No source map can hide a bookmark fallback bug');
+      const document = new PdfDocument(compiled.pdf);
+      try {
+        assert.equal(document.length, 1, 'The fixture puts both columns on the same page');
+        const notes = [mark(document, 'left', 'distinctive'), mark(document, 'right', 'separate right')];
+        if (variant === 'continuation') notes.push(mark(document, 'nested', 'nested passage'), mark(document, 'continued', 'continuation'));
+        const result = await reader.sections(compiled, 'pdf', notes);
+        assert.deepEqual(result.sections.map(section => section.notes), variant === 'continuation' ? [['left', 'nested', 'continued'], ['nested', 'continued'], ['right']] : [['left'], ['right']], variant);
+        assert.equal(result.unplaced, 0, variant + ' retains every verifiable comment');
+        if (variant === 'duplicate-title') assert.deepEqual(result.sections.map(section => section.title), ['1 Summary', '2 Summary'], 'Unique anchors take priority over duplicated title text');
+      } finally { document.close(); }
+    }
+  } finally { await reader.stop(); fs.rmSync(folder, { recursive: true, force: true }); }
+});
