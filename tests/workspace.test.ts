@@ -129,6 +129,7 @@ const summary = { state: 'reviewing', round: 1, counts: { pending: 1 } };
 
 class FakeCodex extends EventEmitter {
   permissionOptions = Codex.prototype.permissionOptions;
+  closeThread = Codex.prototype.closeThread;
   async taskPermissionConfig(value: string, _cwd: string) {
     return { thread: { sandbox: value === 'full' ? 'danger-full-access' : 'workspace-write', approvalPolicy: value === 'full' ? 'never' : 'on-request' },
       turn: { sandboxPolicy: { type: value === 'full' ? 'dangerFullAccess' : 'workspaceWrite' }, approvalPolicy: value === 'full' ? 'never' : 'on-request' } };
@@ -1544,6 +1545,24 @@ test('deletion rejects active, queued, building, uncertain, and reserved tasks w
   });
 });
 
+test('deletion ends the task conversation before the engine removes its worktree, even when that fails', async () => {
+  for (const fails of [false, true]) {
+    const order: string[] = [];
+    const f = fixture(async (method, route) => { order.push(route); return deletionReview(method, route); });
+    try {
+      f.codex.handler = async method => {
+        order.push(method);
+        if (fails) throw new Error('Codex is not connected.');
+        return {};
+      };
+      assert.deepEqual(await f.workspace.deleteTask(f.task.id), { ok: true });
+      assert.deepEqual(order, [...fails ? ['thread/archive', 'thread/unsubscribe'] : ['thread/archive'], '/api/tasks/p-task/state', '/api/tasks/p-task/finish']);
+      assert.deepEqual(f.codex.calls.find(call => call.method === 'thread/archive')?.params, { threadId: 'thread' });
+      assert.equal(f.store.tasks().length, 0);
+    } finally { f.close(); }
+  }
+});
+
 test('deletion waits for every pending comment and then removes only the selected task', async () => {
   const first = deferred<void>(), second = deferred<void>();
   const f = fixture(deletionReview);
@@ -1723,6 +1742,44 @@ test('real engine deletion removes one temporary worktree while preserving accep
     assert.equal(closedState.closed, true);
     assert.equal(f.store.tasks().length, 0);
   } finally { f?.close(); await engine.close(); await disk.close(); }
+});
+
+test('a task folder another program keeps open is removed when deletion is retried', async () => {
+  const { Fixture, holdFolder } = await import(new URL('../engine/tests/ts/helpers.ts', import.meta.url).href);
+  const { createServer: createReviewServer } = await import(new URL('../engine/src/server.ts', import.meta.url).href);
+  const disk = new Fixture();
+  const app = disk.app();
+  const engine = createReviewServer(app);
+  let f: ReturnType<typeof fixture> | undefined, release = async () => {};
+  try {
+    const target = app.tasks.create('p-task', 'Remove this task', [], ['paper']);
+    const other = app.tasks.create('p-other', 'Keep this task', [], ['paper']);
+    const manuscript = disk.read('paper/main.tex'), head = app.repo.rev('HEAD');
+    app.url = await engine.listen({ port: 0, host: '127.0.0.1' });
+    f = fixture(async (method, route, body) => {
+      const response = await fetch(app.url + route, { method, headers: { 'Content-Type': 'application/json', 'X-Review-Token': app.csrf }, ...(method === 'POST' ? { body: JSON.stringify(body) } : {}) });
+      const value = await response.json();
+      if (!response.ok) throw new Error(value.error);
+      return value;
+    });
+    f.store.saveProject({ id: f.task.projectId, name: 'Temporary paper', path: disk.root, createdAt: 1 });
+    f.store.updateTask(f.task.id, { worktree: target.worktree });
+    release = await holdFolder(target.worktree);
+    await assert.rejects(f.workspace.deleteTask(f.task.id), /Could not delete the task folder/);
+    const stuck = f.store.task(f.task.id);
+    assert.equal(stuck.status, 'deleting');
+    assert.match(stuck.error!, /^Deletion has not been confirmed\. Retry deletion to finish cleanup\. Could not delete the task folder .+ If another program is using it, close that program and try again\./);
+    assert.equal(app.tasks.get(target.name).closed, null);
+    await release();
+    assert.deepEqual(await f.workspace.deleteTask(f.task.id), { ok: true });
+    assert.equal(fs.existsSync(target.worktree), false);
+    assert.equal(fs.existsSync(path.join(disk.root, '.git/worktrees', target.name)), false);
+    assert.equal(f.store.tasks().length, 0);
+    assert.equal(fs.existsSync(other.worktree), true);
+    assert.equal(app.tasks.get(other.name).closed, null);
+    assert.equal(disk.read('paper/main.tex'), manuscript);
+    assert.equal(app.repo.rev('HEAD'), head);
+  } finally { await release(); f?.close(); await engine.close(); await disk.close(); }
 });
 
 test('Codex models list their reasoning efforts, and a task runs every turn at its effort', async () => {

@@ -44,6 +44,21 @@ export async function revisionReaderAsync(repo: Repo, rev: string, folder: strin
     blobs = await repo.blobsAsync(rev, files);
   return (file: string) => blobs[file]?.toString() ?? null;
 }
+// Deletes a task's worktree; `git worktree prune` then drops its
+// registration. Windows cannot delete a folder another program uses (as its
+// working directory, say), and `git worktree remove` gives up there only
+// after emptying and unregistering it, leaving a folder Git refuses to
+// remove. Deleting the folder directly also finishes such an attempt, and
+// briefly waits for a program that is closing it.
+async function removeWorktree(folder: string) {
+  try {
+    await fs.promises.rm(folder, { recursive: true, force: true, maxRetries: 5 });
+  } catch (error) {
+    throw new Error(
+      `Could not delete the task folder ${folder}. If another program is using it, close that program and try again. (${(error as Error).message})`,
+    );
+  }
+}
 export function revisionReader(repo: Repo, rev: string, folder: string) {
   const files = repo.files(rev, folder).filter((p) => p.endsWith(".tex")),
     blobs = repo.blobs(rev, files);
@@ -257,7 +272,8 @@ export class Tasks {
       problems.push(
         `${counts.pending} pending and ${counts.commented} commented changes`,
       );
-    const leftover = fs.existsSync(task.worktree)
+    // Only a finish without force refuses to discard the worktree's edits.
+    const leftover = !force && fs.existsSync(task.worktree)
       ? await app.repo.changedFilesAsync(task.accepted, await this.snapshotAsync(task))
       : [];
     if (leftover.length)
@@ -268,8 +284,7 @@ export class Tasks {
       throw new Error(
         `The task still has ${problems.join("; ")}. Publish and finish the review first, or use --force to discard them.`,
       );
-    if (fs.existsSync(task.worktree))
-      await app.repo.runAsync(["worktree", "remove", "--force", task.worktree]);
+    await removeWorktree(task.worktree);
     await app.repo.runAsync(["worktree", "prune"], { check: false });
     await app.repo.deleteRefsAsync(`${REFS}${name}/`);
     await fs.promises.rm(path.join(app.state, "rounds", name), {
