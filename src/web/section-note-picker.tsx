@@ -1,25 +1,25 @@
-import { useId, useState } from 'react';
 import type { NoteSection } from '../shared.ts';
+import { ActionMenu } from './action-menu.tsx';
+import { Icon } from './icons.tsx';
 import { t } from './i18n.ts';
 import './section-note-picker.css';
 
-export function SectionNotePicker({ sections, unplaced = 0, disabled, has, select }: { sections: NoteSection[]; unplaced?: number; disabled: boolean; has: (id: string) => boolean; select: (ids: string[]) => void }) {
-  const id = useId(), [choice, setChoice] = useState('');
-  const current = sections.find(section => section.id === choice) || sections[0];
-  const level = Math.min(...sections.map(section => section.level));
-  const selected = current?.notes.filter(has).length || 0;
-  return <div className="section-note-picker">
-    <label htmlFor={id}>{t('Select comments by section')}</label>
-    {current ? <>
-      <select id={id} value={current.id} disabled={disabled} onChange={event => setChoice(event.target.value)}>
-        {sections.map(section => <option key={section.id} value={section.id}>{'\u2003'.repeat(Math.max(0, Math.min(6, section.level - level)))}{section.title} · {section.notes.length}</option>)}
-      </select>
-      <div className="section-note-actions">
-        <button type="button" className="button secondary compact" disabled={disabled || !current.notes.length || selected === current.notes.length} onClick={() => select(current.notes)}>{t('Select comments in this section')}</button>
-        <span role="status">{t('{selected} of {total} selected', { selected, total: current.notes.length })}</span>
-      </div>
-      <p>{t('Includes subsections. Review the selected comments in New task before sending.')}</p>
-      {unplaced > 0 && <p>{t('Unplaced comments: {n}. You can select them individually.', { n: unplaced })}</p>}
-    </> : <p>{t('Section selection needs a compiled paper outline or PDF bookmarks.')}</p>}
-  </div>;
+export function SectionNotePicker({ sections, notes, disabled, has, select, onAdded }: { sections: NoteSection[]; notes: string[]; disabled: boolean; has: (id: string) => boolean; select: (ids: string[], checked: boolean) => void; onAdded: () => void }) {
+  const available = sections.filter(section => section.notes.length > 0);
+  const allSelected = notes.every(has);
+  const add = (ids: string[]) => { select(ids, true); onAdded(); };
+  if (!available.length && !notes.length) return null;
+  // Without an outline, retain the ordinary bulk action without an empty menu.
+  if (!available.length) return <button type="button" className="note-select-all" aria-label={t('Select all notes for this task')} aria-pressed={allSelected ? true : notes.some(has) ? 'mixed' : false} disabled={disabled} onClick={() => select(notes, !allSelected)}>{allSelected ? t('Remove all from task') : t('Add all to task')}</button>;
+  const level = Math.min(...available.map(section => section.level));
+  return <ActionMenu label={t('Add to task')} className="note-select-all section-note-trigger" menuClassName="section-note-menu" disabled={disabled} actions={[
+    ...(notes.length ? [{ label: allSelected ? t('Remove all from task') : t('Add all to task'), select: () => allSelected ? select(notes, false) : add(notes) }] : []),
+    ...available.map((section, index) => {
+      const selected = section.notes.filter(has).length, total = section.notes.length;
+      return { id: section.id, label: section.title, hint: selected ? `${selected}/${total}` : String(total),
+        title: `${t('Includes subsections')} · ${t('{selected} of {total} selected', { selected, total })}`,
+        indent: Math.max(0, Math.min(6, section.level - level)), divider: index === 0 && notes.length > 0,
+        disabled: disabled || selected === total, select: () => add(section.notes) };
+    }),
+  ]}>{t('Add to task')}<Icon name="chevronDown" size={12}/></ActionMenu>;
 }

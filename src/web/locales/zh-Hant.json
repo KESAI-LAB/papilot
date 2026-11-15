@@ -622,7 +622,6 @@
   "Note {n}: {comment}": "註解 {n}：{comment}",
   "Notes": "註解",
   "Notes in this task": "此任務中的註解",
-  "Notes stay here unless you add them to a task.": "除非加入任務，否則註解會保留在此處。",
   "Nothing to check": "沒有需要檢查的項目",
   "Notification sound": "通知提示音",
   "Notification sounds are managed by your system settings.": "通知提示音由系統設定管理。",
@@ -1425,7 +1424,6 @@
   "Create a new paper": "建立新論文",
   "Create paper": "建立論文",
   "Creating your paper…": "正在建立論文…",
-  "Includes subsections. Review the selected comments in New task before sending.": "包含子章節。送出前，請在「新增任務」中檢查已選取的評論。",
   "Next, edit main.tex in the source editor or ask an agent to help write your paper. Compilation starts in the workspace.": "接著可在原始碼編輯器中編輯 main.tex，或請智慧代理協助撰寫論文。工作區會開始編譯。",
   "Original notes, source context, attachments and skill instructions are copied. Later messages and review decisions stay in the original task.": "將複製原始註解、原始碼脈絡、附件和技能指示。後續訊息與審閱決定會保留在原任務中。",
   "Replacement task": "替代任務",
@@ -1436,9 +1434,6 @@
   "Restart with another agent…": "改用其他智慧代理重新啟動…",
   "Restarted from": "重新啟動自",
   "Save in": "儲存位置",
-  "Section selection needs a compiled paper outline or PDF bookmarks.": "依章節選取需要已編譯的論文大綱或 PDF 書籤。",
-  "Select comments by section": "依章節選取評論",
-  "Select comments in this section": "選取此章節的評論",
   "Start with a minimal LaTeX paper and local version history. No Git hosting account is needed.": "從簡潔的 LaTeX 論文和本機版本歷史開始，無需 Git 託管帳號。",
   "Stop the original task and its queued messages, then start the replacement.": "停止原任務及其排隊中的訊息，然後啟動替代任務。",
   "Stopping and restarting…": "正在停止並重新啟動…",
@@ -1446,5 +1441,6 @@
   "This location is on the computer running Papilot. A new folder with the paper name will be created here; existing folders are never replaced.": "此位置位於執行 Papilot 的電腦上。將在此處建立與論文同名的新資料夾，不會取代現有資料夾。",
   "Your unsent text, skill and attachments are copied as a draft, without sending. Unsent review comments are copied as text with their original locations; review highlights are not transferred.": "未送出的文字、技能和附件會複製為草稿，不會自動送出。未送出的審閱評論會連同原始位置複製為文字；審閱反白標記不會轉移。",
   "{selected} of {total} selected": "已選取 {selected} / {total}",
-  "Unplaced comments: {n}. You can select them individually.": "無法歸入章節的評論：{n} 則。可個別選取。"
+  "Add to task": "加入任務",
+  "Includes subsections": "包含子章節"
 }

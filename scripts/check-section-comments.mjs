@@ -12,7 +12,7 @@ await server.register(staticFiles, { root: path.resolve('dist') });
 await server.listen({ host: '127.0.0.1', port: 0 });
 const reader = new PdfReader();
 const browser = await chromium.launch({ channel: process.env.PAPILOT_BROWSER_CHANNEL || 'chrome', headless: true });
-const page = await browser.newPage({ locale: 'en-US', viewport: { width: 1440, height: 900 } });
+const page = await browser.newPage({ locale: 'en-US', reducedMotion: 'reduce', viewport: { width: 1440, height: 900 } });
 const errors = []; page.on('pageerror', error => errors.push(error.message));
 const origin = `http://127.0.0.1:${server.server.address().port}`;
 const model = { id: 'writer-test', name: 'Writer test', isDefault: true, efforts: [], defaultEffort: null };
@@ -54,46 +54,63 @@ const openNotes = async () => {
   if (!await page.getByRole('complementary', { name: 'PDF note library' }).isVisible()) await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
 };
 const included = id => page.locator(`.new-task-panel [data-note="${id}"]`);
-const pick = () => page.getByRole('combobox', { name: 'Select comments by section', exact: true });
-const select = () => page.getByRole('button', { name: 'Select comments in this section', exact: true });
+const pick = () => page.getByRole('button', { name: 'Add to task', exact: true });
+const menu = () => page.getByRole('menu', { name: 'Add to task', exact: true });
+const section = name => menu().getByRole('menuitem', { name, exact: true });
 try {
   await page.addInitScript(() => {
     localStorage.setItem('papilot:selected-notes', JSON.stringify({ paper: ['outside', 'child-a'] }));
   });
   await page.goto(origin);
   await openNotes();
-  await pick().selectOption({ label: 'Method · 3' });
-  await select().click();
+  await expect(menu()).not.toBeVisible();
+  await pick().click();
+  await expect(section('Method')).toHaveAttribute('title', 'Includes subsections · 1 of 3 selected');
+  await section('Method').click();
   for (const id of ['outside', 'parent', 'child-a', 'child-b']) await expect(included(id)).toHaveCount(1);
   await expect(included('stale')).toHaveCount(0);
-  await expect(page.getByText('3 of 3 selected', { exact: true })).toBeVisible();
-  await expect(select()).toBeDisabled();
+  await expect(page.getByRole('complementary', { name: 'PDF note library' })).not.toBeVisible();
+  await expect(page.getByRole('tab', { name: 'New task', exact: true })).toBeFocused();
+  await openNotes(); await pick().click();
+  await expect(section('Method')).toHaveAttribute('title', 'Includes subsections · 3 of 3 selected');
+  await expect(section('Method')).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(pick()).toBeFocused();
   assert.equal(sent.length, 0, 'Selecting comments never submits a task');
-  await expect(page.getByText('Unplaced comments: 1. You can select them individually.', { exact: true })).toBeVisible();
   // Individual removals remain possible; selecting a child restores only
   // that subtree and leaves the independently selected outside note intact.
   await page.getByRole('button', { name: 'Close notes', exact: true }).click();
   for (const id of ['parent', 'child-b']) await included(id).getByRole('button', { name: /^Remove (?:note|suggestion) / }).click();
   await openNotes();
-  await pick().selectOption('bookmark-2');
-  await select().click();
+  await pick().focus(); await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('End'); await page.keyboard.press('Enter');
   await expect(included('outside')).toHaveCount(1);
   await expect(included('parent')).toHaveCount(0);
   await expect(included('child-a')).toHaveCount(1);
   await expect(included('child-b')).toHaveCount(1);
-  await expect(page.getByText('2 of 2 selected', { exact: true })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'PDF note library' })).not.toBeVisible();
   assert.equal(sent.length, 0);
-  // The picker wraps at phone widths and the selected count remains visible.
+  // The menu only occupies space when asked and fits a phone as a bottom sheet.
   fs.mkdirSync('test-results', { recursive: true });
+  await openNotes(); await pick().click();
+  await expect(section('Results')).toBeDisabled();
   await page.screenshot({ path: 'test-results/section-comments-desktop.png', animations: 'disabled' });
+  await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('group', { name: 'Manuscript view', exact: true }).getByRole('button', { name: 'PDF', exact: true }).click();
   await openNotes();
   await expect(pick()).toBeVisible();
-  assert.ok(await page.locator('.section-note-picker').evaluate(element => element.scrollWidth <= element.clientWidth + 1));
+  await pick().click();
+  assert.ok(await menu().evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return rect.left >= 0 && rect.right <= innerWidth && element.scrollWidth <= element.clientWidth + 1;
+  }));
   await page.screenshot({ path: 'test-results/section-comments-mobile.png', animations: 'disabled' });
+  await section('Method').click();
+  await expect(page.getByRole('complementary', { name: 'PDF note library' })).not.toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Describe the revision', exact: true })).toBeVisible();
+  await included('parent').getByRole('button', { name: /^Remove (?:note|suggestion) / }).click();
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByRole('button', { name: 'Close notes', exact: true }).click();
   await page.getByRole('textbox', { name: 'Describe the revision', exact: true }).fill('Improve these comments together.');
   // Choose Papilot Writer using the normal composer model picker.
   await page.getByRole('button', { name: 'Agent settings', exact: true }).click();

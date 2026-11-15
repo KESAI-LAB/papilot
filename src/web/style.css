@@ -694,7 +694,6 @@ body.resizing iframe{pointer-events:none}
 .note-select-all{padding:4px 0;color:var(--text-2);font:inherit;white-space:nowrap}
 .draft-notes-head .note-select-all{margin-left:auto}
 .note-select-all:hover:not(:disabled){color:var(--accent)}
-.note-selection-hint{margin:0 0 6px;font-size:12px;color:var(--text-3)}
 .notes-panel>.note-section:first-of-type{margin-top:0}
 .notes-panel .note-card{position:relative;isolation:isolate;transition:background-color .15s,border-color .15s}
 .notes-panel .note-card[data-selected=true]{background:color-mix(in srgb,var(--note-color,var(--accent)) 11%,var(--bg));border-color:color-mix(in srgb,var(--note-color,var(--accent)) 55%,var(--line))}

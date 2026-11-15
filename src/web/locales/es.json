@@ -622,7 +622,6 @@
   "Note {n}: {comment}": "Anotación {n}: {comment}",
   "Notes": "Anotaciones",
   "Notes in this task": "Anotaciones en esta tarea",
-  "Notes stay here unless you add them to a task.": "Las anotaciones permanecen aquí a menos que las añadas a una tarea.",
   "Nothing to check": "Nada que comprobar",
   "Notification sound": "Sonido de notificación",
   "Notification sounds are managed by your system settings.": "Los sonidos de notificación se gestionan en los ajustes del sistema.",
@@ -1425,7 +1424,6 @@
   "Create a new paper": "Crear un nuevo artículo",
   "Create paper": "Crear artículo",
   "Creating your paper…": "Creando tu artículo…",
-  "Includes subsections. Review the selected comments in New task before sending.": "Incluye las subsecciones. Revisa los comentarios seleccionados en Nueva tarea antes de enviarlos.",
   "Next, edit main.tex in the source editor or ask an agent to help write your paper. Compilation starts in the workspace.": "A continuación, edita main.tex en el editor de código fuente o pide ayuda a un agente para escribir tu artículo. La compilación se inicia en el espacio de trabajo.",
   "Original notes, source context, attachments and skill instructions are copied. Later messages and review decisions stay in the original task.": "Se copian las anotaciones originales, el contexto del código fuente, los adjuntos y las instrucciones de la habilidad. Los mensajes posteriores y las decisiones de revisión permanecen en la tarea original.",
   "Replacement task": "Tarea de reemplazo",
@@ -1436,9 +1434,6 @@
   "Restart with another agent…": "Reiniciar con otro agente…",
   "Restarted from": "Reiniciada desde",
   "Save in": "Guardar en",
-  "Section selection needs a compiled paper outline or PDF bookmarks.": "La selección por sección necesita el esquema de un artículo compilado o marcadores PDF.",
-  "Select comments by section": "Seleccionar comentarios por sección",
-  "Select comments in this section": "Seleccionar comentarios de esta sección",
   "Start with a minimal LaTeX paper and local version history. No Git hosting account is needed.": "Empieza con un artículo LaTeX mínimo y un historial de versiones local. No se necesita una cuenta de alojamiento Git.",
   "Stop the original task and its queued messages, then start the replacement.": "Detén la tarea original y sus mensajes en cola; después, inicia la tarea de reemplazo.",
   "Stopping and restarting…": "Deteniendo y reiniciando…",
@@ -1446,5 +1441,6 @@
   "This location is on the computer running Papilot. A new folder with the paper name will be created here; existing folders are never replaced.": "Esta ubicación está en el equipo que ejecuta Papilot. Aquí se creará una carpeta nueva con el nombre del artículo; las carpetas existentes nunca se reemplazan.",
   "Your unsent text, skill and attachments are copied as a draft, without sending. Unsent review comments are copied as text with their original locations; review highlights are not transferred.": "El texto, la habilidad y los adjuntos sin enviar se copian como borrador, sin enviarse. Los comentarios de revisión sin enviar se copian como texto con sus ubicaciones originales; los resaltados de revisión no se transfieren.",
   "{selected} of {total} selected": "{selected} de {total} seleccionados",
-  "Unplaced comments: {n}. You can select them individually.": "Comentarios sin ubicar: {n}. Puedes seleccionarlos individualmente."
+  "Add to task": "Añadir a la tarea",
+  "Includes subsections": "Incluye subsecciones"
 }

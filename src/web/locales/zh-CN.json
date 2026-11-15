@@ -220,5 +220,7 @@
   "{n} files": "{n} 个文件",
   "{n} place in the paper": "论文中 {n} 处",
   "{n} places in the paper": "论文中 {n} 处",
-  "Add to chat": "添加到聊天"
+  "Add to chat": "添加到聊天",
+  "Add to task": "加入任务",
+  "Includes subsections": "包含子章节"
 }
