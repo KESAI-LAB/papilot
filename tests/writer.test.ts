@@ -190,10 +190,13 @@ for (const scenario of ['timeout', 'cancel', 'cancel without pipes']) test(`chor
   `);
   try {
     const result = call(tools, 'run_command', { command: `"${process.execPath}" parent.cjs`, timeout_seconds: scenario === 'timeout' ? 2 : 60 }, stop.signal);
+    let finished: string | undefined;
+    void result.then(output => { finished = output; }, error => { finished = String(error); });
     const bounded = Promise.race([result, new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new Error('The command did not stop its descendants')), 8000); })]);
+    void bounded.catch(() => {}); // Readiness can fail before this is awaited.
     // The descendant installs a SIGTERM handler before the cancellation lands.
-    for (let i = 0; i < 200 && !fs.existsSync(path.join(dir, 'writes')); i++) await wait(10);
-    assert.ok(fs.existsSync(path.join(dir, 'writes')), 'The descendant started writing');
+    for (let i = 0; i < 200 && finished === undefined && !fs.existsSync(path.join(dir, 'writes')); i++) await wait(10);
+    assert.ok(fs.existsSync(path.join(dir, 'writes')), finished || 'The descendant started writing');
     if (scenario !== 'timeout') stop.abort();
     const output = await bounded;
     if (scenario === 'timeout') assert.match(output, /stopped after 2 s/);

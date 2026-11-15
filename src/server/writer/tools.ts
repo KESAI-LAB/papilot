@@ -368,8 +368,9 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
       if (host.mode() === 'read-only') throw toolError('This task is read-only.');
       signal?.throwIfAborted();
       const result = await new Promise<{ code: number | null; output: string }>((resolve, reject) => {
-        const shell = process.platform === 'win32' ? { file: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', line] } : { file: '/bin/sh', args: ['-c', line] };
-        const child = spawn(shell.file, shell.args, { cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32' });
+        // Node quotes cmd.exe's /c argument so quoted executable paths work too.
+        const shell = process.platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : '/bin/sh';
+        const child = spawn(line, { shell, cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32' });
         let output = '';
         const take = (chunk: Buffer) => { output += chunk.toString(); if (output.length > 4 * MAX_OUTPUT) output = output.slice(-2 * MAX_OUTPUT); };
         child.stdout.on('data', take); child.stderr.on('data', take);
