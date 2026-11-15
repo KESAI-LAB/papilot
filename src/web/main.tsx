@@ -35,6 +35,8 @@ import { ReviewFrame, reviewUrl, type ReviewSources } from './review-frame.tsx';
 import { AiReviewView } from './ai-review.tsx';
 import { keepDialogFocus } from './focus.ts';
 import { DeleteTaskDialog } from './task-dialog.tsx';
+import { RestartTaskDialog } from './restart-task-dialog.tsx';
+import { restartDraftText } from './restart-draft.ts';
 import { ActionMenu } from './action-menu.tsx';
 import { Icon } from './icons.tsx';
 import { toolIcon, toolNote, toolSentence, toolSummary } from './tool-calls.ts';
@@ -336,14 +338,21 @@ function timelineEntries(items: TimelineItem[]) {
   return entries;
 }
 
-function Activity({ source, onRevealQuote, task, runtime, reconnecting, onReconnect, skills, composer, answerDrafts, items, loading, loadError, retry, requests, refresh, onTaskSaved, reportError, pause, pausing, openReview, feedback, connection, tools, lead, errorActions }: { source?: { tabs: React.ReactNode; panel: React.ReactNode; selected: boolean }; errorActions?: React.ReactNode; tools?: React.ReactNode; lead?: React.ReactNode; onRevealQuote: () => void; task: Task; runtime?: RuntimeStatus; reconnecting: boolean; onReconnect: () => void; skills: Skill[]; composer: ComposerDraft; answerDrafts: Map<string, Record<string, string>>; items: TimelineItem[]; loading: boolean; loadError: string; retry: () => void; requests: PendingRequest[]; refresh: () => void; onTaskSaved: (task: Task) => void; reportError: (e: unknown) => void; pause: () => void; pausing: boolean; openReview?: () => void; feedback?: React.ReactNode; connection?: React.ReactNode }) {
+function Activity({ runtimes, relatedTasks, onOpenTask, onRestarted, source, onRevealQuote, task, runtime, reconnecting, onReconnect, skills, composer, answerDrafts, items, loading, loadError, retry, requests, refresh, onTaskSaved, reportError, pause, pausing, openReview, feedback, connection, tools, lead, errorActions }: { runtimes: Partial<Record<AgentId, RuntimeStatus>>; relatedTasks: Task[]; onOpenTask: (id: string) => void; onRestarted: (task: Task) => void; source?: { tabs: React.ReactNode; panel: React.ReactNode; selected: boolean }; errorActions?: React.ReactNode; tools?: React.ReactNode; lead?: React.ReactNode; onRevealQuote: () => void; task: Task; runtime?: RuntimeStatus; reconnecting: boolean; onReconnect: () => void; skills: Skill[]; composer: ComposerDraft; answerDrafts: Map<string, Record<string, string>>; items: TimelineItem[]; loading: boolean; loadError: string; retry: () => void; requests: PendingRequest[]; refresh: () => void; onTaskSaved: (task: Task) => void; reportError: (e: unknown) => void; pause: () => void; pausing: boolean; openReview?: () => void; feedback?: React.ReactNode; connection?: React.ReactNode }) {
   const input = useRef<HTMLTextAreaElement>(null);
   const reviewNotes = reviewDraft(task.id), notes = useReviewDraft(task.id);
   const [savingModel, setSavingModel] = useState(false);
   const [savingPermissions, setSavingPermissions] = useState(false);
   const { text: draft, sending } = useSyncExternalStore(composer.subscribe, composer.getSnapshot);
   const files = useAttachmentDraft(`papilot:files:task:${task.id}`);
-  const [skill, setSkill] = useState<Skill | null>(null);
+  const [skill, setSkill] = useState<Skill | null>(() => skills.find(item => item.id === browserStorage.getItem('papilot:draft-skill:' + task.id)) || null);
+  const restoringSkill = useRef(browserStorage.getItem('papilot:draft-skill:' + task.id));
+  const [restarting, setRestarting] = useState(false);
+  useEffect(() => {
+    const saved = skills.find(item => item.id === restoringSkill.current);
+    if (saved) { restoringSkill.current = null; setSkill(saved); }
+  }, [skills]);
+  useEffect(() => { if (restoringSkill.current) return; if (skill) browserStorage.setItem('papilot:draft-skill:' + task.id, skill.id); else browserStorage.removeItem('papilot:draft-skill:' + task.id); }, [skill, task.id]);
   useEffect(() => setSkill(current => current ? skills.find(item => item.id === current.id) || null : null), [skills]);
   const scroller = useRef<HTMLDivElement>(null);
   // A chat the author scrolled back through opens at the same place; one that
@@ -409,6 +418,7 @@ function Activity({ source, onRevealQuote, task, runtime, reconnecting, onReconn
     <div className="conversation-history"><div className="messages" ref={scroller} onScroll={() => { if (scroller.current && back.current === undefined) { const el = scroller.current; shouldFollow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 90; setFollowing(shouldFollow.current); savePlace(place, shouldFollow.current ? undefined : Math.round(el.scrollTop)); } }}><div className="thread">
       {loading && <p className="muted" role="status">{t('Loading conversation…')}</p>}
       {loadError && <div className="conversation-error" role="alert"><p>{loadError}</p><button className="button secondary compact" onClick={retry}>{t('Retry conversation')}</button></div>}
+      {relatedTasks.map(related => <p className="restart-link" key={related.id}>{related.id === task.restart?.taskId ? t('Restarted from') : t('Replacement task')}: <button type="button" onClick={() => onOpenTask(related.id)}>{related.title}</button></p>)}
       {thread}
       {requests.map(r => <RequestCard key={r.id} request={r} agent={agentName(task)} answerDrafts={answerDrafts} onDone={refresh}/>)}
       {task.status === 'running' && <div className="working"><span className="working-dots"><i/><i/><i/></span>{t('{agent} is working on this task', { agent: agentName(task) })}</div>}
@@ -424,6 +434,7 @@ function Activity({ source, onRevealQuote, task, runtime, reconnecting, onReconn
         footer={attach => <div className="composer-options">
           {task.mode !== 'review' && <SkillPicker onAttach={attach} skills={skills.filter(skill => skill.output !== 'annotations')} selected={skill} disabled={sending || blocked} onPick={value => { setSkill(value); input.current?.focus(); }}/>}
           <TaskModelPicker task={task} runtime={runtime} disabled={sending || blocked || savingPermissions} reconnecting={reconnecting} onReconnect={onReconnect} save={settings => api<Task>(`/tasks/${task.id}/model`, settings)} onSaving={setSavingModel} refresh={refresh} reportError={reportError}
+            restart={<button type="button" className="restart-task-action" disabled={sending || savingModel || savingPermissions || files.blocked || notes.busy} onClick={event => { event.currentTarget.closest<HTMLElement>('[popover]')?.hidePopover(); if (isPlayground) requestPlaygroundDownload(); else setRestarting(true); }}>{t('Restart with another agent…')}</button>}
             permissions={<TaskPermissionOptions task={task} runtime={runtime} disabled={sending || blocked || savingModel} save={permissions => api<Task>(`/tasks/${task.id}/permissions`, { permissions })} onSaved={onTaskSaved} onSaving={setSavingPermissions} refresh={refresh} reportError={reportError}/>}/>
         </div>}
         action={<div className="composer-actions">
@@ -433,6 +444,15 @@ function Activity({ source, onRevealQuote, task, runtime, reconnecting, onReconn
         </div>}/>
       {hint && <p className="composer-hint" role="status">{hint}</p>}
     </div>
+    {restarting && <RestartTaskDialog task={task} runtimes={runtimes} reconnecting={reconnecting} onReconnect={onReconnect} onClose={() => setRestarting(false)}
+      submit={settings => api<Task>(`/tasks/${task.id}/restart`, { ...settings, draftAttachments: files.draft.getSnapshot().files.map(file => file.id) })}
+      onDone={replacement => {
+        const pending = reviewNotes.getSnapshot();
+        browserStorage.setItem('papilot:draft:' + replacement.id, restartDraftText(composer.text, pending.instructions, pending.notes.map(reviewNoteSummary)));
+        if (skill) browserStorage.setItem('papilot:draft-skill:' + replacement.id, skill.id);
+        if (replacement.restart?.draftAttachments?.length) browserStorage.setItem('papilot:files:task:' + replacement.id, JSON.stringify(replacement.restart.draftAttachments));
+        setRestarting(false); onRestarted(replacement);
+      }}/>}
   </section>;
 }
 
@@ -1249,7 +1269,7 @@ function App() {
     snapshotRequest.cancel();
     const previous = snapshotRef.current;
     if (!previous) return;
-    const next = { ...previous, tasks: previous.tasks.map(current => current.id === saved.id && current.updatedAt <= saved.updatedAt ? saved : current) };
+    const next = { ...previous, tasks: previous.tasks.some(current => current.id === saved.id) ? previous.tasks.map(current => current.id === saved.id && current.updatedAt <= saved.updatedAt ? saved : current) : [...previous.tasks, saved] };
     snapshotRef.current = next; snapshotText.current = ''; setState(next);
   }, [snapshotRequest]);
   const refreshTimeline = useCallback(async (selection: string) => {
@@ -2076,7 +2096,7 @@ function App() {
           {!mobile && !chatOnly && task.status === 'deleting' && (sidebarToggle || !conversationVisible) && <div className="review-placeholder-toolbar">{sidebarToggle}{!conversationVisible && workspaceViews}<div className="panel-tools">{!conversationVisible && taskStateActions}</div></div>}
           {(task.review?.state === 'build_failed' || task.status === 'failed' && task.review?.job?.status === 'failed') && <div className="review-build-error" role="status"><Icon name="alert" size={15}/><span>{t('Could not generate the PDF comparison.')}</span><button className="button secondary compact" disabled={taskActionBusy} onClick={() => void action('/tasks/' + task.id + '/publish')}>{t('Retry build')}</button></div>}
           {task.status === 'deleting' ? <div className="review-placeholder"><div className="placeholder-icon"><Icon name="trash" size={22}/></div><h2>{t('Deletion is in progress')}</h2><p>{t('This task is reserved until its worktree cleanup is confirmed. Use Retry deletion if the connection was interrupted.')}</p></div> : !task.preparation && task.mode === 'review' ? <AiReviewView key={task.id} task={task} api={api} onCopied={() => void loadManuscript(task.projectId)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={!mobile && !conversationVisible ? taskStateActions : null}/> : <TaskDocument key={task.id} projectId={task.projectId} manuscript={manuscriptData.data} placeholder={task.preparation ? <PreparingTask task={task}/> : <PendingComparison task={task} busy={taskActionBusy} onBuild={() => void action('/tasks/' + task.id + '/publish')}/>} task={task} sources={taskReview} onOpenSource={openTaskSource} onChanges={next => setTaskChanges(current => JSON.stringify(current) === JSON.stringify(next) ? current : next)} onCurrentChange={change => { if (taskSource.editing && taskSide === 'source') void taskSource.follow(change, () => undefined); }} onDecided={() => void refresh(true)} lead={!mobile && !chatOnly && (sidebarToggle || !conversationVisible) ? <>{sidebarToggle}{!conversationVisible && workspaceViews}</> : null} tools={<>{reviewTools}{!mobile && !conversationVisible && <>{taskStateActions}{reviewOpen}</>}</>} completion={chatOnly ? null : applicationStep} onComment={() => { setMobileTab('conversation'); setTaskSide('chat'); setLayout(current => current === 'review' ? 'split' : current); }}/>}
-        </section><Activity key={task.id} source={taskSourceSide} onRevealQuote={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} task={task} lead={!mobile && chatOnly ? sidebarToggle : null} tools={!mobile && conversationVisible ? <>{taskControls}{reviewOpen}</> : null} connection={<AgentConnectionNotice name={agentName(task)} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')}/>} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')} composer={composers.current.get(task.id)!} answerDrafts={answerDrafts.current} items={timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || []} loading={timeline.taskId === task.id ? itemsLoading : !timelineCache.current.has(task.id)} loadError={timelineError.taskId === task.id ? timelineError.message : ''} retry={() => void refreshTimeline(task.id)} requests={taskRequests} refresh={() => void refresh(true)} errorActions={task.preparation && task.status === 'failed' ? <div className="task-error-actions">
+        </section><Activity key={task.id} runtimes={runtimes} relatedTasks={state?.tasks.filter(other => other.id === task.restart?.taskId || other.restart?.taskId === task.id) || []} onOpenTask={id => { setSelected(id); setSidebar(false); }} onRestarted={replacement => { acceptSavedTask(replacement); setSelected(replacement.id); void refresh(true); }} source={taskSourceSide} onRevealQuote={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} task={task} lead={!mobile && chatOnly ? sidebarToggle : null} tools={!mobile && conversationVisible ? <>{taskControls}{reviewOpen}</> : null} connection={<AgentConnectionNotice name={agentName(task)} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')}/>} runtime={runtimes[task.agent || 'codex']} reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')} composer={composers.current.get(task.id)!} answerDrafts={answerDrafts.current} items={timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || []} loading={timeline.taskId === task.id ? itemsLoading : !timelineCache.current.has(task.id)} loadError={timelineError.taskId === task.id ? timelineError.message : ''} retry={() => void refreshTimeline(task.id)} requests={taskRequests} refresh={() => void refresh(true)} errorActions={task.preparation && task.status === 'failed' ? <div className="task-error-actions">
             <button type="button" className="button secondary compact" disabled={taskActionBusy} aria-busy={taskActionBusy} onClick={() => void action('/tasks/' + task.id + '/prepare')}><Icon name="refresh" size={14}/>{t('Retry')}</button>
             <button type="button" className="button secondary compact" onClick={() => setDeleteTarget(task)}><Icon name="trash" size={14}/>{t('Delete task…')}</button>
           </div> : chatOnly && task.mode !== 'review' && ['failed', 'interrupted'].includes(task.status) ? <div className="task-error-actions">

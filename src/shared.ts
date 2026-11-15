@@ -42,6 +42,8 @@ export interface TaskReconciliation {
 export type TaskPermissions = string;
 export interface TaskPermissionOption { value: TaskPermissions; label: string; detail: string }
 export interface Task {
+  // A fresh session replaying another task's original request. Provider sessions are never reused.
+  restart?: { taskId: string; draftAttachments?: Attachment[] };
   permissions?: TaskPermissions;
   mode?: 'edit' | 'review';
   aiReview?: { key: string; notes?: number; revision?: number };

@@ -1,6 +1,19 @@
 // Simplified Chinese for the workspace, keyed by the English text (see i18n.ts).
 // Chinese text keeps a space around numbers and Latin words: "修改 2", "PDF 批注".
 export const zhCN: Record<string, string> = {
+  'Restart with another agent…': '用其他智能体重新开始…',
+  'Restart with another agent': '用其他智能体重新开始',
+  'Rerun the original request on the current manuscript in a linked new task. The original conversation and proposed changes stay available.': '在关联的新任务中，基于当前稿件重新执行最初的请求。原来的对话和修改建议会保留。',
+  'Original notes, source context, attachments and skill instructions are copied. Later messages and review decisions stay in the original task.': '会复制最初的批注、源码上下文、附件和技能指令。后续消息和审阅决定保留在原任务中。',
+  'Your unsent text, skill and attachments are copied as a draft, without sending. Unsent review comments are copied as text with their original locations; review highlights are not transferred.': '未发送的文字、技能和附件会复制为草稿，不会自动发送。未发送的审阅评论会连同原位置复制为文字，但不转移审阅高亮。',
+  'The new agent starts a fresh conversation with its default permissions. To continue from proposed changes, keep using the original task.': '新智能体使用默认权限开始新对话。若要继续处理已有的修改建议，请留在原任务中。',
+  'Connect an agent with an available model before restarting.': '请先连接一个有可用模型的智能体，再重新开始。',
+  'Stop the original task and its queued messages, then start the replacement.': '停止原任务及其排队中的消息，再启动新任务。',
+  'Resolve the pending task action before restarting.': '请先处理任务中尚未确认的操作，再重新开始。',
+  'Stopping and restarting…': '正在停止并重新开始…',
+  'Restart task': '重新开始任务',
+  'Restarted from': '原任务',
+  'Replacement task': '替代任务',
   'Switch tasks and manuscript': '快速切换任务和稿件',
   'Hold {key} and press ` to cycle. Shift reverses; release {key} to switch. Esc cancels.': '按住 {key}，连续按 ` 选择；加 Shift 反向选择，松开 {key} 切换，Esc 取消。',
   'Environment': '运行环境',

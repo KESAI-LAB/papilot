@@ -3193,3 +3193,141 @@ test('review instructions retain read-only manuscript boundaries despite editing
     }
   } finally { f.close(); }
 });
+
+function restartFixture(handler?: (method: string, route: string, body?: unknown) => Promise<any>) {
+  const f = fixture(handler || (async (_method, route) => route === '/api/tasks' ? { worktree: '/replacement', deferred: true } : route.includes('/feedback') ? { cursor: 0, feedback: [] } : summary));
+  f.workspace.runtimes.claude = { connected: true, authenticated: true, account: null, error: null, models: [{ id: 'opus', name: 'Opus', isDefault: true, efforts: ['high'], defaultEffort: 'high' }] };
+  const run: Run = { id: 'original-initial', taskId: f.task.id, requestKey: 'initial-' + f.task.id, prompt: 'Original request with exact skill and source excerpt.', status: 'completed', createdAt: 1, finishedAt: 2, reviewRound: 1 };
+  f.store.saveRun(run);
+  f.store.saveItem({ id: run.id, taskId: f.task.id, type: 'user', text: 'Original request.', createdAt: 1, meta: { notes: [{ id: 'old-note', where: 'main.tex:10–12, PDF page 2', quote: 'Original text', comment: 'Clarify.', anchor: { sources: [{ file: 'main.tex', lines: [10, 12] }] } }], skill: { id: 'polish', name: 'Polish' }, groupInstructions: { purple: 'Improve clarity.' } } });
+  return { ...f, run, choice: { id: 'replacement-task-id', agent: 'claude' as const, model: 'opus', effort: 'high' } };
+}
+
+test('restart preserves the original request and source context in a new session with independent attachments', async () => {
+  const f = restartFixture();
+  try {
+    const originalFile = await f.workspace.attachments.upload(f.task.projectId, 'reference.txt', Buffer.from('original reference'));
+    const draftFile = await f.workspace.attachments.upload(f.task.projectId, 'draft.txt', Buffer.from('unsent reference'));
+    f.workspace.attachments.claim(f.task.projectId, [originalFile.id], f.task.id);
+    const originalMessage = f.store.item(f.task.id, f.run.id)!;
+    f.store.saveItem({ ...originalMessage, meta: { ...originalMessage.meta, attachments: [originalFile] } });
+    f.store.saveRun({ ...f.run, noteOptionsRequested: true, prompt: f.run.prompt + f.workspace.attachments.prompt([originalFile]), attachments: [originalFile] });
+    f.store.updateTask(f.task.id, { permissions: 'full', model: 'codex-model', effort: 'xhigh', serviceTier: 'priority', review: { state: 'reviewing', round: 3, counts: { pending: 2 } } });
+    const originalTask = f.store.task(f.task.id), originalItems = f.store.items(f.task.id);
+    const replacement = await f.workspace.restartTask(f.task.id, { ...f.choice, draftAttachments: [draftFile.id] });
+    await f.workspace.prepareTask(replacement.id);
+    assert.equal(replacement.restart?.taskId, f.task.id);
+    assert.equal(replacement.threadId, null); assert.equal(replacement.turnId, null);
+    assert.equal(replacement.permissions, 'workspace'); assert.equal(replacement.serviceTier, undefined);
+    assert.equal(replacement.model, 'opus'); assert.equal(replacement.effort, 'high');
+    assert.deepEqual(f.store.task(f.task.id), originalTask);
+    assert.deepEqual(f.store.items(f.task.id), originalItems);
+    const request = f.store.runByKey('initial-' + replacement.id)!;
+    assert.equal(request.noteOptionsRequested, true);
+    assert.match(request.prompt, /exact skill and source excerpt/);
+    assert.ok(!request.prompt.includes(f.workspace.attachments.path(originalFile)));
+    const copied = request.attachments![0];
+    assert.notEqual(copied.id, originalFile.id);
+    assert.match(request.prompt, new RegExp(copied.id));
+    assert.deepEqual(f.store.items(replacement.id)[0].meta?.notes, originalMessage.meta?.notes);
+    assert.deepEqual(f.store.items(replacement.id)[0].meta?.skill, originalMessage.meta?.skill);
+    assert.deepEqual(f.store.items(replacement.id)[0].meta?.groupInstructions, originalMessage.meta?.groupInstructions);
+    const copiedDraft = replacement.restart!.draftAttachments![0];
+    assert.notEqual(copiedDraft.id, draftFile.id);
+    assert.ok(!request.prompt.includes(copiedDraft.id), 'An unsent attachment is not sent automatically');
+    f.workspace.attachments.removeTask(f.task.id);
+    assert.equal(fs.readFileSync(f.workspace.attachments.path(copied), 'utf8'), 'original reference');
+    assert.equal(fs.readFileSync(f.workspace.attachments.path(copiedDraft), 'utf8'), 'unsent reference');
+    assert.equal((await f.workspace.restartTask(f.task.id, { ...f.choice, draftAttachments: [draftFile.id] })).id, replacement.id);
+    assert.equal(f.store.tasks().length, 2, 'Retrying the same replacement ID never duplicates it');
+  } finally { f.close(); }
+});
+
+test('restart validates destination settings and preserves unavailable context rather than silently dropping it', async () => {
+  const f = restartFixture();
+  try {
+    for (const change of [{ model: 'codex-model' }, { effort: 'xhigh' }, { serviceTier: 'priority' }]) await assert.rejects(f.workspace.restartTask(f.task.id, { ...f.choice, ...change }), /available model|reasoning effort|Fast mode/);
+    f.workspace.runtimes.claude.authenticated = false;
+    await assert.rejects(f.workspace.restartTask(f.task.id, f.choice), /Connect and sign in/);
+    f.workspace.runtimes.claude.authenticated = true;
+    const file = await f.workspace.attachments.upload('paper', 'missing.txt', Buffer.from('reference'));
+    f.workspace.attachments.claim('paper', [file.id], f.task.id);
+    f.store.saveItem({ ...f.store.item(f.task.id, f.run.id)!, meta: { attachments: [file] } });
+    fs.rmSync(f.workspace.attachments.path(file));
+    await assert.rejects(f.workspace.restartTask(f.task.id, f.choice), /Attachment is missing/);
+    assert.equal(f.store.tasks().length, 1);
+  } finally { f.close(); }
+});
+
+test('restart requires stop confirmation and waits for the original agent to actually stop', async () => {
+  const f = restartFixture(), stopped = deferred<void>();
+  try {
+    f.store.updateTask(f.task.id, { status: 'running', turnId: 'original-turn' });
+    (f.workspace as any).active.set(f.task.id, f.run);
+    await assert.rejects(f.workspace.restartTask(f.task.id, f.choice), /Confirm stopping/);
+    let interrupts = 0;
+    f.workspace.interrupt = async () => { interrupts++; await stopped.promise; (f.workspace as any).active.delete(f.task.id); f.store.updateTask(f.task.id, { status: 'interrupted' }); };
+    const restarting = f.workspace.restartTask(f.task.id, { ...f.choice, stop: true });
+    assert.equal(interrupts, 1);
+    assert.equal(f.store.tasks().length, 1, 'No replacement is admitted while the original can still edit');
+    await assert.rejects(f.workspace.restartTask(f.task.id, { ...f.choice, id: 'another-replacement-id', stop: true }), /already being restarted/);
+    const same = f.workspace.restartTask(f.task.id, { ...f.choice, stop: true });
+    stopped.resolve();
+    const replacement = await restarting;
+    assert.equal((await same).id, replacement.id); assert.equal(interrupts, 1);
+    await f.workspace.prepareTask(replacement.id);
+  } finally { stopped.resolve(); f.close(); }
+});
+
+test('restart of a failed preparation cancels its saved queue and safely prepares a replacement', async () => {
+  const f = restartFixture();
+  try {
+    f.store.updateTask(f.task.id, { preparation: {}, status: 'failed', worktree: '', threadId: null });
+    f.store.saveRun({ ...f.run, status: 'queued' });
+    const replacement = await f.workspace.restartTask(f.task.id, { ...f.choice, stop: true });
+    await f.workspace.prepareTask(replacement.id);
+    assert.equal(f.store.runByKey(f.run.requestKey)?.status, 'interrupted');
+    assert.equal(f.store.task(replacement.id).worktree, '/replacement');
+    assert.equal(f.store.task(f.task.id).status, 'failed');
+  } finally { f.close(); }
+});
+
+test('AI review restarts capture the new manuscript PDF and never reuse the original PDF path', async () => {
+  const f = restartFixture();
+  try {
+    f.store.updateTask(f.task.id, { mode: 'review', instructions: 'Saved original review skill and request.' });
+    f.store.saveRun({ ...f.run, prompt: 'Original request\nPDF at /old-task/review.pdf\nOld snapshot content' });
+    let captured = '';
+    f.workspace.prepareReview = async (task, worktree) => { captured = task.id + ':' + worktree; return { key: 'new-pdf', pdf: '/replacement/review.pdf', lines: [{ id: 'p1-l1', page: 0, text: 'Current manuscript', rect: [0, 0, 1, 1] }] }; };
+    const replacement = await f.workspace.restartTask(f.task.id, f.choice);
+    await f.workspace.prepareTask(replacement.id);
+    assert.equal(captured, replacement.id + ':/replacement');
+    assert.equal(f.store.task(replacement.id).aiReview?.key, 'new-pdf');
+    const prompt = f.store.runByKey('initial-' + replacement.id)!.prompt;
+    assert.match(prompt, /Saved original review skill and request/); assert.match(prompt, /Current manuscript/); assert.match(prompt, /\/replacement\/review.pdf/);
+    assert.doesNotMatch(prompt, /old-task|Old snapshot/);
+  } finally { f.close(); }
+});
+
+test('restart excludes an in-flight follow-up and rejects project removal or stale destination settings during copying', async () => {
+  const feedbackGate = deferred<void>(), copyGate = deferred<void>();
+  const f = restartFixture(async (_method, route) => {
+    if (route.includes('/feedback')) { await feedbackGate.promise; return { cursor: 0, feedback: [] }; }
+    return route === '/api/tasks' ? { worktree: '/replacement', deferred: true } : summary;
+  });
+  try {
+    const followup = f.workspace.enqueue(f.task.id, 'Do not lose me.', 'racing-followup');
+    const rejected = assert.rejects(followup, /Wait for this task to restart/);
+    const copy = f.workspace.attachments.copy.bind(f.workspace.attachments);
+    f.workspace.attachments.copy = async (...args) => { await copyGate.promise; return copy(...args); };
+    const restarting = f.workspace.restartTask(f.task.id, f.choice);
+    feedbackGate.resolve(); await rejected;
+    assert.throws(() => f.workspace.removeProject('paper'), /Pause this paper/);
+    await assert.rejects(f.workspace.deleteTask(f.task.id), /Wait for this task to restart/);
+    f.workspace.runtimes.claude.models = [];
+    copyGate.resolve();
+    await assert.rejects(restarting, /destination model settings changed/);
+    assert.equal(f.store.tasks().length, 1);
+    assert.equal(f.store.runByKey('racing-followup'), undefined);
+  } finally { feedbackGate.resolve(); copyGate.resolve(); f.close(); }
+});
