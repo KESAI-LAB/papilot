@@ -423,7 +423,10 @@ export class Workspace extends EventEmitter {
         // Section lookup yields to manuscript reanchoring. Its ancestry must
         // describe the same PDF/source location we are about to send.
         if (scoped && noteLocation(scoped.note) !== noteLocation(note)) throw new Error('A selected PDF note is no longer available. Refresh the manuscript and try again.');
-        return scoped ? { ...note, context: scoped.context } : note;
+        // A note released from a failed task may still carry that task's old
+        // ancestry. Only freshly derived context belongs in this request.
+        const { context: _previousContext, ...unscoped } = note;
+        return scoped ? { ...unscoped, context: scoped.context } : unscoped;
       });
       const groupInstructions = parseGroupInstructions(input.groupInstructions);
       const selectedGroups = new Set(notes.flatMap(note => note.group ? [canonicalGroup(note.group)] : []));

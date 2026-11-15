@@ -531,6 +531,22 @@ test('a comment reanchored during section lookup cannot send stale ancestry and 
   } finally { await f.close(); }
 });
 
+test('a released note cannot reuse old section context when its current scope is unavailable', async () => {
+  const f = await fixture();
+  try {
+    const note: Annotation = { id: 'released-note', projectId: 'thesis', key: 'new-pdf', page: 5, rect: [0.1, 0.2, 0.4, 0.3], quote: 'A result.', comment: 'Clarify.', source: { file: 'results.tex', lines: [70, 72] }, context: ['Section: 1 Introduction'], createdAt: 1 };
+    f.store.saveAnnotation(note);
+    f.manuscripts.noteSections = async () => ({ sections: [], contexts: {}, unplaced: 1 });
+    const id = 'released-note-task-01';
+    const response = await f.local.inject({ method: 'POST', url: '/api/tasks', headers: f.as, payload: { id, projectId: 'thesis', title: 'Revise', instructions: 'Clarify.', annotations: [note.id] } });
+    assert.equal(response.statusCode, 200, response.body);
+    const sent = f.store.items(id)[0].meta!.notes![0];
+    assert.equal(sent.context, undefined);
+    assert.match(sent.where, /Page 6 · results.tex lines 70–72/);
+    assert.doesNotMatch(f.store.runByKey('initial-' + id)!.prompt, /Introduction/);
+  } finally { await f.close(); }
+});
+
 test('review marking tools keep deletion, replacement and quick-note intent through the messages API', async () => {
   const f = await fixture();
   try {
