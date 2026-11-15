@@ -11,6 +11,9 @@ export function paintAppliedPages(container: HTMLElement, pdf: PDFDocumentProxy,
     alive.delete(index);
     entry?.task?.cancel();
     if (entry?.canvas) { entry.canvas.remove(); entry.canvas.width = entry.canvas.height = 0; }
+    // Resize keeps the old pixels on screen until the new render finishes;
+    // that canvas may no longer belong to the active render entry.
+    pages()[index]?.querySelectorAll("canvas").forEach((canvas) => { canvas.remove(); canvas.width = canvas.height = 0; });
   };
   const pump = () => {
     while (!stopped && running < 2) {

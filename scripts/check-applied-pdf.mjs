@@ -41,6 +41,13 @@ try {
   const bytes = replacement.saveToBuffer('');
   const revisedPdf = Buffer.from(bytes.asUint8Array());
   bytes.destroy(); replacement.destroy();
+  const taller = new mupdf.PDFDocument(pdf);
+  for (let index = 0; index < taller.countPages(); index++) {
+    taller.findPage(index).put('MediaBox', [0, 0, 612, 1200]);
+    taller.findPage(index).put('CropBox', [0, 0, 612, 1200]);
+  }
+  const tallerBytes = taller.saveToBuffer(''), tallerPdf = Buffer.from(tallerBytes.asUint8Array());
+  tallerBytes.destroy(); taller.destroy();
   const words = JSON.parse(fs.readFileSync('tests/fixtures/outline-words.json', 'utf8'));
   const task = { id: 'issue-178', projectId: 'paper', agent: 'codex', name: 'issue-178', title: 'Revise the introduction', instructions: '', worktree: '/tmp/issue-178', deferred: true, status: 'running', createdAt: 1, updatedAt: 1, review: { state: 'editing', round: null, counts: {} } };
   const snapshot = { version: '0.10.4', csrf: 'fixture', projects: [{ id: 'paper', name: 'Issue 178 reproduction', path: '/tmp/issue-178', createdAt: 1 }], tasks: [task], requests: [], runtime: { connected: true, authenticated: true, models: [] } };
@@ -83,7 +90,7 @@ try {
     if (relative.startsWith('/assets/')) return route.fulfill({ path: path.resolve('engine/dist/web' + relative), contentType: /\.m?js$/.test(relative) ? 'text/javascript' : relative.endsWith('.css') ? 'text/css' : 'application/octet-stream' });
     if (relative.endsWith('.pdf')) {
       report.pdfRequests.push(url.pathname + url.search);
-      return route.fulfill({ contentType: 'application/pdf', body: relative.includes('applied-v2') ? revisedPdf : pdf });
+      return route.fulfill({ contentType: 'application/pdf', body: relative.includes('applied-tall') ? tallerPdf : relative.includes('applied-v2') ? revisedPdf : pdf });
     }
     if (relative.startsWith('/files/')) return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 612 35"><rect width="612" height="35" fill="white"/><text x="60" y="24" font-size="12">Revised paragraph.</text></svg>' });
     if (/\/rounds\/\d+$/.test(relative)) return route.fulfill({ json: detail });
@@ -152,6 +159,16 @@ try {
   await expect(pageNumber).toHaveValue('2');
   await expect.poll(offset).toBe(-180);
   await expect(reviewBar.getByRole('combobox', { name: 'Zoom', exact: true })).toHaveText('125%');
+  // Preserve the fractional place on page two when preceding pages also grow.
+  // Reading the DOM during effect cleanup sees the new geometry too late.
+  appliedKey = 'applied-tall';
+  await readable();
+  await expect(pageNumber).toHaveValue('2');
+  await expect.poll(async () => Math.abs(await offset() + 180 * 1200 / 792)).toBeLessThan(2);
+  appliedKey = 'applied-v1c';
+  await readable();
+  await expect(pageNumber).toHaveValue('2');
+  await expect.poll(async () => Math.abs(await offset() + 180)).toBeLessThan(2);
   await reviewBar.getByRole('button', { name: 'Find in PDF', exact: true }).click();
   const search = page.getByRole('textbox', { name: 'Search the PDF', exact: true });
   await search.fill('review');
