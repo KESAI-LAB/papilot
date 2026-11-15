@@ -284,5 +284,16 @@
   "Wait for the task and review actions to finish before applying changes.": "Attendez la fin de la tâche et des actions de révision avant d'appliquer les modifications.",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "Attendez la fin de la compilation du PDF de cet article avant de modifier son chemin d’accès ou de le supprimer.",
   "ZIP links and special files are not supported.": "Les liens et fichiers spéciaux dans les archives ZIP ne sont pas pris en charge.",
-  "npm is unavailable to Papilot.": "npm n’est pas disponible pour Papilot."
+  "npm is unavailable to Papilot.": "npm n’est pas disponible pour Papilot.",
+  "Papilot Writer is not available.": "Papilot Writer n’est pas disponible.",
+  "This provider does not take an API key here.": "Ce fournisseur n’accepte pas de clé API ici.",
+  "Paste the API key exactly as the provider shows it.": "Collez la clé API exactement comme le fournisseur l’affiche.",
+  "This is a Claude subscription token. Papilot Writer can use Claude only with an Anthropic API key.": "Il s’agit d’un jeton d’abonnement Claude. Papilot Writer ne peut utiliser Claude qu’avec une clé API Anthropic.",
+  "Unknown provider.": "Fournisseur inconnu.",
+  "This provider has no sign-in here.": "Ce fournisseur n’a pas de connexion ici.",
+  "This sign-in has ended. Start it again.": "Cette connexion est terminée. Recommencez-la.",
+  "This sign-in is not waiting for a code.": "Cette connexion n’attend pas de code.",
+  "Sign-in cancelled.": "Connexion annulée.",
+  "This page is no longer available.": "Cette page n’est plus disponible.",
+  "That page is not in the PDF.": "Cette page n’est pas dans le PDF."
 }

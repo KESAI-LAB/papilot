@@ -42,7 +42,7 @@ import { agentDirs, execCommand, findExecutable, agentPath, spawnCommand } from 
 import { npmCli } from '../../bin/npm-cli.mjs';
 export { agentDirs, findExecutable };
 
-export interface Thread { permissions?: TaskPermissions; readOnly?: boolean; webSearch?: boolean; cwd: string; instructions: string; model: string | null; started: boolean }
+export interface Thread { permissions?: TaskPermissions; readOnly?: boolean; ephemeral?: boolean; webSearch?: boolean; cwd: string; instructions: string; model: string | null; started: boolean }
 export interface Turn { id: string; threadId: string; clientId?: string; status: 'inProgress' | 'completed' | 'interrupted' | 'failed'; stop: () => void }
 export interface Item { id: string; type: string; [key: string]: unknown }
 
@@ -69,7 +69,7 @@ export abstract class Adapter extends EventEmitter implements AgentRuntime {
       const id = method === 'thread/start' ? randomUUID() : String(params.threadId);
       const known = this.threads.get(id);
       const model = params.model || known?.model || null;
-      this.threads.set(id, { permissions: params.taskPermissions, readOnly: params.sandbox === 'read-only', webSearch: params.sandbox !== 'read-only' && params.config?.web_search === 'live', cwd: params.cwd, instructions: params.developerInstructions || '', model, started: method === 'thread/resume' || Boolean(known?.started) });
+      this.threads.set(id, { permissions: params.taskPermissions, readOnly: params.sandbox === 'read-only', ephemeral: Boolean(params.ephemeral || known?.ephemeral), webSearch: params.sandbox !== 'read-only' && params.config?.web_search === 'live', cwd: params.cwd, instructions: params.developerInstructions || '', model, started: method === 'thread/resume' || Boolean(known?.started) });
       return { thread: { id }, model };
     }
     if (method === 'turn/start') {

@@ -284,5 +284,16 @@
   "Wait for the task and review actions to finish before applying changes.": "请等待任务和审阅操作完成后再应用更改。",
   "Wait for this paper’s PDF build to finish before changing its path or removing it.": "请等待此论文的 PDF 构建完成后，再更改其路径或将其移除。",
   "ZIP links and special files are not supported.": "不支持 ZIP 链接和特殊文件。",
-  "npm is unavailable to Papilot.": "Papilot 无法使用 npm。"
+  "npm is unavailable to Papilot.": "Papilot 无法使用 npm。",
+  "Papilot Writer is not available.": "Papilot Writer 不可用。",
+  "This provider does not take an API key here.": "此提供商在这里不接受 API 密钥。",
+  "Paste the API key exactly as the provider shows it.": "请按提供商显示的内容原样粘贴 API 密钥。",
+  "This is a Claude subscription token. Papilot Writer can use Claude only with an Anthropic API key.": "这是 Claude 订阅令牌。Papilot Writer 只能通过 Anthropic API 密钥使用 Claude。",
+  "Unknown provider.": "未知的提供商。",
+  "This provider has no sign-in here.": "此提供商在这里没有登录方式。",
+  "This sign-in has ended. Start it again.": "此次登录已结束，请重新开始。",
+  "This sign-in is not waiting for a code.": "此次登录未在等待验证码。",
+  "Sign-in cancelled.": "已取消登录。",
+  "This page is no longer available.": "此页面已不可用。",
+  "That page is not in the PDF.": "PDF 中没有这一页。"
 }

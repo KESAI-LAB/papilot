@@ -51,6 +51,8 @@ export interface Task {
   delivery?: { mode: 'workspace' | 'commit' | 'branch'; accepted: string; branch?: string; commit?: string; pending?: boolean } | null;
   id: string; projectId: string; name: string; title: string; instructions: string;
   titleSource?: 'prompt' | 'generated' | 'manual'; titleRevision?: number; titleGeneration?: 'pending' | 'failed' | null;
+  /** How full the agent's context window was after its latest reply. */
+  context?: ContextUsage | null;
   worktree: string; threadId: string | null; turnId: string | null; agent?: AgentId; model: string | null; effort?: string | null; serviceTier?: string;
   // The agent's thread was started with Papilot's view_pdf tool.
   viewPdf?: boolean;
@@ -79,12 +81,28 @@ export function taskFinished(task: Task) {
 // reviewRound is 0 while awaiting a result, null when no changes were produced,
 // or the published round. Older runs omit it.
 export interface Run { id: string; taskId: string; requestKey: string; prompt: string; attachments?: Attachment[]; feedbackCursor?: number; status: 'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'uncertain'; createdAt: number; finishedAt: number | null; reviewRound?: number | null; noteRounds?: Record<number, number>; noteOptionsRequested?: boolean; noteOptions?: PreparedNoteOptions[] }
-export interface TimelineItem { id: string; taskId: string; type: string; text: string; rawText?: string; detail?: string; status?: string; createdAt: number; meta?: MessageMeta }
+/** One part of what fills the context window; ids are named in the web app. */
+export interface ContextPart { id: string; tokens: number }
+/** breakdown: the parts, when the agent can tell them apart, adding up to the window. */
+export interface ContextUsage { tokens: number; window: number; breakdown?: ContextPart[] }
+/** What a tool call did, when the agent says so: the chat words, groups and marks it by kind. */
+export interface ToolCallInfo { kind: string; target?: string; lines?: string; place?: ToolPlace }
+/** Where a read was in the paper: the sections it covered and the PDF pages they print on. */
+export interface ToolPlace { sections: { number: string; title: string }[]; more?: number; partial?: boolean; pages?: number[] }
+export interface TimelineItem { id: string; taskId: string; type: string; text: string; rawText?: string; detail?: string; status?: string; createdAt: number; meta?: MessageMeta; tool?: ToolCallInfo; pages?: PageView[]; changes?: FileEdit[] }
+/** A file an agent changed: its diff, and where in the paper the changes are. */
+export interface FileEdit { path: string; diff?: string; added: number; removed: number; places?: EditPlace[] }
+/** Changes within one part of the paper: its sections (innermost last), the page it starts on, and the lines changed. */
+export interface EditPlace { sections: { number: string; title: string }[]; page?: string; lines: string; added: number; removed: number }
+/** A page an agent looked at, kept by Papilot so the chat can show it. */
+export interface PageView { index: number; label: string | null; file: string }
 // A user message can run a skill or carry review feedback; the chat shows
 // those as what they are rather than as the prompt the agent receives.
 // Papilot itself sends the agent a build its own edits broke.
 export interface NoteAnchor { sources: { file: string; lines: [number, number] }[]; round?: number }
-export interface NoteSummary { group?: NoteGroup; kind?: MarkKind; stamp?: string; where: string; quote: string; comment: string; id?: string; anchor?: NoteAnchor }
+// paper: where a note made in the task's PDF reader was, so its page can be
+// shown to the agent; context: what the agent is told beyond its location.
+export interface NoteSummary { group?: NoteGroup; kind?: MarkKind; stamp?: string; where: string; quote: string; comment: string; id?: string; anchor?: NoteAnchor; context?: string[]; paper?: { page: number; rects: [number, number, number, number][]; round?: number; key?: string; build?: string } }
 export interface NoteChange { round: number; stop: number; units: string[]; state: 'pending' | 'accepted' | 'rejected' | 'commented' | 'mixed'; match: 'source' | 'quote' }
 export interface NoteResult { key: string; itemId: string; index: number; note: NoteSummary; round: number | null; state: 'waiting' | 'unmatched' | 'matched'; changes: NoteChange[] }
 export interface NoteOption { id: string; label: string; reason?: string; previewError?: string; edits: { unit: string; text: string }[] }
@@ -104,12 +122,18 @@ export interface BuildFailure { error: string; details: string[]; log?: string }
 export interface FeedbackSummary { round: number | null; accepted: number; rejected: number; undone: number; comments: { where: string; text: string }[]; buildError?: boolean }
 export interface Skill { output?: 'annotations'; id: string; name: string; description: string; hint: string; icon?: SkillIcon; source: 'builtin' | 'user' | 'paper' }
 export interface PendingRequest { id: string; taskId: string; method: string; params: Record<string, any>; createdAt: number }
-export type AgentId = 'codex' | 'claude' | 'antigravity' | 'kimi' | 'cursor' | 'copilot' | 'grok' | 'opencode' | 'qwen' | 'glm' | 'deepseek';
+export type AgentId = 'papilot' | 'codex' | 'claude' | 'antigravity' | 'kimi' | 'cursor' | 'copilot' | 'grok' | 'opencode' | 'qwen' | 'glm' | 'deepseek';
 // Every agent Papilot can drive, in menu order. Only the ones found on the host are offered.
-export const AGENT_IDS: AgentId[] = ['codex', 'claude', 'cursor', 'copilot', 'grok', 'antigravity', 'kimi', 'glm', 'deepseek', 'qwen', 'opencode'];
-export const AGENT_NAMES: Record<AgentId, string> = { codex: 'Codex', claude: 'Claude', cursor: 'Cursor', copilot: 'Copilot', grok: 'Grok', antigravity: 'Antigravity', kimi: 'Kimi', glm: 'GLM', deepseek: 'DeepSeek', qwen: 'Qwen', opencode: 'OpenCode' };
+export const AGENT_IDS: AgentId[] = ['papilot', 'codex', 'claude', 'cursor', 'copilot', 'grok', 'antigravity', 'kimi', 'glm', 'deepseek', 'qwen', 'opencode'];
+export const AGENT_NAMES: Record<AgentId, string> = { papilot: 'Papilot Writer', codex: 'Codex', claude: 'Claude', cursor: 'Cursor', copilot: 'Copilot', grok: 'Grok', antigravity: 'Antigravity', kimi: 'Kimi', glm: 'GLM', deepseek: 'DeepSeek', qwen: 'Qwen', opencode: 'OpenCode' };
+// Papilot Writer's providers: subscriptions it signs in to, and API keys
+// stored by Papilot or read from the environment.
+export interface WriterProvider { id: string; name: string; kind: 'login' | 'key'; env?: string; configured: boolean; source: 'stored' | 'environment' | null }
+export interface WriterLogin { id: string; provider: string; name: string; status: 'waiting' | 'done' | 'failed' | 'cancelled'; url: string | null; instructions: string | null; error: string | null; startedAt: number }
+export interface WriterAuth { providers: WriterProvider[]; logins: WriterLogin[] }
 export const isAgentId = (value: unknown): value is AgentId => AGENT_IDS.includes(value as AgentId);
-export interface AgentModel { id: string; name: string; isDefault: boolean; efforts: string[]; defaultEffort: string | null; fastMode?: { serviceTier: string; description: string } }
+/** source: where an agent with several model providers gets this model, such as a subscription. */
+export interface AgentModel { id: string; name: string; source?: string; isDefault: boolean; efforts: string[]; defaultEffort: string | null; fastMode?: { serviceTier: string; description: string } }
 // The account's included usage: rolling windows (minutes long, reset time in ms) and credits.
 export interface UsageWindow { usedPercent: number; minutes: number | null; resetsAt: number | null }
 export interface Usage { plan: string | null; windows: UsageWindow[]; credits: { unlimited: boolean; balance: number | null } | null; reached: boolean }

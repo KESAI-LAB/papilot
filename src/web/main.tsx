@@ -36,6 +36,9 @@ import { keepDialogFocus } from './focus.ts';
 import { DeleteTaskDialog } from './task-dialog.tsx';
 import { ActionMenu } from './action-menu.tsx';
 import { Icon } from './icons.tsx';
+import { toolIcon, toolNote, toolSentence, toolSummary } from './tool-calls.ts';
+import { ContextMeter } from './context-meter.tsx';
+import { ChangeSummary, FileDiffs } from './file-changes.tsx';
 import { UpdateNotice, versionLabel } from './update-notice.tsx';
 import { chooseDirectory, DesktopWindowChrome, nativeFolders } from './desktop-chrome.tsx';
 import { MainFileDialog } from './main-file-dialog.tsx';
@@ -72,7 +75,7 @@ import { notificationState, notify, notifying, subscribeNotifications, taskAlert
 import { Markdown } from './markdown.tsx';
 import { ComparisonProgress } from './comparison-progress.tsx';
 import logo from './logo.svg';
-import { AgentConnectionNotice, AgentPicker, NoAgentNotice } from './agent-picker.tsx';
+import { AgentConnectionNotice, AgentPicker, NoAgentNotice, WriterSuggestion } from './agent-picker.tsx';
 import { taskEffort } from './task-effort.ts';
 import { PermissionOptions, TaskPermissionOptions } from './task-permissions.tsx';
 import { type TaskPermissions } from '../shared.ts';
@@ -218,6 +221,8 @@ function CopyButton({ text }: { text: string }) {
 // absolute paths; the chat shows the command itself and paths in the task.
 const shellCommand = (text: string) => text.match(/^\/bin\/(?:ba|z)?sh -lc (['"])([\s\S]*)\1$/)?.[2] ?? text;
 const taskPath = (file: string, root: string) => root && file.startsWith(root + '/') ? file.slice(root.length + 1) : file;
+// Items are named task:turn:item; a user message starts the next turn.
+const turnOf = (item: TimelineItem) => item.type === 'user' ? null : item.id.split(':')[1] || null;
 const editedFiles = (item: TimelineItem, root: string) => item.text.split('\n').filter(Boolean).map(file => taskPath(file, root));
 const toolState = (item: TimelineItem) => item.status === 'inProgress' ? 'running' : item.status && item.status !== 'completed' ? 'failed' : '';
 
@@ -283,31 +288,40 @@ function UserMessage({ item, agent }: { item: TimelineItem; agent: string }) {
 }
 
 // Memoized: polling and typing re-render the thread, and unchanged items can skip it.
-const TimelineEntry = memo(function TimelineEntry({ item, agent, root }: { item: TimelineItem; agent: string; root: string }) {
+// The pages an agent looked at, small enough to glance at; each opens full size.
+function PageStrip({ items }: { items: TimelineItem[] }) {
+  const pages = items.flatMap(item => (item.pages || []).map(page => ({ ...page, url: `/api/tasks/${encodeURIComponent(item.taskId)}/pages/${encodeURIComponent(page.file)}` })));
+  if (!pages.length) return null;
+  return <div className="tool-pages">{pages.map(page => {
+    const name = page.label ? t('p. {page}', { page: page.label }) : t('PDF page {page}', { page: page.index });
+    return <a key={page.url} href={page.url} target="_blank" rel="noopener noreferrer" title={name}><img src={page.url} alt={name} loading="lazy"/><span>{name}</span></a>;
+  })}</div>;
+}
+
+const TimelineEntry = memo(function TimelineEntry({ item, agent, root, pages = true }: { item: TimelineItem; agent: string; root: string; pages?: boolean }) {
   // Memoized, so it follows a language change itself rather than through App.
   useLanguage();
   if (PlaygroundProgress && item.type === 'demo-progress') return <Suspense fallback={null}><PlaygroundProgress item={item}/></Suspense>;
   if (item.type === 'user') return <UserMessage item={item} agent={agent}/>;
   if (item.type === 'assistant') return <article className="message assistant" aria-label={`${agent}, ${time(item.createdAt)}`}><div className="message-body markdown"><Markdown text={item.text}/></div><div className="message-actions"><CopyButton text={item.text}/><time dateTime={new Date(item.createdAt).toISOString()}>{time(item.createdAt)}</time></div></article>;
   const files = item.type === 'files' ? editedFiles(item, root) : [];
-  const label = item.type === 'command' ? shellCommand(item.text) || t('Run command') : item.type === 'files' ? (files.length === 1 ? t('Edited {file}', { file: files[0] }) : t('Edited {n} files', { n: files.length })) : item.type === 'pdf' ? (item.text ? t('Viewed the PDF: {places}', { places: item.text }) : t('Viewed the PDF')) : item.text || t('Run tool');
-  const detail = item.type === 'files' ? files.join('\n') : item.detail;
+  const label = item.type === 'command' ? shellCommand(item.text) || t('Run command') : item.type === 'files' ? (files.length === 1 ? t('Edited {file}', { file: files[0] }) : t('Edited {n} files', { n: files.length })) : item.type === 'pdf' ? (item.text ? t('Viewed the PDF: {places}', { places: item.text }) : t('Viewed the PDF')) : toolSentence(item) || item.text || t('Run tool');
+  const detail = item.type === 'files' ? null : item.detail;
+  const note = toolNote(item);
   const state = toolState(item);
-  return <details className={'tool-item ' + state}><summary><Icon name={item.type === 'command' ? 'terminal' : item.type === 'files' ? 'diff' : item.type === 'pdf' ? 'pdf' : 'tool'} size={14}/><span className="tool-label">{label}</span>{state === 'running' ? <span className="spinner" aria-label={t('Running')}/> : state && <span className="tool-status">{item.status === 'declined' ? t('Declined') : t('Failed')}</span>}</summary>{detail && <pre>{detail}</pre>}</details>;
+  const row = <details className={'tool-item ' + state} data-kind={item.type === 'tool' ? item.tool?.kind || 'tool' : item.type}><summary><Icon name={toolIcon(item)} size={14}/><span className="tool-label">{label}{note && <span className="tool-note">{note}</span>}</span>{state === 'running' ? <span className="spinner" aria-label={t('Running')}/> : state && <span className="tool-status">{item.status === 'declined' ? t('Declined') : t('Failed')}</span>}</summary>{item.type === 'files' ? <FileDiffs changes={item.changes} files={files}/> : detail && <pre>{detail}</pre>}</details>;
+  return pages && item.pages?.length ? <>{row}<PageStrip items={[item]}/></> : row;
 });
 
 // Consecutive commands, edits and tool calls fold into one line that opens to the list.
 function ToolGroup({ items, agent, root }: { items: TimelineItem[]; agent: string; root: string }) {
   // The thread reuses its elements, so the summary follows a language change itself.
   useLanguage();
-  const commands = items.filter(item => item.type === 'command').length, edits = items.filter(item => item.type === 'files');
-  const pdfs = items.filter(item => item.type === 'pdf').length;
-  const files = [...new Set(edits.flatMap(item => editedFiles(item, root)))], tools = items.length - commands - edits.length - pdfs;
+  const summary = toolSummary(items, item => editedFiles(item, root));
   const running = items.some(item => toolState(item) === 'running'), failed = items.filter(item => toolState(item) === 'failed').length;
-  const parts = [commands ? tn(commands, 'ran {n} command', 'ran {n} commands') : '', files.length ? (files.length === 1 ? t('edited {file}', { file: files[0] }) : t('edited {n} files', { n: files.length })) : '', pdfs ? t('viewed the PDF') : '', tools ? tn(tools, 'used {n} tool', 'used {n} tools') : ''].filter(Boolean).join(t(', '));
-  return <details className="tool-group"><summary><Icon name={commands ? 'terminal' : files.length ? 'diff' : 'tool'} size={14}/><span className="tool-group-label">{parts[0].toUpperCase() + parts.slice(1)}</span>{running ? <span className="spinner" aria-label={t('Running')}/> : failed ? <span className="tool-status">{t('{n} failed', { n: failed })}</span> : null}<Icon name="chevronDown" size={13}/></summary>
-    <div className="tool-group-items">{items.map(item => <TimelineEntry key={item.id} item={item} agent={agent} root={root}/>)}</div>
-  </details>;
+  return <><details className="tool-group"><summary><Icon name={summary.icon} size={14}/><span className="tool-group-label">{summary.text}</span>{running ? <span className="spinner" aria-label={t('Running')}/> : failed ? <span className="tool-status">{t('{n} failed', { n: failed })}</span> : null}<Icon name="chevronDown" size={13}/></summary>
+    <div className="tool-group-items">{items.map(item => <TimelineEntry key={item.id} item={item} agent={agent} root={root} pages={false}/>)}</div>
+  </details><PageStrip items={items}/></>;
 }
 
 function timelineEntries(items: TimelineItem[]) {
@@ -377,7 +391,14 @@ function Activity({ source, onRevealQuote, task, runtime, reconnecting, onReconn
   // React skip the conversation until its items change.
   const agent = agentName(task), review = task.mode === 'review', root = task.worktree;
   const thread = useMemo(() => timelineEntries(visibleTimeline(items).filter(item => item.type !== 'reviewOutput').map(item => review && item.type === 'assistant' ? { ...item, text: aiReviewSummary(item.text) } : item))
-    .map(entry => entry.length > 1 ? <ToolGroup key={entry[0].id} items={entry} agent={agent} root={root}/> : <TimelineEntry key={entry[0].id} item={entry[0]} agent={agent} root={root}/>), [items, review, agent, root]);
+    .flatMap((entry, index, all) => {
+      const shown = entry.length > 1 ? <ToolGroup key={entry[0].id} items={entry} agent={agent} root={root}/> : <TimelineEntry key={entry[0].id} item={entry[0]} agent={agent} root={root}/>;
+      // A finished turn that changed files ends with where it changed the paper.
+      const turn = turnOf(entry[0]), next = all[index + 1];
+      if (!turn || (next && (next[0].type !== 'user' && turnOf(next[0]) === turn)) || (!next && active)) return [shown];
+      const edits = all.filter(other => turnOf(other[0]) === turn).flat().filter(item => item.type === 'files' && item.changes?.length);
+      return edits.length ? [shown, <ChangeSummary key={turn + ':changes'} items={edits}/>] : [shown];
+    }), [items, review, agent, root, active]);
   const hint = task.status === 'deleting' ? t('This task is being deleted') : task.status === 'uncertain' ? t('Check task status before sending') : task.preparation ? t('Send more instructions once the task has started.') : sending ? t('Sending…')
     : emptyNotes ? canSend ? tn(emptyNotes, '{n} empty comment will stay in drafts', '{n} empty comments will stay in drafts') : t('Write a comment or message to send.') : active ? t('{agent} is working · new instructions run next', { agent: agentName(task) }) : '';
   // A source tab beside the chat hides the chat while it is selected; both stay as they were.
@@ -404,6 +425,7 @@ function Activity({ source, onRevealQuote, task, runtime, reconnecting, onReconn
             permissions={<TaskPermissionOptions task={task} runtime={runtime} disabled={sending || blocked || savingModel} save={permissions => api<Task>(`/tasks/${task.id}/permissions`, { permissions })} onSaved={onTaskSaved} onSaving={setSavingPermissions} refresh={refresh} reportError={reportError}/>}/>
         </div>}
         action={<div className="composer-actions">
+          <ContextMeter usage={task.context}/>
           {active && <button type="button" className="send-button stop" aria-label={t('Pause task')} title={t('Pause {agent}', { agent: agentName(task) })} disabled={pausing} aria-busy={pausing} onClick={pause}><Icon name="stop" size={18}/></button>}
           {(!active || draft.trim() || skill || files.entries.length || notes.notes.length || feedbackCount || sending) && <button aria-label={t('Send instructions')} title={t('Send (Enter) · New line (Shift+Enter)')} disabled={!canSend || files.blocked || sending || savingModel || savingPermissions || blocked || Boolean(task.preparation)} className="send-button" type="submit"><Icon name="arrowUp" size={18}/></button>}
         </div>}/>
@@ -1395,6 +1417,11 @@ function App() {
       setAgentChoice(agentChoice); browserStorage.setItem('papilot:agent', agentChoice);
     }
   }, [savedAgent, settled, agentChoice, offered]);
+  // Authors who already picked another agent keep it; Papilot Writer is suggested once.
+  const [writerDismissed, setWriterDismissed] = useState(() => browserStorage.getItem('papilot:writer-suggestion') === 'dismissed');
+  const dismissWriter = () => { setWriterDismissed(true); browserStorage.setItem('papilot:writer-suggestion', 'dismissed'); };
+  const writerReady = Boolean(runtimes.papilot?.connected && runtimes.papilot.authenticated);
+  const suggestWriter = !writerDismissed && !missingAgent && savedAgent !== null && agentChoice !== 'papilot' && offered.includes('papilot');
   const effectivePermissions = runtimes[agentChoice]?.permissionOptions?.some(option => option.value === newPermissions) ? newPermissions : 'workspace';
   const models = runtimes[agentChoice]?.models || [], pref = agentPrefs[agentChoice];
   const chosenModel = models.length && !models.some(m => m.id === pref.model) ? '' : pref.model;
@@ -1955,6 +1982,7 @@ function App() {
     {!noteSelection.selected.length && <div className="new-task-welcome"><img src={logo} alt=""/><h2>{t('What are we revising next?')}</h2></div>}
     {newSkill?.output !== 'annotations' && attachments}
     {missingAgent && <NoAgentNotice reconnecting={pendingActions.has('/reconnect')} onReconnect={() => void action('/reconnect')} onAdd={() => setSettings('agents')}/>}
+    {suggestWriter && <WriterSuggestion ready={writerReady} onUse={() => { chooseModel('papilot', runtimes.papilot?.models.find(model => model.isDefault)?.id || ''); dismissWriter(); }} onSetUp={() => setSettings('agents')} onDismiss={dismissWriter}/>}
     <Composer attachments={newSkill?.output === 'annotations' ? undefined : newFiles.draft} upload={(file, signal) => uploadAttachment(project!.id, file, signal)} imageHint={agentChoice === 'antigravity' && newFiles.files.some(file => file.mime.startsWith('image/'))} autoFocus inputRef={newTaskInput} label={t('Describe the revision')} value={newDraft} onChange={setNewDraft} readOnly={creating} onSubmit={() => void createTask()} placeholder={noteSelection.selected.length ? t('Add overall instructions (optional)') : t('Describe the revision')}
       skills={projectSkills} skill={newSkill} onSkill={setNewSkill}
       footer={attach => <div className="composer-options">
@@ -2059,7 +2087,7 @@ function App() {
       : <div className="home"><div className="home-inner"><img className="home-logo" src={logo} alt=""/><h1>{t('Add your first paper')}</h1><button className="button primary" onClick={() => openProject()}><Icon name={nativeFolders ? 'folder' : 'plus'} size={16}/>{nativeFolders ? t('Open a folder') : t('Add paper')}</button></div></div>}
     </main>
     {error && !modal && <div role="alert" className="toast"><Icon name="alert" size={16}/><span>{error}</span><button className="icon-button" aria-label={t('Dismiss error')} onClick={() => setError('')}><Icon name="close" size={14}/></button></div>}
-    {settings && <SettingsDialog requirements={isPlayground ? undefined : { state: requirements, online }} modelDefaults={{ agents: offered.map(id => ({ value: id, label: AGENT_LABELS[id], runtime: runtimes[id] })), agent: agentChoice, model: chosenModel, effort: agent.effort, onSelect: chooseModel, onEffort: effort => remember({ effort }) }} updates={!isPlayground ? api : undefined} initialPage={settings} theme={theme.theme} onTheme={theme.setTheme} resolved={theme.resolved} appearance={theme.appearance} onAppearance={theme.setAppearance} onClose={() => setSettings(false)} diagnostics={!isPlayground ? { online, runtimes, project, check: checkDiagnostics, latex: detectLatexInstallation, reconnect: async () => { await api('/reconnect', {}); await refresh(true); } } : undefined} skills={!isPlayground ? { project, api, onChanged: () => setSkillsRevision(value => value + 1) } : undefined}/>}
+    {settings && <SettingsDialog requirements={isPlayground ? undefined : { state: requirements, online }} modelDefaults={{ agents: offered.map(id => ({ value: id, label: AGENT_LABELS[id], runtime: runtimes[id] })), agent: agentChoice, model: chosenModel, effort: agent.effort, onSelect: chooseModel, onEffort: effort => remember({ effort }) }} updates={!isPlayground ? api : undefined} initialPage={settings} theme={theme.theme} onTheme={theme.setTheme} resolved={theme.resolved} appearance={theme.appearance} onAppearance={theme.setAppearance} onClose={() => setSettings(false)} diagnostics={!isPlayground ? { online, runtimes, project, check: checkDiagnostics, latex: detectLatexInstallation, reconnect: async () => { await api('/reconnect', {}); await refresh(true); }, writer: (route: string, body?: unknown) => api('/writer' + route, body) } : undefined} skills={!isPlayground ? { project, api, onChanged: () => setSkillsRevision(value => value + 1) } : undefined}/>}
     {deleteTarget && <DeleteTaskDialog task={state?.tasks.find(t => t.id === deleteTarget.id) || deleteTarget} submit={() => api('/tasks/' + deleteTarget.id + '/delete', { confirm: true })} onClose={() => setDeleteTarget(null)} onDeleted={() => taskDeleted(deleteTarget.id)} refresh={() => void refresh(true)}/>}
     {editingPaper && <PaperDialog key={editingPaper.id} paper={editingPaper} onClose={() => setEditingPaper(null)} save={async form => {
       const paper = editingPaper, pathChanged = form.path !== paper.path;

@@ -17,6 +17,10 @@ export interface ViewRequest {
   locations?: string[];
   pages?: string[];
   accepted?: boolean;
+  /** Only compile and report problems, drawing no pages (Papilot Writer's check_build). */
+  check?: boolean;
+  /** Compile every chapter, so the paper map includes the whole current outline. */
+  full?: boolean;
 }
 export interface ViewedPage {
   /** The page's position in the PDF that was built, from 1. */
@@ -35,6 +39,13 @@ export interface ViewResult {
   targets: string[];
   error?: string;
   details?: string[];
+  /** With check: the built PDF's page count, the build time and its problems. */
+  pageCount?: number;
+  seconds?: number;
+  errors?: string[];
+  warnings?: string[];
+  /** With check: where the build is, for Papilot Writer's paper map. */
+  compiled?: { pdf: string; root: string; cwd: string; sourceDir: string };
 }
 // How far from an asked-for line SyncTeX may look for one that printed
 // something (blank lines and comments print nothing).
@@ -102,12 +113,12 @@ export async function view(
       location(app, task.worktree, l),
     ),
     labels = (request.pages ?? []).map((p) => p.trim()).filter(Boolean);
-  if (!locations.length && !labels.length)
+  if (!locations.length && !labels.length && !request.check)
     throw new Error("Ask for at least one source location or page number.");
   const after = await app.tasks.snapshotAsync(task),
     before = task.accepted,
     builder = new Builder(project, app.repo),
-    targets = await builder.planAsync(before, after, [
+    targets = request.full ? ["full"] : await builder.planAsync(before, after, [
       ...new Set([
         ...(await app.repo.changedFilesAsync(before, after)),
         ...locations.map((l) => l.file),
@@ -137,6 +148,11 @@ export async function view(
   }
   const pdf = build.pdf,
     document = mupdf.Document.openDocument(fs.readFileSync(pdf), "application/pdf");
+  if (request.check) {
+    const pageCount = document.countPages();
+    document.destroy();
+    return { pages: [], missing: [], targets, pageCount, seconds: build.seconds, errors: build.errors ?? [], warnings: build.warnings, compiled: { pdf, root: build.root, cwd: build.cwd, sourceDir: project.source_dir || "" } };
+  }
   try {
     // MuPDF synthesizes 1, 2, ... when /PageLabels is absent. Those are
     // physical positions, not the printed numbers (front matter may be i, ii).

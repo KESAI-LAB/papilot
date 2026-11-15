@@ -1,4 +1,5 @@
 import type { ReviewSnapshot } from './ai-review.ts';
+import { markedPage } from './note-pages.ts';
 import type { Project as BuildProject } from '../../engine/src/core/config.ts';
 import type { BuildInfo } from '../../engine/src/types.ts';
 import { ReviewSnapshots } from './review-snapshot.ts';
@@ -16,7 +17,7 @@ import type { Annotation, BuildProblem, BuildProgress, BuildRepairResult, GitDif
 import { ignorePattern } from '../commit.ts';
 import { PdfReader } from './pdf-reader.ts';
 import { annotatePdf, type ExportNote } from './annotated-pdf.ts';
-import { collectProblems, countProblems, locateProblems, scrubLog, sortProblems, type StoredProblem } from './build-problems.ts';
+import { collectProblems, countProblems, locateProblems, scrubLog, sortProblems, syncView, type StoredProblem } from './build-problems.ts';
 import { parseLatexRepair } from './latex-repair.ts';
 // Where a note comes from in the source, worked out in the PDF reader's worker.
 export { anchor, followLines, parseSynctex, settleLines, sourceExcerpt, type Anchor } from './note-location.ts';
@@ -957,6 +958,30 @@ export class Manuscripts extends EventEmitter {
     return pending;
   }
 
+  /** The PDF pages, counted from 1, where lines of a paper file printed in the
+   *  manuscript's latest build, or null without one. A task's text differs
+   *  from it only where the task edited, so this places most of what it reads. */
+  /** The paper's latest compiled build, which Papilot Writer maps the paper from. */
+  paperBuild(projectId: string) {
+    const build = this.builds.get(projectId);
+    if (!build?.pdf || !build.root || !fs.existsSync(build.pdf)) return null;
+    return { pdf: build.pdf, root: build.root, sourceDir: build.sourceDir || '', builtAt: build.builtAt, pages: build.pages?.length };
+  }
+  async sourcePages(projectId: string, file: string, lines: number[]): Promise<number[] | null> {
+    const build = this.builds.get(projectId);
+    if (!build?.pdf || !fs.existsSync(build.pdf)) return null;
+    const relative = path.posix.relative(build.sourceDir || '', file.split(path.sep).join('/'));
+    if (relative.startsWith('..')) return [];
+    const input = path.join(build.root || path.dirname(build.pdf), relative), pages = new Set<number>();
+    // A blank or preamble line prints nothing; the next few lines stand in for it.
+    await Promise.all(lines.slice(0, 12).map(async line => {
+      for (let next = line; next < line + 4; next++) {
+        const boxes = await syncView(build.pdf!, input, next);
+        if (boxes.length) { for (const box of boxes) pages.add(box.page + 1); return; }
+      }
+    }));
+    return [...pages].sort((a, b) => a - b);
+  }
   pdf(projectId: string, key: string) {
     const shown = this.shownBuild(projectId, key);
     if (!shown) throw Object.assign(new Error('This manuscript preview is out of date. Refresh it and try again.'), { statusCode: 404 });
@@ -971,6 +996,11 @@ export class Manuscripts extends EventEmitter {
     return { pdf, root: shown.root || path.dirname(pdf), sourceDir: shown.sourceDir || '' };
   }
 
+  /** A page of a PDF as a PNG, with a commented passage marked on it. */
+  async notePage(pdf: string, page: number, rects: Rect[]) {
+    const { mupdf } = await engine();
+    return markedPage(mupdf, pdf, page, rects);
+  }
   // The PDF with the paper's notes drawn on it, to share with people outside Papilot.
   async annotatedPdf(projectId: string, key: string, notes: ExportNote[]) {
     const pdf = this.pdf(projectId, key), { mupdf } = await engine();
@@ -995,6 +1025,14 @@ export class Manuscripts extends EventEmitter {
   // The pages may be those of an earlier pass or build than the latest: the
   // place is found in the PDF that was marked, then followed to the file as it
   // is now.
+  /** The PDF of a build in the paper's build cache, or null once it is gone. */
+  async buildPdf(root: string, key: string) {
+    const { loadProject } = await engine(), project = loadProject(root);
+    try {
+      const info = JSON.parse(await fs.promises.readFile(path.join(project.state, 'cache/builds', key, 'result.json'), 'utf8'));
+      return typeof info.pdf === 'string' && fs.existsSync(info.pdf) ? info.pdf as string : null;
+    } catch { return null; }
+  }
   /** Where a mark on a page of any build of the paper is in the source, in
    *  `working`'s files: a task's PDF of its decisions, located in its worktree. */
   async locateBuild(root: string, key: string, page: number, rect: Rect, rects: Rect[], selected: string, working: string) {
@@ -1005,6 +1043,11 @@ export class Manuscripts extends EventEmitter {
     catch { throw Object.assign(new Error('This PDF is no longer available.'), { statusCode: 404 }); }
     if (typeof info.pdf !== 'string' || typeof info.root !== 'string') throw Object.assign(new Error('This PDF is no longer available.'), { statusCode: 404 });
     return this.pdfReader.locate({ pdf: info.pdf, page, rect, rects, selected, root: info.root, sourceDir: project.source_dir || '', working });
+  }
+  /** Where a mark on a manuscript preview PDF is, followed into `working`'s files. */
+  async locateShown(projectId: string, key: string, page: number, rect: Rect, rects: Rect[], selected: string, working: string) {
+    const { pdf, root, sourceDir } = this.compiled(projectId, key);
+    return this.pdfReader.locate({ pdf, page, rect, rects, selected, root, sourceDir, working });
   }
   async locate(projectId: string, key: string, page: number, rect: Rect, rects: Rect[] = [], selected = '') {
     const pdf = this.pdf(projectId, key), build = this.shownBuild(projectId, key)!;

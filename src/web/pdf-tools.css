@@ -152,3 +152,6 @@ blockquote[data-kind=delete]{text-decoration:line-through;text-decoration-color:
   .stamp-wheel:not(.stamp-preview) .stamp-segment-lit{--lit:color-mix(in srgb,var(--accent) 14%,var(--bg))}
 }
 @media (prefers-reduced-motion:reduce){.pdf-rail,.pdf-rail[data-collapsed=true]{transition:none;animation:none}.stamp-menu:popover-open{animation:none}}
+/* A passage quoted in the chat's unsent message. */
+.pdf-comment-mark{position:absolute;z-index:2;border-radius:2px;background:color-mix(in srgb,var(--accent) 22%,transparent);box-shadow:inset 0 -1.5px color-mix(in srgb,var(--accent) 70%,transparent);mix-blend-mode:multiply;pointer-events:none}
+.pdf-comment-tag{position:absolute;z-index:3;transform:translate(-110%,-10%);min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--accent);color:#fff;font:600 10px/16px var(--sans,system-ui);text-align:center;pointer-events:none}

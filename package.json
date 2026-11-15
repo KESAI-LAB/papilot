@@ -95,6 +95,10 @@
     "@fastify/compress": "^9.2.2",
     "@fastify/rate-limit": "^11.2.2",
     "@fastify/static": "^10.1.7",
+    "@mariozechner/pi-coding-agent": "0.73.1",
+    "@unified-latex/unified-latex-types": "^1.8.4",
+    "@unified-latex/unified-latex-util-arguments": "^1.8.4",
+    "@unified-latex/unified-latex-util-parse": "^1.8.4",
     "commander": "^15.0.0",
     "cross-spawn": "^7.0.6",
     "diff": "^9.0.0",
@@ -106,6 +110,8 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.311",
+    "@babel/parser": "^8.0.10",
+    "@babel/types": "^8.0.10",
     "@codemirror/commands": "^6.11.1",
     "@codemirror/language": "^6.13.1",
     "@codemirror/legacy-modes": "^6.5.5",
@@ -125,6 +131,7 @@
     "electron-builder": "26.18.0",
     "fast-check": "^4.10.2",
     "katex": "^0.18.2",
+    "parse5": "^8.0.1",
     "pdfjs-dist": "^6.4.299",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -133,10 +140,7 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.5",
-    "parse5": "^8.0.1",
-    "@babel/parser": "^8.0.10",
-    "@babel/types": "^8.0.10"
+    "vite": "^8.3.5"
   },
   "overrides": {
     "katex": "$katex",

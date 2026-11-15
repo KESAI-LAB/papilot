@@ -10,8 +10,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import { registerFrontend } from './frontend.ts';
 import type { Store } from './store.ts';
 import type { Workspace } from './workspace.ts';
+import { WriterAgent } from './writer/agent.ts';
 import { AGENT_TURN, reviewClient, retryReviewRead, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson, confirmedReviewResponse, annotateReviewState, taskRoute } from './review.ts';
 import { fullPaperPdf, nextPaperPass, paperPassPdf, retainedPaperPdf } from './pdf.ts';
+import { withNotePages } from './note-pages.ts';
 import { type ChangeAction, Changes } from './changes.ts';
 import { bibliography, confirmEntry } from './references.ts';
 import { type Manuscripts, gitAbortMerge, gitCommit, gitDiff, gitDiscard, gitFinishMerge, gitIgnore, gitRemote, gitStage, gitStatus, gitSync } from './manuscript.ts';
@@ -29,9 +31,9 @@ import { taskNoteResults } from './note-results.ts';
 import type { Updates } from './updates.ts';
 import { Diagnostics } from './diagnostics.ts';
 import { attachmentIds } from './attachments.ts';
-import { MAX_ATTACHMENT_BYTES } from '../shared.ts';
+import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from '../shared.ts';
 import { PaperImports, openFolder } from './imports.ts';
-import { DATA } from './paths.ts';
+import { DATA, pageViewDir } from './paths.ts';
 import { registerAiReviewRoutes } from './ai-review-routes.ts';
 import { detectLatex } from './latex-installation.ts';
 import { systemRequirements } from './system-requirements.ts';
@@ -75,6 +77,20 @@ export function gitQueue() {
 // Quick notes as one person saved them: up to eight, each with a unique id.
 // A preset may keep only its id; one added in settings needs a name for the
 // wheel and an instruction for the agent.
+// Where a comment on the task's PDF reader was: a page, its lines, and the
+// review round's, manuscript preview's or build's PDF it was made on.
+function notePaper(value: unknown, rounds: number): NonNullable<NoteSummary['paper']> {
+  const paper = value as Record<string, unknown> | null, invalid = () => new Error('Invalid note location.');
+  if (!paper || typeof paper !== 'object' || !Number.isSafeInteger(paper.page) || (paper.page as number) < 0 || !Array.isArray(paper.rects) || !paper.rects.length || paper.rects.length > 200) throw invalid();
+  const rects = paper.rects.map(rect => {
+    if (!Array.isArray(rect) || rect.length !== 4 || !rect.every(v => typeof v === 'number' && v >= 0 && v <= 1) || rect[2] < rect[0] || rect[3] < rect[1]) throw invalid();
+    return rect as [number, number, number, number];
+  });
+  if (paper.round !== undefined && (!Number.isSafeInteger(paper.round) || (paper.round as number) < 1 || (paper.round as number) > rounds)) throw invalid();
+  if (paper.key !== undefined && (typeof paper.key !== 'string' || !/^[0-9a-f]{16,64}$/.test(paper.key))) throw invalid();
+  if (paper.build !== undefined && (typeof paper.build !== 'string' || !/^[0-9a-f]{32}$/.test(paper.build))) throw invalid();
+  return { page: paper.page as number, rects, ...(paper.round ? { round: paper.round as number } : paper.key ? { key: paper.key as string } : paper.build ? { build: paper.build as string } : {}) };
+}
 function readQuickNotes(value: unknown): QuickNote[] {
   const invalid = () => new Error('Invalid quick notes.');
   if (!Array.isArray(value) || !value.length || value.length > QUICK_NOTE_LIMIT) throw invalid();
@@ -124,6 +140,8 @@ export async function buildApp(options: AppOptions) {
   workspace.indirectChanges = changes.indirectChanges = indirectChanges;
   // An AI review resumed after a restart compiles its copy here too.
   workspace.prepareReview = (task, worktree) => manuscripts.captureReview(store.project(task.projectId).path, worktree, task.id);
+  workspace.sourcePages = (task, file, lines) => manuscripts.sourcePages(task.projectId, file, lines);
+  workspace.paperBuild = task => manuscripts.paperBuild(task.projectId);
   const app = Fastify({ logger: false, bodyLimit: Number.MAX_SAFE_INTEGER });
   const buildSettingsChanged = (projectId: string) => changes.buildSettingsChanged(projectId);
   manuscripts.on('build-settings', buildSettingsChanged);
@@ -286,6 +304,23 @@ export async function buildApp(options: AppOptions) {
     });
   });
   app.post('/api/reconnect', async request => { await workspace.connect(); return workspace.snapshot().runtime; });
+  // Papilot Writer's model providers: subscription sign-ins and API keys.
+  const writer = async () => {
+    const runtime = workspace.agents.papilot as WriterAgent;
+    if (!(runtime instanceof WriterAgent)) throw Object.assign(new Error('Papilot Writer is not available.'), { statusCode: 404 });
+    await runtime.preload();
+    return runtime.credentials!;
+  };
+  app.get('/api/writer/auth', async () => (await writer()).status());
+  app.post('/api/writer/keys', async request => { const body = (request.body || {}) as any, credentials = await writer(); credentials.setKey(string(body.provider, 'Provider', 64), string(body.key, 'API key', 4096)); return credentials.status(); });
+  app.post<{ Params: { provider: string } }>('/api/writer/providers/:provider/remove', async request => { const credentials = await writer(); credentials.remove(request.params.provider); return credentials.status(); });
+  app.post('/api/writer/logins', async request => {
+    const body = (request.body || {}) as any, credentials = await writer();
+    const enterprise = typeof body.enterprise === 'string' ? body.enterprise.trim().slice(0, 200) : '';
+    return { id: credentials.login(string(body.provider, 'Provider', 64), enterprise), ...credentials.status() };
+  });
+  app.post<{ Params: { id: string } }>('/api/writer/logins/:id/code', async request => { const credentials = await writer(); credentials.input(request.params.id, string((request.body as any)?.code, 'Code', 4096)); return credentials.status(); });
+  app.post<{ Params: { id: string } }>('/api/writer/logins/:id/cancel', async request => { const credentials = await writer(); credentials.cancel(request.params.id); return credentials.status(); });
   // Codex names reasoning efforts with short lowercase words (low, medium, xhigh).
   const agent = (value: unknown): AgentId => isAgentId(value) ? value : 'codex';
   const effort = (value: unknown) => typeof value === 'string' && /^[a-z]{1,16}$/.test(value) ? value : undefined;
@@ -499,10 +534,27 @@ export async function buildApp(options: AppOptions) {
           if (!source || !Array.isArray(source.lines) || source.lines.length !== 2 || !source.lines.every((line: unknown) => Number.isSafeInteger(line) && Number(line) >= 1) || source.lines[1] < source.lines[0]) throw new Error('Invalid note location.');
           return { file: string(source.file, 'Source file', 4096), lines: source.lines as [number, number] };
         });
-        return { ...(note.id ? { id: string(note.id, 'Note ID', 100) } : {}), where: string(note.where, 'Note location'), quote: optional(note.quote, 'PDF text'), comment, ...(note.group ? { group: note.group } : {}), ...(note.kind ? { kind: note.kind } : {}), ...(stamp ? { stamp } : {}), ...(anchor ? { anchor: { sources, ...(anchor.round ? { round: anchor.round } : {}) } } : {}) };
+        const paper = note.paper === undefined ? undefined : notePaper(note.paper, task.review?.round || 0);
+        return { ...(paper ? { paper } : {}), ...(note.id ? { id: string(note.id, 'Note ID', 100) } : {}), where: string(note.where, 'Note location'), quote: optional(note.quote, 'PDF text'), comment, ...(note.group ? { group: note.group } : {}), ...(note.kind ? { kind: note.kind } : {}), ...(stamp ? { stamp } : {}), ...(anchor ? { anchor: { sources, ...(anchor.round ? { round: anchor.round } : {}) } } : {}) };
       });
     }
     const text = feedback || skill || reviewNotes || attachments.length ? optional(b.text, 'Revision instructions') : string(b.text, 'Revision instructions');
+    // A comment on the task's PDF brings its page as an image, and its source lines.
+    if (reviewNotes?.some(note => note.paper)) {
+      const project = store.project(task.projectId);
+      const pages = await withNotePages(reviewNotes, {
+        pdf: async paper => paper.round ? retainedPaperPdf(connectReview, project.path, task.name, paper.round) : paper.key ? manuscripts.compiled(task.projectId, paper.key).pdf : paper.build ? manuscripts.buildPdf(project.path, paper.build) : null,
+        locate: async (paper, quote) => {
+          if (!paper.key || !task.worktree) return null;
+          const rect: [number, number, number, number] = [Math.min(...paper.rects.map(r => r[0])), Math.min(...paper.rects.map(r => r[1])), Math.max(...paper.rects.map(r => r[2])), Math.max(...paper.rects.map(r => r[3]))];
+          const located = await manuscripts.locateShown(task.projectId, paper.key, paper.page, rect, paper.rects, quote, task.worktree);
+          return located?.source ? { file: located.source.file, lines: located.source.lines } : null;
+        },
+        render: (pdf, page, rects) => manuscripts.notePage(pdf, page, rects),
+        attach: async (name, png) => (await workspace.attachments.upload(task.projectId, name, png)).id,
+      }, MAX_ATTACHMENTS - attachments.length);
+      reviewNotes = pages.notes; attachments.push(...pages.attachments);
+    }
     return workspace.enqueue(task.id, text, string(b.requestKey, 'Request ID', 100), true, { skill, feedback, reviewNotes, attachments });
   });
   // Applying writes the manuscript only once its delivery is complete: not
@@ -532,6 +584,12 @@ export async function buildApp(options: AppOptions) {
   app.post<{ Params: { id: string } }>('/api/tasks/:id/archive', task, request => workspace.archiveTask(request.params.id, (request.body as any)?.archived, (request.body as any)?.finished === true));
   app.post<{ Params: { id: string } }>('/api/tasks/:id/interrupt', task, request => workspace.interrupt(request.params.id).then(() => ({ ok: true })));
   // Deleting a task that is already gone succeeds, so a lost response can be retried; a hidden one answers the same.
+  // A page an agent looked at, as the chat shows it with that tool call.
+  app.get<{ Params: { id: string; file: string } }>('/api/tasks/:id/pages/:file', task, (request, reply) => {
+    const dir = pageViewDir(store.task(request.params.id).id), file = request.params.file;
+    if (!/^[\w-]{1,100}-\d\.png$/.test(file) || !fs.existsSync(path.join(dir, file))) return reply.code(404).send({ error: 'This page is no longer available.' });
+    return reply.type('image/png').header('Cache-Control', 'private, max-age=31536000, immutable').sendFile(file, dir, { cacheControl: false });
+  });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/delete', { config: { resource: { task: 'id' } } }, request => {
     if ((request.body as any)?.confirm !== true) throw new Error('Confirm permanent task deletion before continuing.');
     return workspace.deleteTask(request.params.id);

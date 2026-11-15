@@ -69,11 +69,17 @@ try {
   const modelMenu = page.getByRole('dialog', { name: 'Agent settings', exact: true });
   const modelTrigger = page.getByRole('button', { name: 'Agent settings', exact: true });
   await expect(modelTrigger).toContainText('GPT-6 Astra');
-  await expect(modelTrigger).toHaveAttribute('title', /GPT-6 Astra.*Xhigh/);
+  await expect(modelTrigger).toHaveAttribute('title', /Papilot Writer.*GPT-6 Astra.*High/);
   await modelTrigger.click();
-  for (const name of ['Codex', 'Claude', 'Cursor', 'Copilot', 'Grok', 'Antigravity', 'Kimi', 'GLM', 'DeepSeek', 'Qwen', 'OpenCode']) await expect(modelMenu.getByRole('group', { name, exact: true })).toHaveCount(1);
+  for (const name of ['Papilot Writer', 'Codex', 'Claude', 'Cursor', 'Copilot', 'Grok', 'Antigravity', 'Kimi', 'GLM', 'DeepSeek', 'Qwen', 'OpenCode']) await expect(modelMenu.getByRole('group', { name, exact: true })).toHaveCount(1);
   const effort = modelMenu.getByRole('slider', { name: 'Reasoning effort', exact: true });
   const fast = modelMenu.getByRole('switch', { name: 'Fast mode', exact: true });
+  await expect(effort).toHaveAttribute('aria-valuetext', 'High');
+  await expect(modelMenu.getByRole('radio', { name: 'Paper edits', exact: true })).toBeChecked();
+  await expect(fast).toHaveCount(0);
+  await expect(modelMenu.getByRole('option', { name: 'GPT-6 Astra · ChatGPT Plus or Pro · Papilot Writer', exact: true })).toHaveAttribute('aria-selected', 'true');
+  // Existing agents retain their own model, permission and fast-mode controls.
+  await modelMenu.getByRole('option', { name: 'GPT-6 Astra · Codex', exact: true }).click();
   await expect(effort).toHaveAttribute('aria-valuetext', 'Xhigh');
   await expect(modelMenu.getByRole('radio', { name: 'Workspace access', exact: true })).toBeChecked();
   await fast.check();

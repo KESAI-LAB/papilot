@@ -134,13 +134,16 @@ const sync = async () => page.evaluate(() => window.dispatchEvent(new Event('onl
 
 const send = () => page.getByRole('button', { name: 'Send instructions', exact: true });
 const input = () => page.getByRole('textbox', { name: 'Instructions for Codex', exact: true });
-async function quote(side, offset = 8) {
+async function quote(side, offset = 8, comment) {
   await viewer().locator(`.change[data-stop="0"] .${side} .pdf-glyph`).first().evaluate((el, offset) => {
     const range = document.createRange(); range.setStart(el.firstChild, 0); range.setEnd(el.firstChild, offset);
     const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
     document.dispatchEvent(new Event('selectionchange'));
   }, offset);
   await viewer().locator('.review-select-menu button').click();
+  const input = viewer().getByRole('textbox', { name: 'Comment', exact: true });
+  await expect(input).toBeFocused();
+  if (comment !== undefined) { await input.fill(comment); await input.press('Enter'); }
 }
 try {
   console.log('Opening fixture'); await page.goto(origin);
@@ -149,7 +152,14 @@ try {
   if (!process.env.PAPILOT_REVIEW_TOOLS_ONLY) {
   await input().fill('Keep the examples.');
   console.log('Selecting before'); await quote('before');
-  await expect(page.getByRole('textbox', { name: 'Comment 1', exact: true })).toBeFocused();
+  await expect(page.locator('.review-draft-note')).toHaveCount(0);
+  await viewer().getByRole('textbox', { name: 'Comment', exact: true }).press('Escape');
+  await expect(viewer().locator('.review-comment')).toHaveCount(0);
+  await expect(page.locator('.review-draft-note')).toHaveCount(0);
+  await quote('before', 8, 'Keep this original term.');
+  await expect(page.getByRole('textbox', { name: 'Comment 1', exact: true })).toHaveValue('Keep this original term.');
+  // Clearing a saved draft still keeps its quotation without sending it.
+  await page.getByRole('textbox', { name: 'Comment 1', exact: true }).fill('');
   await expect(page.locator('.review-draft-note')).toContainText('Before revision');
   await expect(page.locator('.review-draft-note blockquote')).toHaveText('Original');
   await expect(send()).toBeEnabled();
@@ -158,8 +168,8 @@ try {
   await expect(send()).toBeDisabled();
   await input().fill('Keep the examples.');
   await page.getByRole('textbox', { name: 'Comment 1', exact: true }).fill('Keep this original term.');
-  await quote('after', 7);
-  await page.getByRole('textbox', { name: 'Comment 2', exact: true }).fill('Make this more precise.');
+  await quote('after', 7, 'Make this more precise.');
+  await expect(page.getByRole('textbox', { name: 'Comment 2', exact: true })).toHaveValue('Make this more precise.');
   await expect(page.locator('.review-draft-note').nth(1)).toContainText('After revision');
   await expect(input()).toHaveValue('Keep the examples.');
   await expect(viewer().locator('.composer')).toHaveCount(0);
@@ -234,8 +244,8 @@ try {
   await expect(page.locator('.review-draft')).toHaveCount(0);
   // A comment can outlive a review round and navigate back to its exact source.
   rounds[1] = { first: 'pending', second: 'pending', third: 'pending', fourth: 'pending' }; update();
-  await page.reload(); await quote('before');
-  await page.getByRole('textbox', { name: 'Comment 1', exact: true }).fill('Compare this with the next round.');
+  await page.reload(); await quote('before', 8, 'Compare this with the next round.');
+  await expect(page.getByRole('textbox', { name: 'Comment 1', exact: true })).toHaveValue('Compare this with the next round.');
   latest = 2; rounds[2] = { new: 'pending' }; task.review.round = 2; update(); await sync();
   await expect(page.locator('.review-draft-note small')).toContainText('round 1');
   await page.getByRole('button', { name: /Before revision.*Page 1/ }).click();

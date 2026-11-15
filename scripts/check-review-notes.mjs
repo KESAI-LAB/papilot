@@ -42,7 +42,7 @@ const strip = (text, page) => `<div class="pdf-strip" data-page="${page}" style=
 const review = `<html><head><style>${fs.readFileSync('engine/src/web/style.css', 'utf8')} .pdf-glyph{color:#171717}</style></head><body><header class="bar"><div class="identity"><span>Round 1</span></div><span class="meter">2 of 2 decided</span></header><main id="paper"><div class="document"><div class="sheet"><div class="context">${strip('Unchanged paragraph for context.', 'ix')}</div>${['rejected', 'accepted'].map((state, i) => `<article class="change inline" data-stop="${i}" data-state="${state}" data-resolved="${i ? 'after' : 'before'}"><header class="change-head"><span class="change-number">Change ${i + 1}</span><span class="change-where" title="main/frontmatter/acknowledgments.tex:26–43">main/frontmatter/acknowledgments.tex:26–43</span><span class="badge">${state}</span></header><div class="side ${i ? 'after' : 'before'}">${strip(i ? 'Accepted paragraph remains available.' : 'Thank you to my friends and family.', 'x')}</div></article>`).join('')}</div></div></main></body></html>`;
 await page.route('**/review/**', route => route.fulfill({ contentType: 'text/html', body: review }));
 const frame = () => page.frameLocator('.review-frame');
-async function selectText(selector) {
+async function selectText(selector, text, finish = 'Enter') {
   await frame().locator(selector).evaluate(el => {
     const range = document.createRange(); range.selectNodeContents(el);
     const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
@@ -56,6 +56,11 @@ async function selectText(selector) {
       button.contains(document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2));
   }), true, 'selection action must escape strip stacking, fit the viewer and remain clickable');
   await comment.click();
+  const input = frame().getByRole('textbox', { name: 'Comment', exact: true });
+  await expect(input).toBeFocused();
+  await input.fill(text);
+  await input.press(finish);
+  await expect(input).toHaveCount(0);
 }
 
 const noteInput = n => page.getByRole('textbox', { name: `Comment ${n}`, exact: true });
@@ -74,18 +79,18 @@ try {
   await frame().locator('.review-region-capture').first().waitFor();
   await page.keyboard.press('Escape');
   await frame().locator('.review-region-capture').first().waitFor({ state: 'hidden' });
-  await selectText('[data-state="accepted"] .pdf-glyph');
+  await selectText('[data-state="accepted"] .pdf-glyph', 'A temporary note.');
   await page.getByRole('button', { name: 'Delete review note 1' }).click();
-  await selectText('[data-state="rejected"] .pdf-glyph');
+  await selectText('[data-state="rejected"] .pdf-glyph', 'Keep all the names and make this warmer.', 'Escape');
   assert.equal(await frame().locator('.sheet').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(41, 41, 41)');
   assert.match(await frame().locator('.pdf-strip img').first().evaluate(el => getComputedStyle(el).filter), /invert/);
-  await noteInput(1).fill('Keep all the names and make this warmer.');
+  await expect(noteInput(1)).toHaveValue('Keep all the names and make this warmer.');
   await frame().locator('.review-note-tag').first().waitFor();
   assert.equal(await frame().locator('[data-state="rejected"]').getAttribute('data-state'), 'rejected');
   await page.reload();
   assert.equal(await noteInput(1).inputValue(), 'Keep all the names and make this warmer.');
-  await selectText('[data-state="accepted"] .pdf-glyph');
-  await noteInput(2).fill('Keep this accepted paragraph.');
+  await selectText('[data-state="accepted"] .pdf-glyph', 'Keep this accepted paragraph.');
+  await expect(noteInput(2)).toHaveValue('Keep this accepted paragraph.');
   await page.getByRole('button', { name: 'Region', exact: true }).click();
   const box = await frame().locator('.context .review-region-capture').boundingBox();
   await page.mouse.move(box.x + 60, box.y + 20); await page.mouse.down();
@@ -124,11 +129,12 @@ try {
   assert.match(messages[1].notes[1].where, /After · Change 2/);
   assert.match(messages[1].notes[2].where, /Unchanged text · Region in displayed strip/);
   assert.deepEqual(messages[1].notes[0].anchor, { round: 1, sources: [{ file: 'main/frontmatter/acknowledgments.tex', lines: [26, 43] }] });
-  // A phone moves straight from selection to the same chat draft.
+  // A phone composes beside the passage, then opens the same chat draft.
   await page.setViewportSize({ width: 320, height: 740 });
   await page.getByRole('button', { name: /^Review/ }).first().click();
-  await selectText('.context .pdf-glyph'); await noteInput(1).waitFor({ state: 'visible' });
-  await noteInput(1).fill('Keep the names.');
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
+  await selectText('.context .pdf-glyph', 'Keep the names.'); await noteInput(1).waitFor({ state: 'visible' });
+  await expect(noteInput(1)).toHaveValue('Keep the names.');
   const bounds = await noteInput(1).boundingBox(); assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 320);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 320);
   await page.screenshot({ path: 'test-results/review-notes-mobile.png', fullPage: true });

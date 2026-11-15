@@ -30,3 +30,9 @@
 :root[data-review-tool=hand] #paper{cursor:grab;user-select:none;touch-action:none}
 :root[data-review-tool=hand] .pdf-text,:root[data-review-tool=point] .pdf-text{pointer-events:none}
 :root[data-review-tool=delete] .pdf-text ::selection{background:color-mix(in srgb,var(--red) 20%,transparent);text-decoration:line-through}
+/* A comment written beside its passage. */
+.review-select-menu.composing{-webkit-user-select:auto;user-select:auto}
+.review-comment{display:flex;align-items:flex-end;gap:6px;width:min(300px,80vw);padding:6px 6px 6px 12px;border:1px solid var(--line);border-radius:14px;background:var(--bg);box-shadow:0 6px 22px rgb(0 0 0/.22)}
+.review-comment textarea{flex:1;min-width:0;min-height:28px;max-height:140px;padding:5px 0;border:0;outline:0;resize:none;background:transparent;color:var(--text);font:14px/1.4 var(--sans);field-sizing:content}
+.review-select-menu .review-comment button{flex:none;width:30px;height:30px;padding:0;display:grid;place-items:center;border-radius:50%;box-shadow:none}
+.review-select-menu .review-comment button:disabled{opacity:.4;cursor:default}

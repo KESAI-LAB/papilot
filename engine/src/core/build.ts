@@ -189,6 +189,41 @@ const SELF = createHash("sha256").update(fs.readFileSync(fileURLToPath(import.me
 // settle references, page numbers and the bibliography. Older versions
 // have no hooks and skip it.
 const PASS_HOOK = String.raw`if (defined &add_hook) { my $papilot_pass = 0; add_hook('after_xlatex', sub { my $dir = $ENV{PAPILOT_PASS_DIR}; return 0 unless $dir; $papilot_pass++; my $to = "$dir/$papilot_pass"; make_path($to); for my $file (split /\n/, $ENV{PAPILOT_PASS_FILES}) { next unless -f $file; my ($name) = $file =~ m{([^/]+)$}; copy($file, "$to/$name"); } print "Papilot: pass $papilot_pass output saved\n"; return 0; }); }`;
+// Every build records how TeX read the paper, in <job>.papilot beside the
+// PDF: each file it entered and left, and the file and line where each
+// contents entry (sections, floats), label, the title and the abstract
+// came from, with the contents text as TeX expanded it. Papilot Writer's
+// paper map is made from it, so the map shows the paper TeX typeset: no
+// commented-out or \iffalse'd parts, and the PDF's own numbering. It loads
+// before the paper, writes only that file, and does nothing on a LaTeX
+// older than the 2020 hooks.
+export const OUTLINE_TRACE = String.raw`\makeatletter
+\ifdefined\AddToHook
+\newwrite\papilot@trace
+\immediate\openout\papilot@trace=\jobname.papilot\relax
+\def\papilot@at{\the\inputlineno|\CurrentFilePath|\CurrentFile}
+\def\papilot@w#1{\immediate\write\papilot@trace{#1}}
+\papilot@w{V|1}
+\AddToHook{file/before}{\papilot@w{F|\papilot@at}}
+\AddToHook{file/after}{\papilot@w{X|\papilot@at}}
+\AddToHook{env/abstract/begin}{\papilot@w{A|\papilot@at}}
+\AddToHook{env/abstract/end}{\papilot@w{a|\papilot@at}}
+\AddToHook{enddocument}{\papilot@w{E|\papilot@at}}
+\let\papilot@titled\@empty
+\def\papilot@title{\papilot@w{T|\papilot@at}\gdef\papilot@titled{1}\papilot@ttl}
+\def\papilot@patchtitle{\ifx\title\papilot@title\else\let\papilot@ttl\title\let\title\papilot@title\fi}
+\AddToHook{class/after}{\papilot@w{C|\CurrentFile}\papilot@patchtitle}
+\def\papilot@addcl#1#2#3{{\let\protect\@unexpandable@protect\let\label\@gobble\let\index\@gobble\let\glossary\@gobble
+  \papilot@w{H|\papilot@at|#1|#2|#3}}\papilot@acl{#1}{#2}{#3}}
+\protected\def\papilot@label{\@ifnextchar[\papilot@labelopt\papilot@labelone}
+\def\papilot@labelopt[#1]#2{\papilot@w{L|\papilot@at|\detokenize{#2}}\papilot@lbl[#1]{#2}}
+\def\papilot@labelone#1{\papilot@w{L|\papilot@at|\detokenize{#1}}\papilot@lbl{#1}}
+\def\papilot@patch{\ifx\addcontentsline\papilot@addcl\else\let\papilot@acl\addcontentsline\let\addcontentsline\papilot@addcl\fi
+  \ifx\label\papilot@label\else\let\papilot@lbl\label\let\label\papilot@label\fi
+  \ifx\papilot@titled\@empty\else\papilot@w{TT|\detokenize\expandafter{\@title}}\fi}
+\AddToHook{begindocument/end}{\papilot@patch}
+\fi
+\makeatother`;
 const SAVED = /^Papilot: pass (\d+) output saved/m, NEXT = /^Run number \d+ of rule '([^' ]+)/m;
 /** A TeX pass's PDF, shown while the build goes on. */
 export interface PassPreview { pass: number; pdf: string; root: string; cwd: string }
@@ -820,6 +855,10 @@ export class Builder {
       ...(pastErrors ? ["-f"] : ["-halt-on-error"]),
       "-file-line-error",
     ];
+    // The outline trace comes first; a chapter build adds its \includeonly.
+    const trace = path.join(folder, "papilot-trace.tex");
+    await fs.promises.writeFile(trace, OUTLINE_TRACE + "\n");
+    let pretex = `\\input{${path.relative(cwd, trace).split(path.sep).join("/")}}`;
     if (partial) {
       // Chapters outside \includeonly keep the seed's auxiliary files, also
       // when this build continues from an earlier one built on another seed.
@@ -838,11 +877,12 @@ export class Builder {
         )
         .map(([, file]) => `\\input{${file}}`)
         .join("");
-      args.push(
-        `-usepretex=\\includeonly{${targets.join(",")}}` +
-          (preload ? `\\AtBeginDocument{${preload}}` : ""),
-      );
+      pretex += `\\includeonly{${targets.join(",")}}` + (preload ? `\\AtBeginDocument{${preload}}` : "");
     }
+    args.push(`-usepretex=${pretex}`);
+    // latexmk only reruns TeX for changed inputs. Output carried over from a
+    // build without the trace would stay without one, so TeX runs once more.
+    if (fs.existsSync(path.join(out, job + ".fdb_latexmk")) && !fs.existsSync(path.join(out, job + ".papilot"))) args.push("-g");
     // Each pass's pages are shown once latexmk decides to run more than that
     // pass: a bibliography or another pass. The last pass's are the result.
     // A background build keeps its passes too, for whoever starts waiting

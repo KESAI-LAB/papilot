@@ -34,8 +34,8 @@ export function noteAnchor(note: NoteSummary): NoteAnchor {
 }
 
 export function reviewNotesInstructions(notes: NoteSummary[], request = '') {
-  const items = notes.map((note, index) => `${index + 1}. ${heading(note)}\n${marked(note)}${NOTE}${comment(note)}`);
-  return `${PREAMBLE} ${NOTE_INTENT}${notes.some(note => note.group) ? ` ${GROUP_INSTRUCTIONS}` : ''}${marks(notes)}${request.trim() ? ` Overall request: ${request.trim()}\n\n` : ''} These notes refer to the displayed review round and its Before, After or Unchanged text. Region coordinates are percentages of the displayed PDF strip (left, top, right, bottom); any quoted text for a region is nearby context. If an edit is requested, read the current source before changing it. Preserve accepted changes and do not reintroduce rejected edits unless a note explicitly asks for it.\n\n${items.join('\n\n')}`;
+  const items = notes.map((note, index) => `${index + 1}. ${heading(note)}\n${note.context?.length ? note.context.map(line => `   ${line}\n`).join('') : ''}${marked(note)}${NOTE}${comment(note)}`);
+  return `${PREAMBLE} ${NOTE_INTENT}${notes.some(note => note.group) ? ` ${GROUP_INSTRUCTIONS}` : ''}${marks(notes)}${request.trim() ? ` Overall request: ${request.trim()}\n\n` : ''} These notes refer to the displayed review round and its Before, After or Unchanged text. Region coordinates are percentages of the displayed PDF strip (left, top, right, bottom); any quoted text for a region is nearby context. If an edit is requested, read the current source before changing it. Preserve accepted changes and do not reintroduce rejected edits unless a note explicitly asks for it.${notes.some(note => note.paper) ? ' A note on a "PDF page" was made on the paper as the author read it rather than on a review strip; its attached page image shows where.' : ''}\n\n${items.join('\n\n')}`;
 }
 
 export function notesInstructions(notes: Annotation[], request = '', groupInstructions: GroupInstructions = {}) {
