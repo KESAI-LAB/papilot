@@ -5,6 +5,7 @@ import { agentsSettled, chosenAgent, noAgent, offeredAgents } from './agent-choi
 import { isPlayground, pdfAsset, wordAsset, requestPlaygroundDownload } from './playground-mode.ts';
 import { canonicalGroup, groupsWithoutInstructions, noteGroups, type NoteGroup } from '../note-groups.ts';
 import { GroupCard, GroupInstruction } from './note-groups.tsx';
+import { SectionNotePicker } from './section-note-picker.tsx';
 import { useNoteSelection } from './note-selection.tsx';
 import { useGroupInstructions } from './group-instructions.ts';
 import { markText, NoteQuote } from './note-content.tsx';
@@ -16,7 +17,7 @@ import { readNotesInstructions, type NoteSummary } from '../notes.ts';
 import { aiReviewSummary, isFeedbackPrompt } from '../conversation.ts';
 import { ignorePattern } from '../commit.ts';
 import { AGENT_IDS, AGENT_NAMES, isAgentId, taskFinished } from '../shared.ts';
-import type { TaskCommitReview, LatexInstallation, AgentId, Annotation, BuildRepairResult, MarkKind, Author, FeedbackSummary, GitDiff, GitFile, GitOverview, GitStatus, Manuscript, ManuscriptProblems, PendingRequest, Project, RuntimeStatus, Skill, Snapshot, Task, TimelineItem } from '../shared.ts';
+import type { TaskCommitReview, LatexInstallation, AgentId, Annotation, NoteSection, BuildRepairResult, MarkKind, Author, FeedbackSummary, GitDiff, GitFile, GitOverview, GitStatus, Manuscript, ManuscriptProblems, PendingRequest, Project, RuntimeStatus, Skill, Snapshot, Task, TimelineItem } from '../shared.ts';
 import { SkillChip, SkillMenu, SkillPicker, matchSkills, skillName, skillQuery } from './skills.tsx';
 import { reviewDraft, useReviewDraft, reviewNoteSummary, reviewSubmission } from './review-draft.ts';
 import { ReviewDraftCards } from './review-draft-cards.tsx';
@@ -836,7 +837,7 @@ function useSaveNotesOnLeave(save: () => Promise<boolean>) {
 }
 
 interface NotesHandle { save: () => Promise<boolean> }
-function NotesPanel({ notes, currentKey, active, actions, onShow, onAnnotate, controller }: { notes: Annotation[]; currentKey?: string; active: string; actions: NoteActions; onShow: (note: Annotation) => void; onAnnotate: (region: boolean) => void; controller: React.Ref<NotesHandle> }) {
+function NotesPanel({ notes, sections = [], unplaced, currentKey, active, actions, onShow, onAnnotate, controller }: { sections?: NoteSection[]; unplaced?: number; notes: Annotation[]; currentKey?: string; active: string; actions: NoteActions; onShow: (note: Annotation) => void; onAnnotate: (region: boolean) => void; controller: React.Ref<NotesHandle> }) {
   const list = useRef<HTMLElement>(null);
   const cards = useNoteCards(notes, actions, actions.onEditing);
   useSaveNotesOnLeave(cards.saveAll);
@@ -858,6 +859,7 @@ function NotesPanel({ notes, currentKey, active, actions, onShow, onAnnotate, co
       {ownNotes.length > 0 && <button type="button" className="note-select-all" aria-label={t('Select all notes for this task')} aria-pressed={ownSelected === ownNotes.length ? true : ownSelected ? 'mixed' : false} disabled={selectionLocked} onClick={() => actions.selection.set(ownNotes.map(note => note.id), ownSelected !== ownNotes.length)}>{ownSelected === ownNotes.length ? t('Remove all from task') : t('Add all to task')}</button>}
     </div>
     <p className="note-selection-hint">{t('Notes stay here unless you add them to a task.')}</p>
+    <SectionNotePicker key={currentKey} sections={sections.map(section => ({ ...section, notes: section.notes.filter(id => notes.some(note => note.id === id)) }))} unplaced={unplaced} disabled={selectionLocked} has={actions.selection.has} select={ids => actions.selection.set(ids, true)}/>
     {currentKey && notes.some(note => note.key !== currentKey) && <p className="note-placement-summary" role="status">{t('Some note positions need confirmation. Their original text and comments are kept.')}</p>}
     {ownNotes.length > 0 && <section className="note-section" aria-label={t('My notes')}>
     {noteGroups(notes).map(({ group, entries }) => {
@@ -1065,7 +1067,7 @@ function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, s
           onCreate={actions.add} onSelect={async note => { if (await closeReadingNotes()) setActive(note.id); }} outline={outline} section={section} onOutline={setOutline} onSection={setSection} lead={switcher} tools={pdfTools}
           onSource={async (target, key) => { if (!await closeReadingNotes()) return; setActive(''); setView('source'); setCollapsed(false); void source.open(target, key); }} passage={source.passage}/></Suspense>
         : !error && build?.status !== 'failed' && <div className="review-placeholder"><div className="placeholder-icon"><span className="spinner large"/></div><h2>{t('Compiling the PDF…')}</h2></div>}
-      {readingNotes && <><div aria-hidden="true" className="pdf-reading-notes-scrim" onClick={() => void closeReadingNotes()}/><aside className="pdf-reading-notes" aria-label={t('PDF note library')}><div className="pdf-reading-notes-head"><strong>{t('My notes')}</strong><button type="button" className="icon-button" aria-label={t('Close notes')} onClick={() => void closeReadingNotes()}><Icon name="close" size={16}/></button></div><NotesPanel key={project.id} controller={notesPanel} notes={notes} currentKey={build?.key} active={active} actions={actions} onShow={show} onAnnotate={annotate}/></aside></>}
+      {readingNotes && <><div aria-hidden="true" className="pdf-reading-notes-scrim" onClick={() => void closeReadingNotes()}/><aside className="pdf-reading-notes" aria-label={t('PDF note library')}><div className="pdf-reading-notes-head"><strong>{t('My notes')}</strong><button type="button" className="icon-button" aria-label={t('Close notes')} onClick={() => void closeReadingNotes()}><Icon name="close" size={16}/></button></div><NotesPanel key={project.id} controller={notesPanel} notes={notes} sections={data?.noteSections} unplaced={data?.unplacedSectionNotes} currentKey={build?.key} active={active} actions={actions} onShow={show} onAnnotate={annotate}/></aside></>}
     </section>}
     <aside id={panelId} className="manuscript-side" aria-label={t('Manuscript panels')} hidden={hidden}>
       <div className="manuscript-side-header">

@@ -719,4 +719,10 @@ export const zhCN: Record<string, string> = {
   'This passage changed after the PDF was compiled. It is shown as it is now.': 'PDF 生成后这段又改过，这里显示的是当前版本。',
   'Load the current source': '载入当前源码',
   'Task panels': '任务面板',
+  "Select comments by section": "按章节选择评论",
+  "Select comments in this section": "选择本节评论",
+  "{selected} of {total} selected": "已选择 {selected} / {total} 条",
+  "Includes subsections. Review the selected comments in New task before sending.": "包含下级章节。发送前可在“新任务”中检查已选评论。",
+  "Unplaced comments: {n}. You can select them individually.": "有 {n} 条评论无法确定所属章节，可逐条选择。",
+  "Section selection needs a compiled paper outline or PDF bookmarks.": "按章节选择需要编译后的论文大纲或 PDF 书签。",
 };

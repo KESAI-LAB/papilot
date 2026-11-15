@@ -213,10 +213,11 @@ export const isMarkKind = (value: unknown): value is MarkKind => value === 'dele
 export interface QuickNote { id: string; label?: string; instruction?: string; icon?: string }
 export const QUICK_NOTE_LIMIT = 8;
 export const PRESET_QUICK_NOTES = ['polish', 'tighten', 'runt', 'connect', 'verify'];
-export interface Annotation { aiReview?: { taskId: string; agent: AgentId; sourceId?: string; copiedTo?: string }; group?: NoteGroup; kind?: MarkKind; stamp?: string; id: string; projectId: string; key: string; page: number; rect: [number, number, number, number]; rects?: [number, number, number, number][]; comment: string; quote: string; source: { file: string; lines: [number, number]; excerpt?: string } | null; createdAt: number; taskId?: string; author?: Author; deletedAt?: number }
+export interface Annotation { context?: string[]; aiReview?: { taskId: string; agent: AgentId; sourceId?: string; copiedTo?: string }; group?: NoteGroup; kind?: MarkKind; stamp?: string; id: string; projectId: string; key: string; page: number; rect: [number, number, number, number]; rects?: [number, number, number, number][]; comment: string; quote: string; source: { file: string; lines: [number, number]; excerpt?: string } | null; createdAt: number; taskId?: string; author?: Author; deletedAt?: number }
 // Review findings stay with their task; only explicit copies belong to the manuscript.
 export const isTaskReviewNote = (note: Annotation) => Boolean(note.aiReview && !note.aiReview.sourceId);
-export interface Manuscript { git: GitStatus; build: ManuscriptBuild; annotations: Annotation[] }
+export interface NoteSection { id: string; title: string; level: number; notes: string[] }
+export interface Manuscript { git: GitStatus; build: ManuscriptBuild; annotations: Annotation[]; noteSections?: NoteSection[]; unplacedSectionNotes?: number }
 // A source file for manual editing, as it is on disk: `revision` names its
 // bytes, so a save refuses when the file changed meanwhile, and `base` is the
 // file at the last commit (null when it has none), to show what changed.

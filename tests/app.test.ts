@@ -474,6 +474,33 @@ test('annotation subsets go to separate agents while unselected notes keep their
   } finally { await f.close(); }
 });
 
+test('selected comments carry host-derived section context into any agent request', async () => {
+  const f = await fixture();
+  try {
+    const note: Annotation = { id: 'section-note', projectId: 'thesis', key: 'pdf', page: 2, rect: [0.1, 0.2, 0.4, 0.3], quote: 'Original text', comment: 'Clarify.', source: { file: 'main.tex', lines: [12, 14] }, createdAt: 1 };
+    f.store.saveAnnotation(note);
+    const lookups: string[] = [];
+    f.manuscripts.noteSections = async (projectId, key, notes) => {
+      assert.equal(projectId, 'thesis'); assert.equal(key, 'pdf');
+      lookups.push(...notes.map(note => note.id));
+      return { sections: [], contexts: { 'section-note': ['Section: 2 Methods > 2.1 Model'] }, unplaced: 0 };
+    };
+    const id = 'section-context-task-01';
+    const response = await f.local.inject({ method: 'POST', url: '/api/tasks', headers: f.as, payload: { id, projectId: 'thesis', title: 'Revise comments', instructions: 'Keep the notation.', agent: 'papilot', annotations: [note.id, note.id], noteContexts: { 'section-note': ['Untrusted context'] } } });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.equal(response.json().agent, 'papilot');
+    assert.deepEqual(lookups, [note.id]);
+    const sent = f.store.items(id)[0].meta!.notes!;
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0].context, ['Section: 2 Methods > 2.1 Model']);
+    assert.deepEqual(sent[0].anchor?.sources, [{ file: 'main.tex', lines: [12, 14] }]);
+    const prompt = f.store.runByKey('initial-' + id)!.prompt;
+    assert.match(prompt, /Section: 2 Methods > 2\.1 Model/);
+    assert.match(prompt, /Page 3 · main\.tex lines 12–14/);
+    assert.doesNotMatch(prompt, /Untrusted context/);
+  } finally { await f.close(); }
+});
+
 test('review marking tools keep deletion, replacement and quick-note intent through the messages API', async () => {
   const f = await fixture();
   try {

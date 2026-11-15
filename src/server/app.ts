@@ -223,7 +223,9 @@ export async function buildApp(options: AppOptions) {
       if (current.deletedAt !== undefined || current.taskId || workspace.annotationSending(current.id) || current.key !== previous.key) continue;
       store.saveAnnotation({ ...current, key: next.key, page: next.page, rect: next.rect, rects: next.rects, source: next.source });
     }
-    return { ...state, annotations: store.annotations(id).filter(note => !note.taskId && !isTaskReviewNote(note)) };
+    const annotations = store.annotations(id).filter(note => !note.taskId && !isTaskReviewNote(note));
+    const scope = state.build.key ? await manuscripts.noteSections(id, state.build.key, annotations).catch(() => null) : null;
+    return { ...state, annotations, ...(scope ? { noteSections: scope.sections, unplacedSectionNotes: scope.unplaced } : {}) };
   }
 
   app.get('/api/health', () => ({ ok: true, name: 'Papilot', version: options.version, ...(options.desktopInstance ? { desktopInstance: options.desktopInstance } : {}), ...(options.updateInstance ? { updateInstance: options.updateInstance } : {}) }));
@@ -369,7 +371,15 @@ export async function buildApp(options: AppOptions) {
     if (existing) { if (existing.projectId !== projectId) throw new Error('Invalid task ID.'); return workspace.retryTask(existing.id); }
     // AI review compiles the task's own copy of the manuscript, so it does not wait for the preview.
     const reviewing = Boolean(skill && findSkill(store.project(projectId).path, skill).output === 'annotations');
-    return workspace.createTask({ id, projectId, ...(reviewing ? { prepareReview: (worktree: string) => manuscripts.captureReview(store.project(projectId).path, worktree, id) } : {}), title: string(b.title, 'Task title', 120), permissions: b.permissions, instructions: skill || annotations?.length || attachments.length ? optional(b.instructions, 'Instructions') : string(b.instructions, 'Instructions'), skill, annotations, groupInstructions, attachments, agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64) });
+    // Derive context on the host from the PDF/source snapshot; clients only
+    // submit note IDs. Preserve each mark's own build, including older marks.
+    const selectedNotes = store.annotations(projectId).filter(note => annotations?.includes(note.id));
+    const noteContexts: Record<string, string[]> = {};
+    for (const key of new Set(selectedNotes.map(note => note.key))) {
+      const scope = await manuscripts.noteSections(projectId, key, selectedNotes.filter(note => note.key === key)).catch(() => null);
+      if (scope) Object.assign(noteContexts, scope.contexts);
+    }
+    return workspace.createTask({ id, projectId, noteContexts, ...(reviewing ? { prepareReview: (worktree: string) => manuscripts.captureReview(store.project(projectId).path, worktree, id) } : {}), title: string(b.title, 'Task title', 120), permissions: b.permissions, instructions: skill || annotations?.length || attachments.length ? optional(b.instructions, 'Instructions') : string(b.instructions, 'Instructions'), skill, annotations, groupInstructions, attachments, agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64) });
   });
   // Retry for a task whose preparation failed; it answers at once as well.
   app.post<{ Params: { id: string } }>('/api/tasks/:id/prepare', task, request => workspace.retryTask(request.params.id));

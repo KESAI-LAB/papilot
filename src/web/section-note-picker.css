@@ -1,0 +1,8 @@
+.section-note-picker{display:flex;flex-direction:column;gap:8px;padding:12px 0;margin:0 0 10px;border-bottom:1px solid var(--line)}
+.section-note-picker>label{font-size:12px;font-weight:600;color:var(--text-2)}
+.section-note-picker>select{width:100%;min-width:0;max-width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);font:inherit;text-overflow:ellipsis}
+.section-note-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.section-note-actions>span,.section-note-picker>p{font-size:12px;color:var(--text-3)}
+.section-note-picker>p{margin:0;line-height:1.5}
+
+.section-note-picker>select:focus-visible{border-color:var(--accent);box-shadow:var(--ring)}

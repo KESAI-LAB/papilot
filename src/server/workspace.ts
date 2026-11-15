@@ -387,7 +387,7 @@ export class Workspace extends EventEmitter {
   // and attachments claimed, and is then prepared in the background (see
   // prepareTask). An AI review passes prepareReview, which reads the PDF of
   // the new task's manuscript copy.
-  async createTask(input: { permissions?: TaskPermissions; prepareReview?: (worktree: string) => Promise<ReviewSnapshot>; projectId: string; title: string; instructions: string; skill?: string; annotations?: string[]; groupInstructions?: GroupInstructions; attachments?: string[]; agent?: AgentId; model?: string; effort?: string; serviceTier?: string; id: string }) {
+  async createTask(input: { permissions?: TaskPermissions; prepareReview?: (worktree: string) => Promise<ReviewSnapshot>; projectId: string; title: string; instructions: string; skill?: string; annotations?: string[]; noteContexts?: Record<string, string[]>; groupInstructions?: GroupInstructions; attachments?: string[]; agent?: AgentId; model?: string; effort?: string; serviceTier?: string; id: string }) {
     if (!/^[\w-]{16,64}$/.test(input.id)) throw new Error('Invalid task ID.');
     if (this.store.taskDeleted(input.id)) throw new Error('This task was deleted. Create a new task instead.');
     // A retried request returns its task, preparing it again if that failed;
@@ -415,7 +415,7 @@ export class Workspace extends EventEmitter {
     const notes = [...new Set(input.annotations || [])].map(id => {
         const note = available.get(id);
       if (!note) throw new Error(this.annotationSending(id) ? 'A selected PDF note is already being sent. Wait for that task to finish creating.' : 'A selected PDF note is no longer available. Refresh the manuscript and try again.');
-        return note;
+        return input.noteContexts?.[id] ? { ...note, context: input.noteContexts[id] } : note;
       });
       const groupInstructions = parseGroupInstructions(input.groupInstructions);
       const selectedGroups = new Set(notes.flatMap(note => note.group ? [canonicalGroup(note.group)] : []));
