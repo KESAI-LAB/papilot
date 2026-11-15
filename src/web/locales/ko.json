@@ -1,4 +1,6 @@
 {
+  "API key": "API 키",
+  "Sign in with a subscription or add an API key.": "구독으로 로그인하거나 API 키를 추가하세요.",
   "Diagnosing the compilation failure…": "컴파일 오류를 진단하는 중…",
   "Prepare source repair…": "소스 수정 작업 준비…",
   "Submit a repair task to approve changes to project files.": "프로젝트 파일 변경을 승인하려면 수정 작업을 제출하세요.",
