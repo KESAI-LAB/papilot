@@ -114,6 +114,9 @@ const commitInstructions = 'You write Git commit messages for the repository of 
 const mergeInstructions = 'You resolve Git merge conflicts in the repository of a LaTeX paper. Edit only the files listed as conflicted, and in each one remove every conflict marker (<<<<<<<, ||||||| , =======, >>>>>>>) so that the text reads as one coherent version. Keep the changes from both sides wherever they are compatible; where both sides rewrote the same passage, combine their intent, and where they truly contradict each other, prefer the version that is more complete and correct and say so. Keep the LaTeX valid: balanced environments and braces, labels, references and citations. You may read any file to understand the context. Do not edit other files, and do not run Git commands that change the repository, such as add, commit, merge, checkout, reset, restore or stash: the author reviews the result and commits the merge.';
 const blankRuntime = (): RuntimeStatus => ({ connected: false, authenticated: false, account: null, error: null, models: [] });
 
+export interface TaskNoteContext { note: Annotation; context: string[] }
+const noteLocation = (note: Annotation) => JSON.stringify([note.key, note.page, note.rect, note.rects, note.source]);
+
 export class Workspace extends EventEmitter {
   // Each task runs on one agent; `runtime` is Codex's status, kept for older clients.
   runtimes = Object.fromEntries(AGENTS.map(id => [id, blankRuntime()])) as Record<AgentId, RuntimeStatus>;
@@ -129,6 +132,7 @@ export class Workspace extends EventEmitter {
   indirectChanges: () => boolean = () => false;
   // Preparations in progress, by task (see createTask).
   private preparing = new Map<string, Promise<Task>>();
+  private restarting = new Map<string, { id: string; promise: Promise<Task> }>();
   // Each AI review created here compiles its copy with the function its
   // request passed; one resumed after a restart uses prepareReview.
   private reviewCopies = new Map<string, (worktree: string) => Promise<ReviewSnapshot>>();
@@ -324,7 +328,7 @@ export class Workspace extends EventEmitter {
     // The first message of a task whose preparation failed waits for Retry.
     const ids = new Set(tasks.filter(task => !task.preparation).map(task => task.id));
     if (this.projectChanges.has(id) || this.projectRequests.has(id) || this.committing.has(id) || this.preparing.size
-      || tasks.some(task => BUSY.has(task.status) || task.status === 'queued' || task.pendingReview || this.active.has(task.id) || this.publishing.has(task.id) || this.reviewWrites.has(task.id) || this.commentWrites.has(task.id) || this.deletions.has(task.id) || this.titles.has(task.id))
+      || tasks.some(task => BUSY.has(task.status) || task.status === 'queued' || task.pendingReview || this.restarting.has(task.id) || this.active.has(task.id) || this.publishing.has(task.id) || this.reviewWrites.has(task.id) || this.commentWrites.has(task.id) || this.deletions.has(task.id) || this.titles.has(task.id))
       || this.store.runs().some(run => ids.has(run.taskId) && ['queued', 'running', 'uncertain'].includes(run.status))) {
       throw Object.assign(new Error('Pause this paper’s active tasks and wait for current work to finish before changing its path or removing it. Resolve any uncertain action first.'), { statusCode: 409 });
     }
@@ -387,7 +391,7 @@ export class Workspace extends EventEmitter {
   // and attachments claimed, and is then prepared in the background (see
   // prepareTask). An AI review passes prepareReview, which reads the PDF of
   // the new task's manuscript copy.
-  async createTask(input: { permissions?: TaskPermissions; prepareReview?: (worktree: string) => Promise<ReviewSnapshot>; projectId: string; title: string; instructions: string; skill?: string; annotations?: string[]; groupInstructions?: GroupInstructions; attachments?: string[]; agent?: AgentId; model?: string; effort?: string; serviceTier?: string; id: string }) {
+  async createTask(input: { permissions?: TaskPermissions; prepareReview?: (worktree: string) => Promise<ReviewSnapshot>; projectId: string; title: string; instructions: string; skill?: string; annotations?: string[]; noteContexts?: Record<string, TaskNoteContext>; groupInstructions?: GroupInstructions; attachments?: string[]; agent?: AgentId; model?: string; effort?: string; serviceTier?: string; id: string }) {
     if (!/^[\w-]{16,64}$/.test(input.id)) throw new Error('Invalid task ID.');
     if (this.store.taskDeleted(input.id)) throw new Error('This task was deleted. Create a new task instead.');
     // A retried request returns its task, preparing it again if that failed;
@@ -415,7 +419,14 @@ export class Workspace extends EventEmitter {
     const notes = [...new Set(input.annotations || [])].map(id => {
         const note = available.get(id);
       if (!note) throw new Error(this.annotationSending(id) ? 'A selected PDF note is already being sent. Wait for that task to finish creating.' : 'A selected PDF note is no longer available. Refresh the manuscript and try again.');
-        return note;
+        const scoped = input.noteContexts?.[id];
+        // Section lookup yields to manuscript reanchoring. Its ancestry must
+        // describe the same PDF/source location we are about to send.
+        if (scoped && noteLocation(scoped.note) !== noteLocation(note)) throw new Error('A selected PDF note is no longer available. Refresh the manuscript and try again.');
+        // A note released from a failed task may still carry that task's old
+        // ancestry. Only freshly derived context belongs in this request.
+        const { context: _previousContext, ...unscoped } = note;
+        return scoped ? { ...unscoped, context: scoped.context } : unscoped;
       });
       const groupInstructions = parseGroupInstructions(input.groupInstructions);
       const selectedGroups = new Set(notes.flatMap(note => note.group ? [canonicalGroup(note.group)] : []));
@@ -436,6 +447,96 @@ export class Workspace extends EventEmitter {
       try { this.requestTaskTitle(task.id); } catch { /* Keep the prompt-derived title. */ }
     void this.prepareTask(task.id);
       return this.store.task(task.id);
+  }
+  restartTask(taskId: string, input: { id: string; agent: AgentId; model?: string; effort?: string; serviceTier?: string; stop?: boolean; draftAttachments?: string[] }): Promise<Task> {
+    const pending = this.restarting.get(taskId);
+    if (pending) return pending.id === input.id ? pending.promise : Promise.reject(new Error('This task is already being restarted.'));
+    const promise = this.restart(taskId, input).finally(() => { this.restarting.delete(taskId); this.schedule(); });
+    this.restarting.set(taskId, { id: input.id, promise });
+    return promise;
+  }
+  private async restart(taskId: string, input: { id: string; agent: AgentId; model?: string; effort?: string; serviceTier?: string; stop?: boolean; draftAttachments?: string[] }): Promise<Task> {
+    if (!/^[\w-]{16,64}$/.test(input.id) || input.id === taskId || this.store.taskDeleted(input.id)) throw new Error('Invalid replacement task ID.');
+    const original = this.store.task(taskId), existing = this.store.findTask(input.id);
+    if (existing) {
+      if (existing.restart?.taskId !== taskId || existing.projectId !== original.projectId) throw new Error('Invalid replacement task ID.');
+      return this.retryTask(existing.id);
+    }
+    const runtime = this.runtimes[input.agent];
+    if (!runtime?.connected || !runtime.authenticated) throw new Error('Connect and sign in to the destination agent before restarting.');
+    const model = runtime.models.find(model => input.model ? model.id === input.model : model.isDefault);
+    if (!model) throw new Error('Choose an available model for the destination agent.');
+    if (input.effort && !model.efforts.includes(input.effort)) throw new Error('This model does not support that reasoning effort.');
+    if (input.serviceTier && input.serviceTier !== 'default' && (input.agent !== 'codex' || input.serviceTier !== model.fastMode?.serviceTier)) throw new Error('Fast mode is not available for this model.');
+    const initial = this.store.runByKey('initial-' + taskId), message = initial && this.store.item(taskId, initial.id);
+    if (!initial || !message) throw new Error('The original request is unavailable. Open the original conversation to create a new task.');
+    const blocked = () => {
+      const current = this.store.task(taskId);
+      if (['uncertain', 'deleting'].includes(current.status) || current.pendingReview || current.delivery?.pending) throw new Error('Resolve the pending task action before restarting.');
+      return current;
+    };
+    const busy = () => {
+      const current = blocked();
+      return Boolean(current.preparation && current.status !== 'failed') || this.preparing.has(taskId) || this.active.has(taskId) || this.publishing.has(taskId) || this.reviewWrites.has(taskId) || this.commentWrites.has(taskId)
+        || ['running', 'waiting_input', 'queued', 'building'].includes(current.status) || this.store.runs().some(run => run.taskId === taskId && run.status === 'queued');
+    };
+    if (busy()) {
+      if (!input.stop) throw new Error('Confirm stopping the original task before restarting.');
+      const deadline = Date.now() + 20_000;
+      let interrupted = false;
+      while (busy()) {
+        const current = blocked();
+        if (current.preparation && current.status === 'failed' && !this.preparing.has(taskId)) {
+          for (const run of this.store.runs().filter(run => run.taskId === taskId && run.status === 'queued')) this.store.saveRun({ ...run, status: 'interrupted', finishedAt: Date.now() });
+        }
+        if (!interrupted && !current.preparation && current.status !== 'building' && (!this.active.has(taskId) || current.turnId)) {
+          await this.interrupt(taskId); interrupted = true;
+        }
+        if (!busy()) break;
+        if (Date.now() >= deadline) throw new Error('The original task is still stopping or preparing. Wait for it to finish, then retry.');
+        await delay(100);
+      }
+    }
+    // A failed preparation has no agent session to stop; cancel its saved queue.
+    for (const run of this.store.runs().filter(run => run.taskId === taskId && run.status === 'queued')) this.store.saveRun({ ...run, status: 'interrupted', finishedAt: Date.now() });
+    const copies: import('../shared.ts').Attachment[] = [];
+    let admitted = false;
+    try {
+      const originalFiles = message.meta?.attachments || initial.attachments || [];
+      const files = await this.attachments.copy(original.projectId, originalFiles.map(file => file.id), taskId); copies.push(...files);
+      const drafts = await this.attachments.copy(original.projectId, input.draftAttachments || [], taskId); copies.push(...drafts);
+      blocked();
+      if (busy()) throw new Error('The original task is still working. Wait for it to finish, then retry.');
+      const currentRuntime = this.runtimes[input.agent], currentModel = currentRuntime.models.find(item => item.id === model.id);
+      if (!currentRuntime.connected || !currentRuntime.authenticated) throw new Error('The destination agent disconnected. Reconnect and retry.');
+      if (!currentModel || (input.effort && !currentModel.efforts.includes(input.effort)) || (input.serviceTier && input.serviceTier !== 'default' && input.serviceTier !== currentModel.fastMode?.serviceTier)) throw new Error('The destination model settings changed. Choose an available model and retry.');
+      if (this.store.findTask(input.id) || this.store.taskDeleted(input.id)) throw new Error('Invalid replacement task ID.');
+      let prompt = original.mode === 'review' ? original.instructions : initial.prompt;
+      for (let i = 0; i < originalFiles.length; i++) {
+        prompt = prompt.replaceAll(JSON.stringify(this.attachments.path(originalFiles[i])), JSON.stringify(this.attachments.path(files[i])))
+          .replaceAll(this.attachments.path(originalFiles[i]), this.attachments.path(files[i]));
+      }
+      const now = Date.now(), id = input.id;
+      const replacement: Task = { id, projectId: original.projectId, name: 'p-' + id.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 48), title: original.title, titleSource: 'prompt',
+        instructions: original.instructions, ...(original.mode === 'review' ? { mode: 'review' } : {}), restart: { taskId, ...(drafts.length ? { draftAttachments: drafts } : {}) },
+        permissions: 'workspace', worktree: '', deferred: true, threadId: null, turnId: null, agent: input.agent, model: model.id, effort: input.effort || null,
+        ...(input.agent === 'codex' ? { serviceTier: input.serviceTier || 'default' } : {}), status: 'preparing', preparation: {}, createdAt: now, updatedAt: now, feedbackCursor: 0, error: null, review: null };
+      const run: Run = { id: randomUUID(), taskId: id, requestKey: 'initial-' + id, prompt, ...(files.length ? { attachments: files } : {}),
+        ...(initial.noteOptionsRequested ? { noteOptionsRequested: true } : {}), status: 'queued', createdAt: now, finishedAt: null, reviewRound: 0 };
+      this.store.transaction(() => {
+        this.store.saveTask(replacement);
+        // Each message has its own attachment limit; draft and request may each contain ten.
+        this.attachments.claim(original.projectId, files.map(file => file.id), id);
+        this.attachments.claim(original.projectId, drafts.map(file => file.id), id);
+        this.store.saveRun(run);
+        this.store.saveItem({ ...message, id: run.id, taskId: id, createdAt: now, meta: { ...message.meta, ...(files.length ? { attachments: files } : {}) } });
+      });
+      admitted = true;
+      void this.prepareTask(id);
+      return this.store.task(id);
+    } finally {
+      if (!admitted) for (const file of copies) this.attachments.discard(original.projectId, file.id);
+    }
   }
   // Retry after a failed preparation; any other task is returned as it is.
   retryTask(taskId: string) {
@@ -507,6 +608,7 @@ export class Workspace extends EventEmitter {
   // the agent gets the prompt.
   // admit is a new task, saved with its first message (see createTask).
   async enqueue(taskId: string, text: string, requestKey: string, includeFeedback = true, options: { attachments?: string[]; skill?: SkillFile; notes?: Annotation[]; groupInstructions?: GroupInstructions; reviewNotes?: NoteSummary[]; feedback?: boolean; build?: BuildFailure; merge?: TaskReconciliation; admit?: Task } = {}) {
+    if (this.restarting.has(taskId)) throw new Error('Wait for this task to restart before sending more instructions.');
     const task = options.admit ?? this.store.task(taskId);
     if (task.status === 'deleting') throw new Error('This task is being deleted.');
     if (task.mode === 'review' && ((options.skill && options.skill.output !== 'annotations') || options.notes?.length || options.reviewNotes?.length || options.attachments?.length || options.feedback || options.build)) throw new Error('AI review accepts review instructions only. Start an editing task to send notes, skills or attachments.');
@@ -551,6 +653,7 @@ export class Workspace extends EventEmitter {
       }
       if (this.store.runs().some(r => r.taskId === taskId && r.status === 'queued')) throw new Error('This task already has queued instructions. Wait or pause it first.');
       const current = options.admit ? this.store.saveTask(options.admit) : this.store.task(taskId);
+      if (this.restarting.has(taskId)) throw new Error('Wait for this task to restart before sending more instructions.');
       if (this.committing.has(current.projectId) || current.delivery?.pending) throw new Error('Wait for the current delivery before sending more instructions.');
       if (current.status === 'deleting') throw new Error('This task is being deleted. Your instructions were not queued.');
       if ((current.pauseVersion || 0) !== pauseVersion) throw new Error('The task was paused before these instructions were queued. Your draft has been kept.');
@@ -586,7 +689,7 @@ export class Workspace extends EventEmitter {
     for (const run of this.store.runs().filter(r => r.status === 'queued')) {
       const agent = this.agentOf(this.store.task(run.taskId));
       if (!this.agents[agent].ready || !this.runtimes[agent].authenticated) continue;
-      if (this.active.has(run.taskId) || this.reviewWrites.has(run.taskId) || this.publishing.has(run.taskId) || this.store.task(run.taskId).delivery?.pending || BUSY.has(this.store.task(run.taskId).status) || this.store.task(run.taskId).preparation) continue;
+      if (this.restarting.has(run.taskId) || this.active.has(run.taskId) || this.reviewWrites.has(run.taskId) || this.publishing.has(run.taskId) || this.store.task(run.taskId).delivery?.pending || BUSY.has(this.store.task(run.taskId).status) || this.store.task(run.taskId).preparation) continue;
       this.active.set(run.taskId, run);
       void this.startRun(run).catch(e => this.failRun(run, e));
     }
@@ -1621,6 +1724,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     return this.store.updateTask(taskId, { archivedAt: archived ? Date.now() : null });
   }
   async deleteTask(taskId: string): Promise<{ ok: true }> {
+    if (this.restarting.has(taskId)) throw new Error('Wait for this task to restart before deleting it.');
     if (this.preparing.has(taskId)) throw new Error('Wait for task creation to finish before deleting it.');
     if (this.deletions.has(taskId)) throw new Error('Deletion is already in progress. Wait for it to finish.');
     const task = this.store.findTask(taskId);

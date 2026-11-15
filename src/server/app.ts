@@ -9,7 +9,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { registerFrontend } from './frontend.ts';
 import type { Store } from './store.ts';
-import type { Workspace } from './workspace.ts';
+import type { TaskNoteContext, Workspace } from './workspace.ts';
 import { WriterAgent } from './writer/agent.ts';
 import { AGENT_TURN, reviewClient, retryReviewRead, allowedReviewRoute, rewriteReviewHtml, rewriteReviewJson, confirmedReviewResponse, annotateReviewState, taskRoute } from './review.ts';
 import { fullPaperPdf, nextPaperPass, paperPassPdf, retainedPaperPdf } from './pdf.ts';
@@ -33,6 +33,7 @@ import { Diagnostics } from './diagnostics.ts';
 import { attachmentIds } from './attachments.ts';
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from '../shared.ts';
 import { PaperImports, openFolder } from './imports.ts';
+import { PaperCreations } from './create-paper.ts';
 import { DATA, pageViewDir } from './paths.ts';
 import { registerAiReviewRoutes } from './ai-review-routes.ts';
 import { detectLatex } from './latex-installation.ts';
@@ -40,6 +41,7 @@ import { systemRequirements } from './system-requirements.ts';
 import { findExecutable } from '../../bin/agent-paths.mjs';
 
 const importsByWorkspace = new WeakMap<Workspace, PaperImports>();
+const creationsByWorkspace = new WeakMap<Workspace, PaperCreations>();
 // A review write's reply does not wait for the task's summary to be read
 // again: that runs right after it, once at a time per task, and once more
 // for writes that arrive meanwhile. The review page's reads of the task wait
@@ -131,7 +133,9 @@ export async function buildApp(options: AppOptions) {
   const diagnostics = options.diagnostics || new Diagnostics();
   let imports = importsByWorkspace.get(workspace);
   if (!imports) { imports = new PaperImports(manuscripts, DATA, root => Boolean(workspace.projectByPath(root))); importsByWorkspace.set(workspace, imports); }
-  workspace.importsBusy = () => imports!.busy;
+  let creations = creationsByWorkspace.get(workspace);
+  if (!creations) { creations = new PaperCreations(DATA); creationsByWorkspace.set(workspace, creations); }
+  workspace.importsBusy = () => imports!.busy || creations!.busy;
   // Whether rounds list what each edit changes elsewhere, such as the uses of
   // a macro: the choice in Settings, off by default, since finding
   // which combination reproduces a change needs additional compilations.
@@ -219,7 +223,9 @@ export async function buildApp(options: AppOptions) {
       if (current.deletedAt !== undefined || current.taskId || workspace.annotationSending(current.id) || current.key !== previous.key) continue;
       store.saveAnnotation({ ...current, key: next.key, page: next.page, rect: next.rect, rects: next.rects, source: next.source });
     }
-    return { ...state, annotations: store.annotations(id).filter(note => !note.taskId && !isTaskReviewNote(note)) };
+    const annotations = store.annotations(id).filter(note => !note.taskId && !isTaskReviewNote(note));
+    const scope = state.build.key ? await manuscripts.noteSections(id, state.build.key, annotations).catch(() => null) : null;
+    return { ...state, annotations, ...(scope ? { noteSections: scope.sections, unplacedSectionNotes: scope.unplaced } : {}) };
   }
 
   app.get('/api/health', () => ({ ok: true, name: 'Papilot', version: options.version, ...(options.desktopInstance ? { desktopInstance: options.desktopInstance } : {}), ...(options.updateInstance ? { updateInstance: options.updateInstance } : {}) }));
@@ -325,6 +331,8 @@ export async function buildApp(options: AppOptions) {
   const agent = (value: unknown): AgentId => isAgentId(value) ? value : 'codex';
   const effort = (value: unknown) => typeof value === 'string' && /^[a-z]{1,16}$/.test(value) ? value : undefined;
   const string = (value: unknown, name: string, max?: number) => { if (typeof value !== 'string' || !value.trim()) throw new Error(`${name} is required.`); if (max !== undefined && value.length > max) throw new Error(`${name} is required and must be no longer than ${max} characters.`); return value.trim(); };
+  app.get('/api/projects/create-defaults', () => creations!.defaults());
+  app.post('/api/projects/create', request => creations!.create((request.body || {}) as any, (root, name) => workspace.addProject(root, name)));
   app.post('/api/projects/open', request => openFolder((request.body || {}) as any, root => workspace.projectByPath(root), (root, name) => workspace.addProject(root, name)));
   app.post('/api/imports', { bodyLimit: 90 * 1024 * 1024 }, request => imports!.create((request.body || {}) as any));
   app.get<{ Params: { id: string } }>('/api/imports/:id', request => imports!.get(request.params.id));
@@ -363,10 +371,29 @@ export async function buildApp(options: AppOptions) {
     if (existing) { if (existing.projectId !== projectId) throw new Error('Invalid task ID.'); return workspace.retryTask(existing.id); }
     // AI review compiles the task's own copy of the manuscript, so it does not wait for the preview.
     const reviewing = Boolean(skill && findSkill(store.project(projectId).path, skill).output === 'annotations');
-    return workspace.createTask({ id, projectId, ...(reviewing ? { prepareReview: (worktree: string) => manuscripts.captureReview(store.project(projectId).path, worktree, id) } : {}), title: string(b.title, 'Task title', 120), permissions: b.permissions, instructions: skill || annotations?.length || attachments.length ? optional(b.instructions, 'Instructions') : string(b.instructions, 'Instructions'), skill, annotations, groupInstructions, attachments, agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64) });
+    // Derive context on the host from the PDF/source snapshot; clients only
+    // submit note IDs. Preserve each mark's own build, including older marks.
+    const selectedNotes = store.annotations(projectId).filter(note => annotations?.includes(note.id));
+    const noteContexts: Record<string, TaskNoteContext> = {};
+    for (const key of new Set(selectedNotes.map(note => note.key))) {
+      const scope = await manuscripts.noteSections(projectId, key, selectedNotes.filter(note => note.key === key)).catch(() => null);
+      if (scope) for (const note of selectedNotes.filter(note => note.key === key)) {
+        const context = scope.contexts[note.id];
+        if (context) noteContexts[note.id] = { note, context };
+      }
+    }
+    return workspace.createTask({ id, projectId, noteContexts, ...(reviewing ? { prepareReview: (worktree: string) => manuscripts.captureReview(store.project(projectId).path, worktree, id) } : {}), title: string(b.title, 'Task title', 120), permissions: b.permissions, instructions: skill || annotations?.length || attachments.length ? optional(b.instructions, 'Instructions') : string(b.instructions, 'Instructions'), skill, annotations, groupInstructions, attachments, agent: agent(b.agent), model: typeof b.model === 'string' ? b.model : undefined, effort: effort(b.effort), serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64) });
   });
   // Retry for a task whose preparation failed; it answers at once as well.
   app.post<{ Params: { id: string } }>('/api/tasks/:id/prepare', task, request => workspace.retryTask(request.params.id));
+  app.post<{ Params: { id: string } }>('/api/tasks/:id/restart', task, request => {
+    const body = (request.body || {}) as any;
+    if (!isAgentId(body.agent)) throw new Error('Choose a valid destination agent.');
+    for (const key of ['model', 'effort', 'serviceTier']) if (body[key] !== undefined && typeof body[key] !== 'string') throw new Error('Choose valid destination model settings.');
+    return workspace.restartTask(request.params.id, { id: string(body.id, 'Task ID', 64), agent: body.agent,
+      model: typeof body.model === 'string' ? body.model : undefined, effort: typeof body.effort === 'string' ? body.effort : undefined,
+      serviceTier: typeof body.serviceTier === 'string' ? body.serviceTier : undefined, stop: body.stop === true, draftAttachments: attachmentIds(body.draftAttachments) });
+  });
   app.get<{ Params: { id: string }; Querystring: { since?: string } }>('/api/tasks/:id/items', task, request => { store.task(request.params.id); return store.itemsSince(request.params.id, typeof request.query.since === 'string' ? request.query.since : undefined); });
   app.get<{ Params: { id: string } }>('/api/tasks/:id/note-results', task, async request => {
     const task = store.task(request.params.id), client = await connectReview(store.project(task.projectId).path);

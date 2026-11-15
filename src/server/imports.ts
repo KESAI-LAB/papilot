@@ -118,14 +118,14 @@ async function repositoryRoot(root: string) {
   if (top && realPath(top) !== realPath(root)) throw new Error('This folder belongs to a parent Git repository. Select its root folder, or upload a copy.');
   return top;
 }
-export async function prepareRepository(root: string) {
+export async function prepareRepository(root: string, message = 'Import paper into Papilot') {
   const top = await repositoryRoot(root);
   if (!top) await git(root, 'init', '-q');
   try { await git(root, 'rev-parse', '--verify', 'HEAD'); return; } catch { /* Empty repositories need their first snapshot. */ }
   // Do not change the author's global identity or overwrite their ignore rules.
   if (!fs.existsSync(path.join(root, '.gitignore'))) fs.writeFileSync(path.join(root, '.gitignore'), '*.aux\n*.log\n*.fls\n*.fdb_latexmk\n*.synctex.gz\n*.toc\n*.out\n.DS_Store\n');
   await git(root, 'add', '--all');
-  await git(root, '-c', 'user.name=Papilot', '-c', 'user.email=papilot@localhost', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'Import paper into Papilot');
+  await git(root, '-c', 'user.name=Papilot', '-c', 'user.email=papilot@localhost', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', message);
 }
 // The desktop app opens a folder the way an editor does. A paper already in
 // Papilot opens again; any other folder with a clear main file is added as it
