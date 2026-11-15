@@ -30,6 +30,9 @@ export interface AgentRuntime extends EventEmitter {
   /** Loads an SDK this host already has, without starting the agent. */
   preload?(): Promise<void>;
   start(): Promise<void>;
+  /** Ends the conversation of a task being deleted, so the agent lets go of
+   *  what it keeps open in the task worktree before Papilot removes it. */
+  closeThread?(threadId: string): Promise<void>;
   request(method: string, params: any, timeout?: number): Promise<any>;
   respond(id: string | number, result: unknown): void;
   reject(id: string | number, message: string): void;

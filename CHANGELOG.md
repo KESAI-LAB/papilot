@@ -7,6 +7,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 ### Fixed
 
 - **Claude starts with default permissions on native Windows.** Claude and GLM use **Accept edits** with an explicit **No sandbox** explanation instead of requiring an unavailable command sandbox. Native permission checks remain active: the CLI declines requests needing approval, while the SDK asks in Papilot. Sandboxed edits remain enforced on macOS, Linux and WSL. ([#167](https://github.com/PapilotAI/papilot/issues/167))
+- **Codex tasks can be deleted on native Windows.** While a task's conversation stays loaded, Codex keeps programs such as MCP servers running inside the task folder, and Windows cannot delete a folder another program is using. Deleting a task now archives its Codex conversation first, which stops them. If another program still holds the folder, the error shows its path, and **Retry deletion** finishes the cleanup once that program closes it, including for tasks already stuck at **Deleting task**. ([#179](https://github.com/PapilotAI/papilot/issues/179))
 
 ## [0.10.4] - 2026-11-14
 
