@@ -1,10 +1,12 @@
 import { readyRequirements } from './required-tools-fixture.mjs';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import fs from 'node:fs';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium, expect } from './playwright.mjs';
 
+fs.mkdirSync('test-results', { recursive: true });
 const server = Fastify();
 await server.register(staticFiles, { root: path.resolve('dist') });
 await server.listen({ host: '127.0.0.1', port: 0 });
@@ -70,7 +72,7 @@ try {
   const dialog = page.getByRole('dialog', { name: 'Restart with another agent', exact: true });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('current manuscript');
-  if (process.env.PAPILOT_RESTART_SCREENSHOTS) await page.screenshot({ path: '/tmp/papilot-164-desktop.png', animations: 'disabled' });
+  await page.screenshot({ path: 'test-results/task-restart-desktop.png', animations: 'disabled' });
   await expect(dialog).toContainText('Later messages and review decisions stay in the original task.');
   await expect(dialog.getByRole('button', { name: 'Restart task', exact: true })).toBeDisabled();
   await dialog.getByRole('button', { name: 'Agent settings', exact: true }).click();
@@ -107,7 +109,7 @@ try {
   await page.getByRole('button', { name: 'Restart with another agent…', exact: true }).click();
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeInViewport();
-  if (process.env.PAPILOT_RESTART_SCREENSHOTS) await page.screenshot({ path: '/tmp/papilot-164-mobile.png', animations: 'disabled' });
+  await page.screenshot({ path: 'test-results/task-restart-mobile.png', animations: 'disabled' });
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   assert.equal(restarts.length, 2, 'Cancel creates no task');
   assert.deepEqual(errors, []);

@@ -213,9 +213,15 @@ jobs:
       - name: note-selection
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-note-selection.mjs
+      - name: section-comments
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-section-comments.mjs
       - name: papers
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-papers.mjs
+      - name: create-paper
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-create-paper.mjs
       - name: pdf-tools
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-pdf-tools.mjs
@@ -269,6 +275,9 @@ jobs:
       - name: task-model
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-task-model.mjs
+      - name: task-restart
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-task-restart.mjs
       - name: task-permissions
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-task-permissions.mjs
@@ -290,6 +299,17 @@ jobs:
       - name: workspace-switcher
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-workspace-switcher.mjs
+      - name: Keep paper workflow screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-workflows
+          path: |
+            test-results/create-paper-*.png
+            test-results/task-restart-*.png
+            test-results/section-comments-*.png
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Keep screenshots of a failed check
         if: failure()
         uses: actions/upload-artifact@v4

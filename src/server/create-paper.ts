@@ -114,7 +114,9 @@ export class PaperCreations {
             fs.rmdirSync(root); fs.rmSync(receiptFile, { force: true }); removed = true;
           }
         }
-        const message = (error as NodeJS.ErrnoException).code === 'ENOENT' && (error as NodeJS.ErrnoException).syscall?.includes('spawn')
+        const missingGit = (error as NodeJS.ErrnoException).code === 'ENOENT' && (error as NodeJS.ErrnoException).syscall?.includes('spawn');
+        if (removed && missingGit) throw new Error('Install Git on the computer running Papilot, then retry creating the paper.');
+        const message = missingGit
           ? 'Install Git on the computer running Papilot, then retry creating the paper.' : (error as Error).message;
         throw new Error(removed ? message : `${message} Paper files were kept at ${root}. Retry creation to continue.`);
       }
