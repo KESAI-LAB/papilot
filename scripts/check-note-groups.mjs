@@ -111,9 +111,15 @@ try {
   await selectText(2); await expect.poll(() => notes.length).toBe(2);
   // Color belongs to the note tool and carries over to the region tool in the rail.
   await page.getByRole('toolbar', { name: 'Marking tools' }).getByRole('button', { name: 'Region', exact: true }).click();
-  const regionBox = await page.locator('.region-capture').first().boundingBox();
-  await page.mouse.move(regionBox.x + 60, regionBox.y + 90); await page.mouse.down();
-  await page.mouse.move(regionBox.x + 180, regionBox.y + 150, { steps: 5 }); await page.mouse.up();
+  const region = page.locator('.region-capture').first();
+  // Wait for the drawing surface to settle and receive the pointer before
+  // reading coordinates; the PDF can still move after switching tools.
+  await region.hover({ position: { x: 60, y: 90 } });
+  const regionBox = await region.boundingBox();
+  await page.mouse.down();
+  await page.mouse.move(regionBox.x + 180, regionBox.y + 150, { steps: 5 });
+  await expect(page.locator('.note-box.draft')).toBeVisible();
+  await page.mouse.up();
   await expect.poll(() => notes.length).toBe(3);
   assert.equal(notes.at(-1).group, 'yellow');
   assert.equal(notes.at(-1).rects, undefined);
