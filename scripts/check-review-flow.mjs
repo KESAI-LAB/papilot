@@ -466,7 +466,11 @@ try {
   // The accepted paragraph remains selectable for another note.
   await accepted.locator('.after .pdf-glyph').evaluate(el => { const range = document.createRange(); range.selectNodeContents(el); const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range); });
   await viewer().locator('.review-select-menu button').click();
-  await page.getByRole('textbox', { name: 'Comment 1', exact: true }).fill('A note on accepted text.');
+  const passageComment = viewer().getByRole('textbox', { name: 'Comment', exact: true });
+  await expect(passageComment).toBeFocused();
+  await passageComment.fill('A note on accepted text.');
+  await passageComment.press('Enter');
+  await expect(page.getByRole('textbox', { name: 'Comment 1', exact: true })).toHaveValue('A note on accepted text.');
   await viewer().locator('.change.current').getByRole('button', { name: 'Reject', exact: true }).click();
   await expect(viewer().locator('[data-stop="1"] .change-head')).toBeHidden();
   await expect(viewer().locator('[data-stop="1"] .side.before')).toBeVisible();
