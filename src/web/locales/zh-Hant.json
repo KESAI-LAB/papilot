@@ -1,4 +1,6 @@
 {
+  "API key": "API 金鑰",
+  "Sign in with a subscription or add an API key.": "使用訂閱登入，或新增 API 金鑰。",
   "Diagnosing the compilation failure…": "正在診斷編譯錯誤…",
   "Prepare source repair…": "準備專案修復任務…",
   "Submit a repair task to approve changes to project files.": "送出修復任務後，代理才會修改專案檔案。",

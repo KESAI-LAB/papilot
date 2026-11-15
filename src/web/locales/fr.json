@@ -1,4 +1,6 @@
 {
+  "API key": "Clé API",
+  "Sign in with a subscription or add an API key.": "Connectez-vous avec un abonnement ou ajoutez une clé API.",
   "Diagnosing the compilation failure…": "Diagnostic de l’échec de compilation…",
   "Prepare source repair…": "Préparer une tâche de correction des sources…",
   "Submit a repair task to approve changes to project files.": "Envoyez la tâche de correction pour autoriser la modification des fichiers du projet.",
