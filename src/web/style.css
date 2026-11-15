@@ -689,10 +689,8 @@ body.resizing iframe{pointer-events:none}
 @container (max-width:760px){.pdf-contents-trigger{width:30px;padding:0;justify-content:center}.pdf-contents-trigger>span,.pdf-contents-trigger>svg:last-child{display:none}}
 .git-panel{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;padding:0}
 .notes-panel{flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto}
-.draft-notes-head{flex:none;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 8px;font-size:12px;color:var(--text-3)}
 .note-selection-head{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%}
 .note-select-all{padding:4px 0;color:var(--text-2);font:inherit;white-space:nowrap}
-.draft-notes-head .note-select-all{margin-left:auto}
 .note-select-all:hover:not(:disabled){color:var(--accent)}
 .notes-panel>.note-section:first-of-type{margin-top:0}
 .notes-panel .note-card{position:relative;isolation:isolate;transition:background-color .15s,border-color .15s}
@@ -1190,7 +1188,11 @@ body.resizing iframe{pointer-events:none}
 
 .pdf-reading-notes-scrim{display:none}
 .pdf-reading-notes{position:absolute;z-index:30;top:52px;right:8px;bottom:8px;width:min(360px,calc(100% - 16px));display:flex;flex-direction:column;padding:8px 10px 10px;border:1px solid var(--line);border-radius:12px;background:var(--bg);box-shadow:var(--float)}
-.pdf-reading-notes-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:2px;font-size:13px;color:var(--text-2);flex:none}
+.pdf-reading-notes-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:6px;font-size:13px;color:var(--text-2);flex:none}
+.pdf-reading-notes-head>strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pdf-reading-notes-actions{display:flex;align-items:center;gap:4px;min-width:0;max-width:70%}
+.pdf-reading-notes-actions>.menu-anchor{min-width:0;flex-shrink:1}
+.pdf-reading-notes-actions>.icon-button{flex:none}
 @media(pointer:fine){.pdf-reading-notes-head .icon-button{width:28px;height:28px;margin-right:-4px}}
 .pdf-reading-notes .notes-panel{overflow:auto}
 @media(max-width:680px){

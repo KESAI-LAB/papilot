@@ -857,7 +857,7 @@ function useSaveNotesOnLeave(save: () => Promise<boolean>) {
 }
 
 interface NotesHandle { save: () => Promise<boolean> }
-function NotesPanel({ notes, sections = [], currentKey, active, actions, onShow, onAdded, controller }: { sections?: NoteSection[]; notes: Annotation[]; currentKey?: string; active: string; actions: NoteActions; onShow: (note: Annotation) => void; onAdded: () => void; controller: React.Ref<NotesHandle> }) {
+function NotesPanel({ notes, sections = [], currentKey, active, actions, onShow, onAdded, onClose, controller }: { sections?: NoteSection[]; notes: Annotation[]; currentKey?: string; active: string; actions: NoteActions; onShow: (note: Annotation) => void; onAdded: () => void; onClose: () => void; controller: React.Ref<NotesHandle> }) {
   const list = useRef<HTMLElement>(null);
   const cards = useNoteCards(notes, actions, actions.onEditing);
   useSaveNotesOnLeave(cards.saveAll);
@@ -870,10 +870,15 @@ function NotesPanel({ notes, sections = [], currentKey, active, actions, onShow,
   const ownNotes = notes.filter(note => !note.aiReview);
   const unplacedSuggestions = notes.filter(note => note.aiReview && note.key !== currentKey);
   const renderNote = (note: Annotation, index: number) => cards.card(note, index, { currentKey, active, onShow, onToggle: () => toggle(note) });
-  return <section ref={list} className="notes-panel" aria-label={t('PDF notes')}>
-    <div className="draft-notes-head">
-      <SectionNotePicker key={currentKey} sections={sections.map(section => ({ ...section, notes: section.notes.filter(id => notes.some(note => note.id === id)) }))} notes={ownNotes.map(note => note.id)} disabled={selectionLocked} has={actions.selection.has} select={actions.selection.set} onAdded={onAdded}/>
+  return <>
+    <div className="pdf-reading-notes-head">
+      <strong>{t('My notes')}</strong>
+      <div className="pdf-reading-notes-actions">
+        <SectionNotePicker key={currentKey} sections={sections.map(section => ({ ...section, notes: section.notes.filter(id => notes.some(note => note.id === id)) }))} notes={ownNotes.map(note => note.id)} disabled={selectionLocked} has={actions.selection.has} select={actions.selection.set} onAdded={onAdded}/>
+        <button type="button" className="icon-button" aria-label={t('Close notes')} onClick={onClose}><Icon name="close" size={16}/></button>
+      </div>
     </div>
+    <section ref={list} className="notes-panel" aria-label={t('PDF notes')}>
     {currentKey && notes.some(note => note.key !== currentKey) && <p className="note-placement-summary" role="status">{t('Some note positions need confirmation. Their original text and comments are kept.')}</p>}
     {ownNotes.length > 0 && <section className="note-section" aria-label={t('My notes')}>
     {noteGroups(notes).map(({ group, entries }) => {
@@ -891,7 +896,8 @@ function NotesPanel({ notes, sections = [], currentKey, active, actions, onShow,
     {unplacedSuggestions.length > 0 && <section className="note-section" aria-label={t('Unplaced suggestions')}><h3>{t('Unplaced suggestions')}</h3><ol className="note-list">{notes.map((note, index) => note.aiReview && note.key !== currentKey && renderNote(note, index))}</ol></section>}
     {cards.undo(selectionLocked)}
     {Object.entries(errors).filter(([id]) => !notes.some(note => note.id === id && !note.group)).map(([id, error]) => <p key={id} className="inline-error" role="alert">{error}</p>)}
-  </section>;
+    </section>
+  </>;
 }
 
 // The composer receives only attachments the author explicitly chose in the PDF.
@@ -1079,7 +1085,7 @@ function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, s
           onCreate={actions.add} onSelect={async note => { if (await closeReadingNotes()) setActive(note.id); }} outline={outline} section={section} onOutline={setOutline} onSection={setSection} lead={switcher} tools={pdfTools}
           onSource={async (target, key) => { if (!await closeReadingNotes()) return; setActive(''); setView('source'); setCollapsed(false); void source.open(target, key); }} passage={source.passage}/></Suspense>
         : !error && build?.status !== 'failed' && <div className="review-placeholder"><div className="placeholder-icon"><span className="spinner large"/></div><h2>{t('Compiling the PDF…')}</h2></div>}
-      {readingNotes && <><div aria-hidden="true" className="pdf-reading-notes-scrim" onClick={() => void closeReadingNotes()}/><aside className="pdf-reading-notes" aria-label={t('PDF note library')}><div className="pdf-reading-notes-head"><strong>{t('My notes')}</strong><button type="button" className="icon-button" aria-label={t('Close notes')} onClick={() => void closeReadingNotes()}><Icon name="close" size={16}/></button></div><NotesPanel key={project.id} controller={notesPanel} notes={notes} sections={data?.noteSections} currentKey={build?.key} active={active} actions={actions} onShow={show} onAdded={() => void reviewAddedNotes()}/></aside></>}
+      {readingNotes && <><div aria-hidden="true" className="pdf-reading-notes-scrim" onClick={() => void closeReadingNotes()}/><aside className="pdf-reading-notes" aria-label={t('PDF note library')}><NotesPanel key={project.id} controller={notesPanel} notes={notes} sections={data?.noteSections} currentKey={build?.key} active={active} actions={actions} onShow={show} onAdded={() => void reviewAddedNotes()} onClose={() => void closeReadingNotes()}/></aside></>}
     </section>}
     <aside id={panelId} className="manuscript-side" aria-label={t('Manuscript panels')} hidden={hidden}>
       <div className="manuscript-side-header">
