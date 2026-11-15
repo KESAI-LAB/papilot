@@ -10,6 +10,7 @@ it("leaves a failed page idle, paints other pages, and retries after the page re
     observe() {}
     disconnect() {}
   });
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   vi.stubGlobal("window", { devicePixelRatio: 1 });
   vi.stubGlobal("document", { createElement: () => ({ width: 0, height: 0, className: "", remove() {} }) });
   vi.spyOn(console, "error").mockImplementation(() => {});

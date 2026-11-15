@@ -4,7 +4,7 @@ import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 // time, and frees them further away.
 export function paintAppliedPages(container: HTMLElement, pdf: PDFDocumentProxy, root: HTMLElement | null) {
   const alive = new Map<number, { canvas?: HTMLCanvasElement; task?: RenderTask }>(), wanted = new Set<number>();
-  let running = 0, stopped = false;
+  let running = 0, stopped = false, width = container.clientWidth;
   const pages = () => Array.from(container.querySelectorAll<HTMLElement>(".applied-page"));
   const release = (index: number) => {
     const entry = alive.get(index);
@@ -59,9 +59,20 @@ export function paintAppliedPages(container: HTMLElement, pdf: PDFDocumentProxy,
     pump();
   }, { root, rootMargin: "1200px 0px" });
   pages().forEach((page) => observer.observe(page));
+  // Reader zoom and pane resizing need new pixels, not stretched canvases.
+  const resized = new ResizeObserver(() => {
+    if (Math.abs(container.clientWidth - width) < 1) return;
+    width = container.clientWidth;
+    for (const [index, entry] of alive) {
+      entry.task?.cancel();
+      alive.delete(index);
+    }
+    pump();
+  });
+  resized.observe(container);
   return () => {
     stopped = true;
-    observer.disconnect();
+    observer.disconnect(); resized.disconnect();
     for (const entry of alive.values()) entry.task?.cancel();
   };
 }
