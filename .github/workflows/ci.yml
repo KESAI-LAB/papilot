@@ -171,6 +171,9 @@ jobs:
       - name: appearance
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-appearance.mjs
+      - name: applied-pdf
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-applied-pdf.mjs
       - name: attachments
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-attachments.mjs
