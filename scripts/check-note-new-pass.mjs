@@ -5,6 +5,7 @@ import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium, expect } from './playwright.mjs';
+import { dragPdfText } from './pdf-selection-fixture.mjs';
 
 // A newer pass of the manuscript lands while a note is being written on the
 // pages on screen. The card stays open and keeps its draft, the note names
@@ -52,13 +53,7 @@ await page.route('**/api/**', async route => {
 const rail = () => page.getByRole('toolbar', { name: 'Marking tools' });
 const textOnPage = () => page.locator('.page[data-page-number="1"] .textLayer span').filter({ hasText: /\S/ });
 async function selectText(index) {
-  await textOnPage().nth(index).evaluate(element => {
-    const range = document.createRange(); range.selectNodeContents(element);
-    const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
-    document.dispatchEvent(new Event('selectionchange'));
-    const box = element.getBoundingClientRect();
-    element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'mouse', clientX: box.right, clientY: box.bottom }));
-  });
+  await dragPdfText(page, textOnPage().nth(index));
 }
 async function newerPass(name) {
   const before = manuscriptReads;

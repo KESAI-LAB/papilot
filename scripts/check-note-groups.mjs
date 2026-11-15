@@ -5,6 +5,7 @@ import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium, expect } from './playwright.mjs';
+import { dragPdfText } from './pdf-selection-fixture.mjs';
 import { summarizeNotes } from '../src/notes.ts';
 
 const server = Fastify();
@@ -68,12 +69,13 @@ async function chooseGroup(name) {
 }
 async function selectText(index, automatic = true) {
   const word = page.locator('.page[data-page-number="1"] .textLayer span').filter({ hasText: /\S/ }).nth(index);
-  await word.evaluate((el, automatic) => {
+  if (automatic) return dragPdfText(page, word);
+  // Leave a selection pending so the explicit Add to group button is tested.
+  await word.evaluate(el => {
     const range = document.createRange(); range.selectNodeContents(el);
     const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
     document.dispatchEvent(new Event('selectionchange'));
-    if (automatic) el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'mouse' }));
-  }, automatic);
+  });
 }
 async function markPoint(note, target = page) {
   const mark = target.locator(`.note-layer [data-note="${note.id}"]`).first();

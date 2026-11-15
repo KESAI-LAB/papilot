@@ -5,6 +5,7 @@ import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium, expect } from './playwright.mjs';
+import { dragPdfText } from './pdf-selection-fixture.mjs';
 
 // The PDF's tool rail: each tool marks the way its name says, keys pick
 // tools, the magic pen's wheel and number keys add quick notes, its menu and
@@ -64,15 +65,13 @@ const rail = () => page.getByRole('toolbar', { name: 'Marking tools' });
 const tool = name => rail().getByRole('button', { name, exact: true });
 const words = () => page.locator('.page[data-page-number="1"] .textLayer span').filter({ hasText: /\S/ });
 async function selectText(index, release = true) {
-  await words().nth(index).evaluate((element, release) => {
+  if (release) return dragPdfText(page, words().nth(index));
+  // Keep a selection pending for the test that picks a marking tool later.
+  await words().nth(index).evaluate(element => {
     const range = document.createRange(); range.selectNodeContents(element);
     const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
     document.dispatchEvent(new Event('selectionchange'));
-    if (release) {
-      const box = element.getBoundingClientRect();
-      element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'mouse', clientX: box.right, clientY: box.bottom }));
-    }
-  }, release);
+  });
 }
 // Floating cards are placed on animation frames and settings scroll a row into
 // view smoothly; act on an element once its box has held still.
