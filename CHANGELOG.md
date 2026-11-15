@@ -7,6 +7,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 ### Fixed
 
 - **Claude starts with default permissions on native Windows.** Claude and GLM use **Accept edits** with an explicit **No sandbox** explanation instead of requiring an unavailable command sandbox. Native permission checks remain active: the CLI declines requests needing approval, while the SDK asks in Papilot. Sandboxed edits remain enforced on macOS, Linux and WSL. ([#167](https://github.com/PapilotAI/papilot/issues/167))
+- **Task titles and commit messages generate on native Windows with MCP servers configured.** Codex runs your MCP servers, such as the Codex app's `node_repl`, in the folder of each one-off conversation that writes a title or commit message, and Papilot never ended those conversations. Windows could not remove the folder, so task titles failed to generate and **Generate commit message** reported `EPERM`. Papilot now ends each one-off conversation when it finishes, so on every platform those MCP servers stop instead of running until Codex restarts. ([#186](https://github.com/PapilotAI/papilot/pull/186))
 
 ## [0.10.4] - 2026-11-14
 

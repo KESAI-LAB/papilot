@@ -1509,13 +1509,20 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     // read-only sandbox (Claude, Cursor, the ACP agents) cannot change the paper.
     const scratch = options.sandbox === 'read-only' ? fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-helper-')) : null;
     try { return await this.helperTurn(id, { ...options, cwd: scratch || options.cwd }); }
-    finally { if (scratch) fs.rmSync(scratch, { recursive: true, force: true }); }
+    // An empty folder left behind must not discard the reply.
+    finally { if (scratch) await fs.promises.rm(scratch, { recursive: true, force: true, maxRetries: 5 }).catch(() => {}); }
   }
   private async helperTurn(id: AgentId, options: { cwd: string; sandbox: 'read-only' | 'workspace-write'; instructions: string; prompt: string; model?: AgentModel; effort?: string | null; timeout: number; what: string }) {
     const agent = this.agents[id], name = AGENT_NAMES[id];
-    const thread = await agent.request('thread/start', { cwd: options.cwd, approvalPolicy: 'never', sandbox: options.sandbox, ephemeral: true, developerInstructions: options.instructions, ...(options.model ? { model: options.model.id } : {}) }, options.timeout);
-    if (this.closing) throw new Error('The server is shutting down.');
+    // Codex unloads the thread as soon as it is released, not a minute later.
+    const thread = await agent.request('thread/start', { cwd: options.cwd, approvalPolicy: 'never', sandbox: options.sandbox, ephemeral: true, config: { thread_unload_delay_secs: 0 }, developerInstructions: options.instructions, ...(options.model ? { model: options.model.id } : {}) }, options.timeout);
     const threadId = thread.thread.id;
+    try {
+      if (this.closing) throw new Error('The server is shutting down.');
+      return await this.helperReply(agent, name, threadId, options);
+    } finally { await releaseThread(agent, threadId); }
+  }
+  private helperReply(agent: AgentRuntime, name: string, threadId: string, options: { cwd: string; prompt: string; effort?: string | null; timeout: number; what: string }) {
     return new Promise<string>((resolve, reject) => {
       let text = '', turnId = '', settled = false;
       const listen = (message: any) => {
@@ -1780,6 +1787,24 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     } finally { this.deletions.delete(taskId); this.schedule(); }
   }
   close() { this.closing = true; for (const stop of this.helperStops) stop(); for (const timer of this.usageTimers.values()) clearTimeout(timer); this.flush(); for (const id of AGENTS) this.agents[id].close(); this.attachments.close(); }
+}
+
+// A loaded Codex thread runs the user's stdio MCP servers in its working
+// directory until it unloads, which also keeps Windows from deleting that
+// folder. Released, a thread started with thread_unload_delay_secs 0 unloads
+// at once and Codex reports thread/closed when its servers have stopped.
+// An agent without thread/unsubscribe is not waited for.
+async function releaseThread(agent: AgentRuntime, threadId: string) {
+  let done = () => {};
+  const closed = new Promise<void>(resolve => {
+    const listen = (message: any) => { if (message.method === 'thread/closed' && message.params?.threadId === threadId) done(); };
+    const timer = setTimeout(() => done(), 5000);
+    done = () => { clearTimeout(timer); agent.off('notification', listen); agent.off('disconnected', done); resolve(); };
+    agent.on('notification', listen); agent.on('disconnected', done);
+  });
+  const result = await agent.request('thread/unsubscribe', { threadId }).catch(() => null);
+  if (result?.status !== 'unsubscribed') done();
+  await closed;
 }
 
 // The review engine records each task's accepted text as a commit beside the
