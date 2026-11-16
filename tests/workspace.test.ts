@@ -2048,6 +2048,7 @@ test('an agent writes a commit message from the chosen changes, in a read-only t
     const replies = ['```\nTighten the opening sentence.\n```', 'Shorten the opening sentence'];
     f.codex.handler = async method => {
       if (method === 'thread/start') return { thread: { id: 'commit-thread' } };
+      if (method !== 'turn/start') return {};
       const text = replies.shift();
       setImmediate(() => {
         f.codex.emit('notification', { method: 'item/completed', params: { threadId: 'commit-thread', turnId: 'commit-turn', item: { id: 'reply', type: 'agentMessage', text } } });
@@ -2076,6 +2077,41 @@ test('an agent writes a commit message from the chosen changes, in a read-only t
     f.codex.ready = false;
     await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex']), /Sign in to an agent, such as Codex/);
   } finally { f.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a helper turn lets go of its Codex thread and removes its folder once Codex has closed the thread', async () => {
+  const f = fixture();
+  try {
+    f.codex.ready = true;
+    let folder = '', fail = false;
+    const closedWithFolder: boolean[] = [];
+    f.codex.handler = async (method, params) => {
+      if (method === 'thread/start') { folder = params.cwd; return { thread: { id: 'helper-thread' } }; }
+      if (method === 'turn/start') {
+        setImmediate(() => {
+          if (!fail) f.codex.emit('notification', { method: 'item/completed', params: { threadId: 'helper-thread', turnId: 'helper-turn', item: { id: 'reply', type: 'agentMessage', text: 'Tighten the opening' } } });
+          f.codex.emit('notification', { method: 'turn/completed', params: { threadId: 'helper-thread', turn: { id: 'helper-turn', status: fail ? 'failed' : 'completed', ...(fail ? { error: { message: 'The model is overloaded.' } } : {}) } } });
+        });
+        return { turn: { id: 'helper-turn' } };
+      }
+      // Codex stops the MCP servers it runs in the thread's folder, then reports the thread closed.
+      if (method === 'thread/unsubscribe') {
+        setTimeout(() => { closedWithFolder.push(fs.existsSync(folder)); f.codex.emit('notification', { method: 'thread/closed', params: { threadId: 'helper-thread' } }); }, 20);
+        return { status: 'unsubscribed' };
+      }
+      return {};
+    };
+    const helper = () => (f.workspace as any).oneOff('codex', { cwd: '/unused', sandbox: 'read-only', instructions: 'Write a commit message.', prompt: 'Write.', timeout: 10000, what: 'write a commit message' });
+    assert.equal(await helper(), 'Tighten the opening');
+    assert.equal(f.codex.calls.find(call => call.method === 'thread/start')!.params.config.thread_unload_delay_secs, 0, 'the thread unloads as soon as it is released');
+    assert.deepEqual(f.codex.calls.map(call => call.method), ['thread/start', 'turn/start', 'thread/unsubscribe']);
+    assert.deepEqual(closedWithFolder, [true]); assert.equal(fs.existsSync(folder), false);
+    // A failed turn lets go of its thread as well.
+    fail = true; f.codex.calls.length = 0;
+    await assert.rejects(helper(), /The model is overloaded/);
+    assert.deepEqual(f.codex.calls.map(call => call.method), ['thread/start', 'turn/start', 'thread/unsubscribe']);
+    assert.deepEqual(closedWithFolder, [true, true]); assert.equal(fs.existsSync(folder), false);
+  } finally { f.close(); }
 });
 
 test('a build the agent broke goes back to it once, and its instructions name what the review covers', async () => {
