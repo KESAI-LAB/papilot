@@ -1442,5 +1442,11 @@
   "Unaccepted edits and comments will be lost. Accepted changes stay in your manuscript.": "Nicht übernommene Bearbeitungen und Kommentare gehen verloren. Übernommene Änderungen bleiben in Ihrem Manuskript erhalten.",
   "Stop this task first": "Diese Aufgabe zuerst stoppen",
   "Rerun the original request in a new task. This task stays as it is.": "Die ursprüngliche Anfrage in einer neuen Aufgabe erneut ausführen. Diese Aufgabe bleibt unverändert.",
-  "The last deletion did not finish.": "Der letzte Löschvorgang wurde nicht abgeschlossen."
+  "The last deletion did not finish.": "Der letzte Löschvorgang wurde nicht abgeschlossen.",
+  "Compile this document": "Dieses Dokument kompilieren",
+  "Compile {name}": "{name} kompilieren",
+  "Compiled document": "Kompiliertes Dokument",
+  "Files": "Dateien",
+  "Loading files…": "Dateien werden geladen…",
+  "Repository files": "Repository-Dateien"
 }

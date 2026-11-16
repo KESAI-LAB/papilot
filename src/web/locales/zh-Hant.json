@@ -1442,5 +1442,11 @@
   "Unaccepted edits and comments will be lost. Accepted changes stay in your manuscript.": "未接受的編輯與評論將會遺失。已接受的變更會保留在您的論文原稿中。",
   "Stop this task first": "先停止此任務",
   "Rerun the original request in a new task. This task stays as it is.": "在新任務中重新執行原始請求。此任務保持原樣。",
-  "The last deletion did not finish.": "上次的刪除未完成。"
+  "The last deletion did not finish.": "上次的刪除未完成。",
+  "Compile this document": "編譯此文件",
+  "Compile {name}": "編譯 {name}",
+  "Compiled document": "已編譯的文件",
+  "Files": "檔案",
+  "Loading files…": "正在載入檔案…",
+  "Repository files": "儲存庫檔案"
 }

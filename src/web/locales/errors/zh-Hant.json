@@ -333,5 +333,7 @@
   "This template changed after creation started. Choose another name to start again.": "此範本在開始建立後已變更。請選擇其他名稱以重新開始。",
   "This template version is no longer available. Choose the template again.": "此範本版本已無法使用。請重新選擇範本。",
   "too large": "過大",
-  "unsupported index": "不支援的索引"
+  "unsupported index": "不支援的索引",
+  "Choose a TeX file with \\documentclass and \\begin{document}.": "請選擇包含 \\documentclass 與 \\begin{document} 的 TeX 檔案。",
+  "Could not list the files of this repository.": "無法列出此儲存庫的檔案。"
 }

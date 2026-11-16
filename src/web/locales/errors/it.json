@@ -333,5 +333,7 @@
   "This template changed after creation started. Choose another name to start again.": "Questo modello è cambiato dopo l'avvio della creazione. Scegli un altro nome per ricominciare.",
   "This template version is no longer available. Choose the template again.": "Questa versione del modello non è più disponibile. Scegli di nuovo il modello.",
   "too large": "troppo grande",
-  "unsupported index": "indice non supportato"
+  "unsupported index": "indice non supportato",
+  "Choose a TeX file with \\documentclass and \\begin{document}.": "Scegli un file TeX con \\documentclass e \\begin{document}.",
+  "Could not list the files of this repository.": "Impossibile elencare i file di questo repository."
 }

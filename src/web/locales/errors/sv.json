@@ -333,5 +333,7 @@
   "This template changed after creation started. Choose another name to start again.": "Den här mallen ändrades efter att skapandet påbörjades. Välj ett annat namn för att börja om.",
   "This template version is no longer available. Choose the template again.": "Den här mallversionen är inte längre tillgänglig. Välj mallen igen.",
   "too large": "för stor",
-  "unsupported index": "indexet stöds inte"
+  "unsupported index": "indexet stöds inte",
+  "Choose a TeX file with \\documentclass and \\begin{document}.": "Välj en TeX-fil med \\documentclass och \\begin{document}.",
+  "Could not list the files of this repository.": "Det gick inte att lista filerna i detta arkiv."
 }

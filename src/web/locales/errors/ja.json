@@ -333,5 +333,7 @@
   "This template changed after creation started. Choose another name to start again.": "作成の開始後にこのテンプレートが変更されました。別の名前を選択してやり直してください。",
   "This template version is no longer available. Choose the template again.": "このバージョンのテンプレートは利用できなくなりました。テンプレートをもう一度選択してください。",
   "too large": "サイズが大きすぎます",
-  "unsupported index": "サポートされていないインデックスです"
+  "unsupported index": "サポートされていないインデックスです",
+  "Choose a TeX file with \\documentclass and \\begin{document}.": "\\documentclass と \\begin{document} を含む TeX ファイルを選択してください。",
+  "Could not list the files of this repository.": "このリポジトリのファイル一覧を取得できませんでした。"
 }

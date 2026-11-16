@@ -243,7 +243,7 @@
   "Compilation problems": "Problemi di compilazione",
   "Compilation status unavailable.": "Stato della compilazione non disponibile.",
   "Compiled the paper": "Ha compilato l’articolo",
-  "Compiling the PDF…": "Compilazione del PDF in corso…",
+  "Compiling the PDF…": "Compilazione del PDF…",
   "Complete PDF comparison": "Confronto PDF completo",
   "Completed": "Completato",
   "Component source": "Sorgente del componente",
@@ -1442,5 +1442,11 @@
   "Unaccepted edits and comments will be lost. Accepted changes stay in your manuscript.": "Le modifiche non accettate e i commenti andranno persi. Le modifiche accettate rimangono nel manoscritto.",
   "Stop this task first": "Interrompi prima questa attività",
   "Rerun the original request in a new task. This task stays as it is.": "Riesegui la richiesta originale in una nuova attività. Questa attività rimane così com'è.",
-  "The last deletion did not finish.": "L'ultima eliminazione non è stata completata."
+  "The last deletion did not finish.": "L'ultima eliminazione non è stata completata.",
+  "Compile this document": "Compila questo documento",
+  "Compile {name}": "Compila {name}",
+  "Compiled document": "Documento compilato",
+  "Files": "File",
+  "Loading files…": "Caricamento dei file…",
+  "Repository files": "File del repository"
 }

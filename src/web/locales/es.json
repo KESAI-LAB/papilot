@@ -1442,5 +1442,11 @@
   "Unaccepted edits and comments will be lost. Accepted changes stay in your manuscript.": "Las ediciones y los comentarios no aceptados se perderán. Los cambios aceptados permanecerán en tu manuscrito.",
   "Stop this task first": "Detén esta tarea primero",
   "Rerun the original request in a new task. This task stays as it is.": "Vuelve a ejecutar la solicitud original en una nueva tarea. Esta tarea permanece como está.",
-  "The last deletion did not finish.": "La última eliminación no se completó."
+  "The last deletion did not finish.": "La última eliminación no se completó.",
+  "Compile this document": "Compilar este documento",
+  "Compile {name}": "Compilar {name}",
+  "Compiled document": "Documento compilado",
+  "Files": "Archivos",
+  "Loading files…": "Cargando archivos…",
+  "Repository files": "Archivos del repositorio"
 }

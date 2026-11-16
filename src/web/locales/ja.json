@@ -243,7 +243,7 @@
   "Compilation problems": "コンパイルの問題",
   "Compilation status unavailable.": "コンパイル状態を取得できません。",
   "Compiled the paper": "論文をコンパイルしました",
-  "Compiling the PDF…": "PDF をコンパイル中…",
+  "Compiling the PDF…": "PDFをコンパイル中…",
   "Complete PDF comparison": "PDF 全体の比較",
   "Completed": "完了",
   "Component source": "コンポーネントのソース",
@@ -1442,5 +1442,11 @@
   "Unaccepted edits and comments will be lost. Accepted changes stay in your manuscript.": "未承認の編集とコメントは失われます。承認済みの変更は原稿に残ります。",
   "Stop this task first": "先にこのタスクを停止する",
   "Rerun the original request in a new task. This task stays as it is.": "元のリクエストを新しいタスクで再実行します。このタスクはそのまま残ります。",
-  "The last deletion did not finish.": "前回の削除が完了しませんでした。"
+  "The last deletion did not finish.": "前回の削除が完了しませんでした。",
+  "Compile this document": "このドキュメントをコンパイル",
+  "Compile {name}": "{name}をコンパイル",
+  "Compiled document": "コンパイル済みドキュメント",
+  "Files": "ファイル",
+  "Loading files…": "ファイルを読み込み中…",
+  "Repository files": "リポジトリのファイル"
 }

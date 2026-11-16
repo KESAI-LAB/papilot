@@ -135,7 +135,7 @@ export class Workspace extends EventEmitter {
   private restarting = new Map<string, { id: string; promise: Promise<Task> }>();
   // Each AI review created here compiles its copy with the function its
   // request passed; one resumed after a restart uses prepareReview.
-  private reviewCopies = new Map<string, (worktree: string) => Promise<ReviewSnapshot>>();
+  private reviewCopies = new Map<string, (worktree: string, document?: string) => Promise<ReviewSnapshot>>();
   prepareReview: (task: Task, worktree: string) => Promise<ReviewSnapshot> = async () => { throw new Error('The PDF snapshot for this review is unavailable. Start a new AI review.'); };
   /** The manuscript pages where lines of a paper file print; app.ts connects the manuscript builds. */
   sourcePages: (task: Task, file: string, lines: number[]) => Promise<number[] | null> = async () => null;
@@ -391,7 +391,7 @@ export class Workspace extends EventEmitter {
   // and attachments claimed, and is then prepared in the background (see
   // prepareTask). An AI review passes prepareReview, which reads the PDF of
   // the new task's manuscript copy.
-  async createTask(input: { permissions?: TaskPermissions; prepareReview?: (worktree: string) => Promise<ReviewSnapshot>; projectId: string; title: string; instructions: string; skill?: string; annotations?: string[]; noteContexts?: Record<string, TaskNoteContext>; groupInstructions?: GroupInstructions; attachments?: string[]; agent?: AgentId; model?: string; effort?: string; serviceTier?: string; id: string }) {
+  async createTask(input: { permissions?: TaskPermissions; prepareReview?: (worktree: string, document?: string) => Promise<ReviewSnapshot>; projectId: string; title: string; instructions: string; skill?: string; annotations?: string[]; noteContexts?: Record<string, TaskNoteContext>; groupInstructions?: GroupInstructions; attachments?: string[]; agent?: AgentId; model?: string; effort?: string; serviceTier?: string; id: string }) {
     if (!/^[\w-]{16,64}$/.test(input.id)) throw new Error('Invalid task ID.');
     if (this.store.taskDeleted(input.id)) throw new Error('This task was deleted. Create a new task instead.');
     // A retried request returns its task, preparing it again if that failed;
@@ -573,9 +573,13 @@ export class Workspace extends EventEmitter {
     // restart reuses a copy it has already made. An engine that kept running
     // across a restart may still be making the copy asked for before: wait
     // for it rather than failing the task.
-    let info: { worktree: string; deferred?: boolean };
+    let info: { worktree: string; deferred?: boolean; document?: string | null };
     for (;;) {
-      try { info = await client.post('/api/tasks', { name: task.name, title: task.title, deferred: true }); break; }
+      // A task that knows its document, such as a retry after a failed copy
+      // and a switch of document, is copied for that one again. A switch
+      // while this waited may have just recorded it.
+      const document = this.store.findTask(taskId)?.document ?? task.document;
+      try { info = await client.post('/api/tasks', { name: task.name, title: task.title, deferred: true, ...(document ? { document } : {}) }); break; }
       catch (error) {
         if (this.closing || !/ is being created\. Try again in a moment\.$/.test(errorText(error))) throw error;
         await delay(1000);
@@ -583,8 +587,10 @@ export class Workspace extends EventEmitter {
     }
     let snapshot: ReviewSnapshot | undefined, file = '';
     if (task.mode === 'review') try {
-      const current = task, capture = this.reviewCopies.get(taskId) ?? ((worktree: string) => this.prepareReview(current, worktree));
-      snapshot = await capture(info.worktree);
+      // The copy compiles the document the engine recorded for it, also when
+      // the paper switched to another while it was being made.
+      const document = typeof info.document === 'string' ? info.document : task.document, fresh = this.reviewCopies.get(taskId);
+      snapshot = await (fresh ? fresh(info.worktree, document) : this.prepareReview({ ...task, document }, info.worktree));
       file = await saveReviewText(info.worktree, snapshot);
     } catch (error) {
       // Discard the copy, so a retry copies the manuscript again with the author's fixes.
@@ -598,7 +604,7 @@ export class Workspace extends EventEmitter {
         // The review reads the PDF of this exact copy.
         if (run?.status === 'queued') this.store.saveRun({ ...run, prompt: reviewPrompt(run.prompt, snapshot, file) });
       }
-      this.store.updateTask(taskId, { worktree: info.worktree, deferred: info.deferred === true, ...(snapshot ? { aiReview: { key: snapshot.key } } : {}), status: run?.status === 'queued' ? 'queued' : 'idle', preparation: null, error: null });
+      this.store.updateTask(taskId, { worktree: info.worktree, deferred: info.deferred === true, ...(typeof info.document === 'string' ? { document: info.document } : {}), ...(snapshot ? { aiReview: { key: snapshot.key } } : {}), status: run?.status === 'queued' ? 'queued' : 'idle', preparation: null, error: null });
     });
     this.reviewCopies.delete(taskId);
     this.schedule();

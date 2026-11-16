@@ -1218,5 +1218,15 @@
     "revision": "a0cc5a85da5d49d99289e05adf549f04eb4d575af283f7153cca88e4a3ce1f74",
     "textHash": "815f757ef23c002db4e1dcbac2942d8cc361701125697d25d4b7b95045b50121",
     "model": "gemini-4-argon-medium"
+  },
+  "Choose a TeX file with \\documentclass and \\begin{document}.": {
+    "revision": "450a5f85b4294d92ffc3db69281c39a16bd41453f2f0177516ddd3eb246abcca",
+    "textHash": "0c2a24f2084d13a648406c2e621803eabae90b1afaac4f76b2242c4eaffef74f",
+    "model": "gemini-4-argon-medium"
+  },
+  "Could not list the files of this repository.": {
+    "revision": "49fefd2865a005d0735b0ecb6209122becf7db6365f157e24a89b6a6fd934963",
+    "textHash": "861cf3aecadb3a584951e0025d029de723417ddfb4dcbe4a70bee1cc718975f7",
+    "model": "gemini-4-argon-medium"
   }
 }

@@ -243,7 +243,7 @@
   "Compilation problems": "Kompileringsproblem",
   "Compilation status unavailable.": "Kompileringsstatus är inte tillgänglig.",
   "Compiled the paper": "Kompilerade artikeln",
-  "Compiling the PDF…": "Kompilerar PDF-filen…",
+  "Compiling the PDF…": "Kompilerar PDF…",
   "Complete PDF comparison": "Fullständig PDF-jämförelse",
   "Completed": "Slutförd",
   "Component source": "Komponentkälla",
@@ -1442,5 +1442,11 @@
   "Unaccepted edits and comments will be lost. Accepted changes stay in your manuscript.": "Oaccepterade redigeringar och kommentarer går förlorade. Accepterade ändringar blir kvar i ditt manuskript.",
   "Stop this task first": "Stoppa denna uppgift först",
   "Rerun the original request in a new task. This task stays as it is.": "Kör om den ursprungliga förfrågan i en ny uppgift. Denna uppgift förblir som den är.",
-  "The last deletion did not finish.": "Den senaste borttagningen slutfördes inte."
+  "The last deletion did not finish.": "Den senaste borttagningen slutfördes inte.",
+  "Compile this document": "Kompilera detta dokument",
+  "Compile {name}": "Kompilera {name}",
+  "Compiled document": "Kompilerat dokument",
+  "Files": "Filer",
+  "Loading files…": "Läser in filer…",
+  "Repository files": "Arkivfiler"
 }

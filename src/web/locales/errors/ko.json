@@ -333,5 +333,7 @@
   "This template changed after creation started. Choose another name to start again.": "생성 시작 후 템플릿이 변경되었습니다. 다시 시작하려면 다른 이름을 선택하세요.",
   "This template version is no longer available. Choose the template again.": "이 템플릿 버전은 더 이상 사용할 수 없습니다. 템플릿을 다시 선택하세요.",
   "too large": "너무 큼",
-  "unsupported index": "지원되지 않는 인덱스"
+  "unsupported index": "지원되지 않는 인덱스",
+  "Choose a TeX file with \\documentclass and \\begin{document}.": "\\documentclass와 \\begin{document}가 포함된 TeX 파일을 선택하세요.",
+  "Could not list the files of this repository.": "이 저장소의 파일 목록을 불러올 수 없습니다."
 }
