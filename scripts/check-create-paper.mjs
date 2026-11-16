@@ -86,6 +86,84 @@ try {
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
     await context.close();
   }
+  // Universe templates: a grid before the details, filters, search, and links from the website.
+  const templates = [
+    { id: 'thuthesis', version: '7.6.0', name: 'Tsinghua University Thesis', zh: { name: '清华大学学位论文' }, category: 'thesis', tags: ['tsinghua'], organization: 'Tsinghua University', engine: 'xelatex', thumbnail: origin + '/favicon.png' },
+    { id: 'neurips', version: '2026', name: 'NeurIPS 2026', category: 'conference', tags: ['machine learning'], venue: { name: 'NeurIPS', year: 2026 }, engine: 'pdflatex', thumbnail: origin + '/favicon.png' },
+    { id: 'acm-pacmpl', version: '2.21', name: 'PACMPL (POPL, PLDI, ICFP, OOPSLA)', category: 'conference', tags: ['acm'], organization: 'ACM', engine: 'pdflatex', thumbnail: origin + '/favicon.png' },
+    // A conference that reuses a shared template is a row, not another first page.
+    { id: 'pldi', version: '2.21', name: 'PLDI 2027', description: 'Programming Language Design and Implementation', category: 'conference', tags: ['PLDI'], venue: { name: 'PLDI', year: 2027, ccf: 'A', full: 'Programming Language Design and Implementation' }, template: 'acm-pacmpl', engine: 'pdflatex', thumbnail: origin + '/favicon.png' },
+    { id: 'popl', version: '2.21', name: 'POPL 2027', description: 'Principles of Programming Languages', category: 'conference', tags: ['POPL'], venue: { name: 'POPL', year: 2027, ccf: 'A', full: 'Principles of Programming Languages' }, template: 'acm-pacmpl', engine: 'pdflatex', thumbnail: origin + '/favicon.png' },
+  ];
+  for (const link of [null, { id: 'neurips', version: '2026' }, { id: 'neurips', version: '2025' }]) {
+    const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 800 } });
+    const requests = [], state = { version: '0.10.4', csrf: 'fixture', projects: [], tasks: [], requests: [], runtime: { connected: true, authenticated: false, account: null, error: null, models: [] } };
+    // A saved blank-paper draft must not be created while a linked template is still loading.
+    if (link) await context.addInitScript(() => localStorage.setItem('papilot:create-paper', JSON.stringify({ name: 'Old draft', parent: '/home/author', template: null })));
+    if (link) await context.addInitScript(link => { let pending = link; window.papilotDesktop = { platform: 'darwin', minimize() {}, maximize() {}, close() {}, chooseDirectory: async () => null, takeNewPaper: async () => { const value = pending; pending = null; return value; }, onNewPaper: () => () => {} }; }, link);
+    await context.route('**/api/**', async route => {
+      const url = new URL(route.request().url());
+      if (url.pathname === '/api/universe') { if (link) await new Promise(resolve => setTimeout(resolve, 1500)); return route.fulfill({ json: { templates } }); }
+      if (url.pathname === '/api/projects/create-defaults') return route.fulfill({ json: { parent: '/home/author' } });
+      if (url.pathname === '/api/projects/create') { const body = route.request().postDataJSON(); requests.push(body); return route.fulfill({ status: 400, json: { error: 'Stop here.' } }); }
+      if (url.pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
+      if (url.pathname === '/api/state') return route.fulfill({ json: state });
+      if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
+      return route.fulfill({ json: {} });
+    });
+    const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
+    await page.goto(origin);
+    const dialog = page.getByRole('dialog', { name: 'Create a new paper', exact: true });
+    const chosen = dialog.locator('.template-chosen');
+    if (link) {
+      await dialog.locator('.template-card.placeholder').first().waitFor();
+      assert.equal(await dialog.getByRole('button', { name: 'Create paper', exact: true }).count(), 0, 'Create waits for the linked template');
+    }
+    if (link?.version === '2025') {
+      // A version the index no longer has asks for a new choice instead of substituting one.
+      await dialog.getByRole('list', { name: 'Templates' }).getByRole('listitem').nth(2).waitFor();
+      assert.equal(await dialog.getByRole('button', { name: 'Create paper', exact: true }).count(), 0);
+      await dialog.getByRole('listitem').filter({ hasText: 'NeurIPS 2026' }).click();
+    } else if (link) {
+      await chosen.getByText('pdfLaTeX', { exact: true }).waitFor(); assert.equal(await chosen.locator('strong').innerText(), 'NeurIPS 2026');
+      assert.equal(await dialog.getByRole('textbox', { name: 'Paper name', exact: true }).isVisible(), true, 'A website link opens the details with its template');
+    } else {
+      await page.getByRole('button', { name: 'New paper', exact: true }).first().click();
+      const grid = dialog.getByRole('list', { name: 'Templates' });
+      await grid.getByRole('listitem').nth(2).waitFor();
+      assert.deepEqual(await grid.getByRole('listitem').allInnerTexts().then(items => items.map(item => item.split('\n')[0])), ['Blank paper', 'Tsinghua University Thesis', 'NeurIPS 2026', 'PACMPL (POPL, PLDI, ICFP, OOPSLA)']);
+      const venues = dialog.getByRole('group', { name: 'Conferences' }).locator('.template-venue-name');
+      assert.equal(await venues.count(), 0, 'Conferences are listed only in their group or when a search matches them');
+      await dialog.getByRole('button', { name: 'Conferences', exact: true }).click();
+      assert.equal(await grid.getByRole('listitem').count(), 0);
+      assert.deepEqual(await venues.allInnerTexts(), ['NeurIPS 2026', 'PLDI 2027', 'POPL 2027'], 'Conferences are alphabetical, not ordered by a ranking');
+      await dialog.getByRole('button', { name: 'All', exact: true }).click();
+      // A search matches a conference by its own name, not by the shared template's name.
+      await dialog.getByRole('searchbox', { name: 'Search templates' }).fill('pldi');
+      assert.deepEqual(await venues.allInnerTexts(), ['PLDI 2027']);
+      await venues.first().click();
+      await chosen.getByText('PACMPL (POPL, PLDI, ICFP, OOPSLA) · pdfLaTeX', { exact: true }).waitFor();
+      await chosen.getByRole('button', { name: 'Change…', exact: true }).click();
+      await dialog.getByRole('searchbox', { name: 'Search templates' }).fill('tsinghua');
+      assert.deepEqual(await grid.getByRole('listitem').allInnerTexts().then(items => items.map(item => item.split('\n')[0])), ['Tsinghua University Thesis']);
+      await page.setViewportSize({ width: 360, height: 740 });
+      assert.ok(await dialog.locator('.modal').evaluate(element => element.scrollWidth <= element.clientWidth + 1), 'The template grid fits a phone');
+      await page.screenshot({ path: 'test-results/create-paper-templates-mobile.png', animations: 'disabled' });
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await grid.getByRole('listitem').first().click();
+      await chosen.getByText('XeLaTeX', { exact: true }).waitFor();
+      await chosen.getByRole('button', { name: 'Change…', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Theses', exact: true }).waitFor();
+      await dialog.getByRole('searchbox', { name: 'Search templates' }).fill('');
+      await grid.getByRole('listitem').filter({ hasText: 'Tsinghua' }).click();
+      await page.screenshot({ path: 'test-results/create-paper-templates.png', animations: 'disabled' });
+    }
+    await dialog.getByRole('textbox', { name: 'Paper name', exact: true }).fill('Thesis');
+    await dialog.getByRole('button', { name: 'Create paper', exact: true }).click();
+    await dialog.getByRole('alert').filter({ hasText: 'Stop here.' }).waitFor();
+    assert.deepEqual(requests.at(-1).template, link ? { id: 'neurips', version: '2026' } : { id: 'thuthesis', version: '7.6.0' });
+    await context.close();
+  }
   assert.deepEqual(errors, []);
-  console.log('PASS: Create paper from empty state and switcher, native Windows/WSL picker paths, browser host location, mobile layout, retry across reload, and workspace compilation errors');
+  console.log('PASS: Create paper from empty state and switcher, native Windows/WSL picker paths, browser host location, mobile layout, retry across reload, workspace compilation errors, Universe templates and website links');
 } finally { await browser.close(); await server.close(); }
