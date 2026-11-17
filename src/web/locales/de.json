@@ -1459,5 +1459,22 @@
   "Paper or repository link": "Link zum Paper oder Repository",
   "Paper source": "Paper-Quelle",
   "Paste a link…": "Link einfügen…",
-  "ZIP": "ZIP"
+  "ZIP": "ZIP",
+  "Archive all tasks?": "Alle Aufgaben archivieren?",
+  "{n} tasks failed.": "{n} Aufgaben fehlgeschlagen.",
+  "Delete all archived tasks…": "Alle archivierten Aufgaben löschen…",
+  "Delete all current tasks…": "Alle aktuellen Aufgaben löschen…",
+  "{n} tasks": "{n} Aufgaben",
+  "Delete all current tasks?": "Alle aktuellen Aufgaben löschen?",
+  "Archive all tasks…": "Alle Aufgaben archivieren…",
+  "Cannot be undone. Manuscript changes are kept.": "Nicht rückgängig zu machen. Änderungen im Manuskript bleiben erhalten.",
+  "Archiving…": "Wird archiviert…",
+  "Delete all archived tasks?": "Alle archivierten Aufgaben löschen?",
+  "Archive all": "Alle archivieren",
+  "Task progress": "Aufgabenfortschritt",
+  "Task list actions": "Aktionen für die Aufgabenliste",
+  "{n} task": "{n} Aufgabe",
+  "{n} task failed.": "{n} Aufgabe fehlgeschlagen.",
+  "Delete all": "Alle löschen",
+  "{done} of {total}": "{done} von {total}"
 }
