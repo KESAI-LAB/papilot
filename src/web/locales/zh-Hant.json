@@ -1443,5 +1443,14 @@
   "Files": "檔案",
   "Loading files…": "正在載入檔案…",
   "Repository files": "儲存庫檔案",
-  "Uses your Pi CLI, providers, skills and extensions. Tools run on the host with Pi’s permissions.": "使用你的 Pi CLI、模型供應商、技能和擴充功能。工具依照 Pi 的權限設定在主機上執行。"
+  "Uses your Pi CLI, providers, skills and extensions. Tools run on the host with Pi’s permissions.": "使用你的 Pi CLI、模型供應商、技能和擴充功能。工具依照 Pi 的權限設定在主機上執行。",
+  "Bottom margin": "下邊距",
+  "Crop margins": "裁剪頁邊距",
+  "Left margin": "左邊距",
+  "Page {page} of {pages}": "第 {page} 頁，共 {pages} 頁",
+  "Reset": "重設",
+  "Right margin": "右邊距",
+  "The page preview could not be loaded.": "無法載入頁面預覽。",
+  "Top margin": "上邊距",
+  "Drag the edges to crop.": "拖曳邊緣裁剪。"
 }

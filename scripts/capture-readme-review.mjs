@@ -145,6 +145,7 @@ Starting a task every ten minutes, each taking six, gives $A = 0.6$ and $C(2, A)
       if (p.endsWith('/events')) return route.fulfill({ contentType: 'text/event-stream', body: ': preview\n\n' });
       if (p.endsWith('/skills')) return json({ skills: [] });
       if (p === '/api/projects/paper/files') return json({ document: 'paper/main.tex', files: [{ path: 'paper/main.tex', root: true }, { path: METHOD }] });
+      if (p.endsWith('/files')) return json({ document: null, files: [] });
       if (p.endsWith('/items')) return json({ items: [
         { id: 'request', taskId: task.id, type: 'user', text: text.request, createdAt: now },
         { id: 'response', taskId: task.id, type: 'assistant', text: text.response, createdAt: now + 1000 },

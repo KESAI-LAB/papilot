@@ -6,6 +6,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Added
 
+- **Crop PDF margins for mobile reading.** Choose **Crop margins** near the end of the PDF tool rail, drag the four edges in the page-shaped preview, then apply the crop to every page. The preview fills the available screen space. **Fit width** fits the remaining area, and each document remembers its crop on this device across reopening and recompilation. **Reset** restores the full page. Notes and source locations stay aligned, and exported PDFs keep their original margins. ([#194](https://github.com/PapilotAI/papilot/issues/194))
 - Support the native Pi CLI as a separate agent alongside Papilot Writer, using existing Pi providers, skills and extensions, with streamed tools and replies, image attachments, extension dialogs and resumable task sessions ([discussion #192](https://github.com/PapilotAI/papilot/discussions/192)). Requires Pi 1.5.1 or newer.
 
 - **Browse the repository and compile any of its documents.** **Manuscript** in the sidebar names the document it compiles; select the name to list the paper's repository, where any text file opens in the source editor beside the PDF. When a repository holds several root documents, such as a thesis, its slides and a response letter, the play button on a document's row compiles it instead of the current one. Each document keeps its own build settings, notes and reading position, and a task keeps compiling the document it was started on. ([#188](https://github.com/PapilotAI/papilot/pull/188))
@@ -14,6 +15,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Changed
 
+- Simplify the PDF toolbars with one separator before Undo and Redo, keeping the other tools together.
 - Add a [Universe](https://papilot.ai/universe/) template-library link with a blue planet icon beside the homepage logo, visible on desktop and phones. Simplify the left navigation to Universe and Blog, and add translated template links below the downloads and in the footer. The orbit turns once on hover or keyboard focus and respects reduced motion; the online demo uses a play icon in narrow headers.
 - Choose any agent’s model from the existing model menu below the chat. A restart icon marks models that start a new task. Models from the current agent keep the conversation; choosing another agent automatically stops the current task and reruns its original request in a linked replacement task, preserving unsent drafts.
 - **New paper and Open paper.** The paper menu and empty screen now say **New paper…** and **Open paper…** (a folder icon on every platform), and the desktop File menu says **Open Paper…**, instead of the easily confused *Create a new paper* and *Add paper…*. The new-paper dialog shows the folder it will create in place of explanatory text, and the open dialog is reduced to **Choose folder**, **Choose ZIP** and the drop zone. ([#182](https://github.com/PapilotAI/papilot/pull/182))
@@ -24,6 +26,8 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 - **Claude starts with default permissions on native Windows.** Claude and GLM use **Accept edits** with an explicit **No sandbox** explanation instead of requiring an unavailable command sandbox. Native permission checks remain active: the CLI declines requests needing approval, while the SDK asks in Papilot. Sandboxed edits remain enforced on macOS, Linux and WSL. ([#167](https://github.com/PapilotAI/papilot/issues/167))
 - **Codex tasks can be deleted on native Windows.** While a task's conversation stays loaded, Codex keeps programs such as MCP servers running inside the task folder, and Windows cannot delete a folder another program is using. Deleting a task now archives its Codex conversation first, which stops them. If another program still holds the folder, the error shows its path, and **Retry deletion** finishes the cleanup once that program closes it, including for tasks already stuck at **Deleting task**. ([#179](https://github.com/PapilotAI/papilot/issues/179))
 - **Task titles and commit messages generate on native Windows with MCP servers configured.** Codex runs your MCP servers, such as the Codex app's `node_repl`, in the folder of each one-off conversation that writes a title or commit message, and Papilot never ended those conversations. Windows could not remove the folder, so task titles failed to generate and **Generate commit message** reported `EPERM`. Papilot now ends each one-off conversation when it finishes, so on every platform those MCP servers stop instead of running until Codex restarts. ([#186](https://github.com/PapilotAI/papilot/pull/186))
+
+- Keep PDF page jumps when a pending panel resize reapplies Fit width, instead of restoring the page shown before the jump. ([#195](https://github.com/PapilotAI/papilot/pull/195))
 
 ### Changed
 

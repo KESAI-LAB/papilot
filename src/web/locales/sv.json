@@ -1443,5 +1443,14 @@
   "Files": "Filer",
   "Loading files…": "Läser in filer…",
   "Repository files": "Arkivfiler",
-  "Uses your Pi CLI, providers, skills and extensions. Tools run on the host with Pi’s permissions.": "Använder din Pi CLI, dina leverantörer, färdigheter och tillägg. Verktyg körs på värddatorn med Pis behörigheter."
+  "Uses your Pi CLI, providers, skills and extensions. Tools run on the host with Pi’s permissions.": "Använder din Pi CLI, dina leverantörer, färdigheter och tillägg. Verktyg körs på värddatorn med Pis behörigheter.",
+  "Bottom margin": "Nedre marginal",
+  "Crop margins": "Beskär marginaler",
+  "Left margin": "Vänster marginal",
+  "Page {page} of {pages}": "Sida {page} av {pages}",
+  "Reset": "Återställ",
+  "Right margin": "Höger marginal",
+  "The page preview could not be loaded.": "Det gick inte att läsa in sidförhandsvisningen.",
+  "Top margin": "Övre marginal",
+  "Drag the edges to crop.": "Dra i kanterna för att beskära."
 }

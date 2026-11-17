@@ -184,6 +184,14 @@ Messages and queued runs are saved in `papilot.sqlite` in the data folder. Closi
 
 Turn on **Settings → Notifications** to receive browser notifications while Papilot is in another tab or app. Under **Notify me about**, choose **Push** or **Off** separately for questions, approval requests, reviews ready, tasks finished without changes to review, and task errors. Choices are saved in this browser and kept when the main switch is turned off. Clicking a notification opens the task. Browsers allow notifications only on HTTPS or localhost, so remotely use the Tailscale HTTPS address.
 
+### Crop PDF margins
+
+Choose **Crop margins** near the end of the PDF tool rail, before Undo and Redo (the floating bottom toolbar on phones, or the left toolbar on desktop). **Find** stays at the start. Narrow desktop panels and read-only PDFs keep these controls in the top bar. The crop preview follows the page proportions and fits the available screen space. Drag its four edges, or focus an edge and use the arrow keys. Use the page arrows to check the crop on other pages, then choose the checkmark (**Apply**) in the title bar to apply it to the whole document and fit the remaining width.
+
+<img src="assets/pdf-crop-editor.png" alt="Adjusting the four PDF margins on a phone" width="280"> <img src="assets/pdf-crop-reading.png" alt="Reading the cropped PDF at Fit width" width="280">
+
+The crop is saved for this document on the current device, including after reopening or recompiling it. The **×** (**Cancel**) discards your adjustments; the curved arrow (**Reset**) immediately restores the full page. Cropping changes the reading view only: PDF exports, LaTeX layout, annotations and source coordinates keep their original page geometry. Separate crops for odd and even pages and automatic margin detection are not included.
+
 ### Edit a passage yourself
 
 In a task review, expand **LaTeX** under a change and select the pencil (**Edit**) beside the filename. The existing source area switches from the diff to editable current source, with syntax highlighting for commands, formulas, brackets and comments. It loads the complete passage even when the displayed diff is shortened. The checkmark (**Save and update PDF**, also ⌘Enter on macOS or Ctrl+Enter elsewhere) saves it in the task's copy, restores the diff view and rebuilds the review without starting an agent. Review and apply the result through the usual task workflow. Closing the editor with **×** returns to the diff and keeps an unfinished draft in this browser, including across reloads; the curved arrow (**Reset to saved source**) replaces the draft with the current saved text. Hover over an icon to see its action.

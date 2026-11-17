@@ -1443,5 +1443,14 @@
   "Files": "Archivos",
   "Loading files…": "Cargando archivos…",
   "Repository files": "Archivos del repositorio",
-  "Uses your Pi CLI, providers, skills and extensions. Tools run on the host with Pi’s permissions.": "Usa tu CLI de Pi, proveedores, habilidades y extensiones. Las herramientas se ejecutan en el equipo anfitrión con los permisos de Pi."
+  "Uses your Pi CLI, providers, skills and extensions. Tools run on the host with Pi’s permissions.": "Usa tu CLI de Pi, proveedores, habilidades y extensiones. Las herramientas se ejecutan en el equipo anfitrión con los permisos de Pi.",
+  "Bottom margin": "Margen inferior",
+  "Crop margins": "Recortar márgenes",
+  "Left margin": "Margen izquierdo",
+  "Page {page} of {pages}": "Página {page} de {pages}",
+  "Reset": "Restablecer",
+  "Right margin": "Margen derecho",
+  "The page preview could not be loaded.": "No se pudo cargar la vista previa de la página.",
+  "Top margin": "Margen superior",
+  "Drag the edges to crop.": "Arrastra los bordes para recortar."
 }

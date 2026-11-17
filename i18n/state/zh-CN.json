@@ -3,5 +3,50 @@
     "revision": "a9fff0a20cda2a7b3fbe5ea0e1d71ae2f0dd51c0c3575b5ee81d82384e54c6fc",
     "textHash": "4a91a9751eee710153d283fb247e2316687a1b29cb836f8ce49ada8974aa4319",
     "model": "manual"
+  },
+  "Bottom margin": {
+    "revision": "ad3cd6139bf9a7d75fa71b55a81bc410b4c98aa8a5a129f862be0d6729e504f6",
+    "textHash": "e5ec19adfc709631cf6e2e68a21ec2a0d481853e1feaf14a9bbf6a95f665871b",
+    "model": "codex"
+  },
+  "Crop margins": {
+    "revision": "6e5e39895a46548c76abb1952b02e219677e66b9ba6b94d0e6a61277b70281e3",
+    "textHash": "09a0f095cad25eed057b8e028c4ae61b0bab4d7740f0833785fd9318844bf553",
+    "model": "codex"
+  },
+  "Left margin": {
+    "revision": "b010bbdcd70da5fcd1335b95311a9bd8584f9e0a941d8d6afc36ea05891d3cb9",
+    "textHash": "d3135e07741619e0fd66c45cf3ec94147f50b8c37b98a3cc137f996ad4ccc248",
+    "model": "codex"
+  },
+  "Page {page} of {pages}": {
+    "revision": "32895acafd3f50d96c20a636378fcecb7a23df2c55569cd9e9756878b0588f55",
+    "textHash": "19b3956b893581ec179a9fb1cffb2cab7052a3c36092b0d807d0a1acfd718f4f",
+    "model": "codex"
+  },
+  "Reset": {
+    "revision": "e8b339e2f67a9509c32c8e245ab05a9ae0154d467c3b5509941dc3f3e0145308",
+    "textHash": "cb5d682bac3d1a2d0012ad9d472f38630b60b4f2849d99b2ae3b4d109a962d87",
+    "model": "codex"
+  },
+  "Right margin": {
+    "revision": "4d238615ff09f6de5a7688c079c498ed9142289596b1b6f4c7523d9b53c34d40",
+    "textHash": "994450ecaf84e7e4213367e8a11f82a1f09461fe8a805b3b37987d4f22fa3f00",
+    "model": "codex"
+  },
+  "The page preview could not be loaded.": {
+    "revision": "be40fad8d085dcb6c1004486c8f2cfc24426dab663a0afcc1b5967ba65cb0458",
+    "textHash": "949a70261f18e7937d2eb83fc1fa69477d40a11d1b6bfebd73bbab584bd3ef6c",
+    "model": "codex"
+  },
+  "Top margin": {
+    "revision": "ad0e057992e15fe1705cabeb859748c2a5e2bec4cfea50869bb0945d2f08966b",
+    "textHash": "15bb07b63b706c6c20ed04b3dd8141cf75759c8c3f9d4d14e53e5eb6bab722bb",
+    "model": "codex"
+  },
+  "Drag the edges to crop.": {
+    "revision": "ab62e43295d3d6b9c13905ade3b983f66893cb30b6fd86a9072fd80946ea1392",
+    "textHash": "1bb13ba10cca8f190e8e4b615b52a6a08fa56a3fae3191310faea75aea6a8e92",
+    "model": "codex"
   }
 }
