@@ -2,7 +2,7 @@
 
 <img src="../assets/wordmark.svg#gh-light-mode-only" width="220" height="69" alt="Papilot"><img src="../assets/wordmark-dark.svg#gh-dark-mode-only" width="220" height="69" alt="Papilot"><br>**Nästa generations AI-drivna LaTeX-redigerare**
 
-# Läs eller skriv inte `.tex`<br>Arbeta direkt i <img src="../assets/pdf.svg" width="34" height="41" align="absmiddle" alt="PDF">
+<h2>Läs eller skriv inte <code>.tex</code><br>Arbeta direkt i <img src="../assets/pdf.svg" width="22" height="31" align="absmiddle" alt="PDF"></h2>
 
 Ett **nytt paradigm** för ansvarsfullt skrivande och typsättning med AI.
 

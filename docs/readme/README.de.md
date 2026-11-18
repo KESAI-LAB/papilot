@@ -2,7 +2,7 @@
 
 <img src="../assets/wordmark.svg#gh-light-mode-only" width="220" height="69" alt="Papilot"><img src="../assets/wordmark-dark.svg#gh-dark-mode-only" width="220" height="69" alt="Papilot"><br>**KI-LaTeX-Editor der nächsten Generation**
 
-# Lesen oder schreiben Sie kein `.tex`<br>Arbeiten Sie direkt am <img src="../assets/pdf.svg" width="34" height="41" align="absmiddle" alt="PDF">
+<h2>Lesen oder schreiben Sie kein <code>.tex</code><br>Arbeiten Sie direkt am <img src="../assets/pdf.svg" width="22" height="31" align="absmiddle" alt="PDF"></h2>
 
 Ein **neues Paradigma** für verantwortungsvolles Schreiben und Setzen mit KI.
 

@@ -2,7 +2,7 @@
 
 <img src="../assets/wordmark.svg#gh-light-mode-only" width="220" height="69" alt="Papilot"><img src="../assets/wordmark-dark.svg#gh-dark-mode-only" width="220" height="69" alt="Papilot"><br>**下一代 AI LaTeX 编辑器**
 
-# 不必读写 `.tex`<br>直接在 <img src="../assets/pdf.svg" width="34" height="41" align="absmiddle" alt="PDF"> 上工作
+<h2>不必读写 <code>.tex</code><br>直接在 <img src="../assets/pdf.svg" width="22" height="31" align="absmiddle" alt="PDF"> 上工作</h2>
 
 用 AI 负责任地写作与排版的**新范式**。
 

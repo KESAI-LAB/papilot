@@ -2,7 +2,7 @@
 
 <img src="../assets/wordmark.svg#gh-light-mode-only" width="220" height="69" alt="Papilot"><img src="../assets/wordmark-dark.svg#gh-dark-mode-only" width="220" height="69" alt="Papilot"><br>**次世代 AI LaTeX エディタ**
 
-# `.tex` の読み書きは不要<br><img src="../assets/pdf.svg" width="34" height="41" align="absmiddle" alt="PDF"> 上で直接作業
+<h2><code>.tex</code> の読み書きは不要<br><img src="../assets/pdf.svg" width="22" height="31" align="absmiddle" alt="PDF"> 上で直接作業</h2>
 
 AI を用いた責任ある執筆と組版のための**新しいパラダイム**。
 

@@ -2,7 +2,7 @@
 
 <img src="../assets/wordmark.svg#gh-light-mode-only" width="220" height="69" alt="Papilot"><img src="../assets/wordmark-dark.svg#gh-dark-mode-only" width="220" height="69" alt="Papilot"><br>**차세대 AI LaTeX 편집기**
 
-# `.tex`을 읽거나 직접 작성하지 마세요<br>그저 <img src="../assets/pdf.svg" width="34" height="41" align="absmiddle" alt="PDF"> 위에서 작업하세요
+<h2><code>.tex</code>을 읽거나 직접 작성하지 마세요<br>그저 <img src="../assets/pdf.svg" width="22" height="31" align="absmiddle" alt="PDF"> 위에서 작업하세요</h2>
 
 AI와 함께하는 책임감 있는 집필 및 조판의 **새로운 패러다임**.
 

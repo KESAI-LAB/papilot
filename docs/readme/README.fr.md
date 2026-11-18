@@ -2,7 +2,7 @@
 
 <img src="../assets/wordmark.svg#gh-light-mode-only" width="220" height="69" alt="Papilot"><img src="../assets/wordmark-dark.svg#gh-dark-mode-only" width="220" height="69" alt="Papilot"><br>**Éditeur LaTeX IA de nouvelle génération**
 
-# Ne lisez ni n'écrivez de `.tex`<br>Travaillez directement sur le <img src="../assets/pdf.svg" width="34" height="41" align="absmiddle" alt="PDF">
+<h2>Ne lisez ni n'écrivez de <code>.tex</code><br>Travaillez directement sur le <img src="../assets/pdf.svg" width="22" height="31" align="absmiddle" alt="PDF"></h2>
 
 Un **nouveau paradigme** pour une rédaction et une composition responsables avec l'IA.
 

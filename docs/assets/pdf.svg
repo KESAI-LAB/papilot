@@ -1,4 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="40" height="48" viewBox="0 0 40 48" fill="none" role="img" aria-labelledby="title">
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="56" viewBox="0 0 40 56" fill="none" role="img" aria-labelledby="title">
+  <!-- The empty band below the page lifts it from the x-height to the cap
+       height when a heading aligns it with align="absmiddle". -->
   <title id="title">PDF</title>
   <!-- The classic PDF document: a red page with a folded corner and the
        Acrobat swirl. Glyph from Simple Icons (adobeacrobatreader, CC0 path
