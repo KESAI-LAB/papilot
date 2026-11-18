@@ -51,6 +51,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Fixed
 
+- Finish preparing a review as soon as its main PDF comparison is ready. Alternative wording previews load in the background without delaying review, application or commit; obsolete preview errors no longer interfere with later decisions.
 - Keep new PDF notes and their TeX locations responsive while grouping comments by section. Reuse the outline and existing assignments for each PDF version, and read only pages containing new or moved marks.
 - Keep the Overleaf project-picker heading on one line beside search, including Chinese labels; let controls wrap when space is limited.
 - Keep space above task search while the workspace loads or no paper is open, so the field does not touch the sidebar divider.
