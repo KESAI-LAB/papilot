@@ -18,6 +18,8 @@ import { ACP_PROFILES, AcpAgent } from './acp.ts';
 import { CursorAgent } from './cursor.ts';
 import { GrokAgent } from './grok.ts';
 import { PiAgent } from './pi.ts';
+import { CodeBuddyAgent } from './codebuddy.ts';
+import { WorkBuddyAgent } from './workbuddy.ts';
 import { WriterAgent } from './writer/agent.ts';
 import type { CompiledPaper } from './writer/build-map.ts';
 import { fileEdit } from './writer/edits.ts';
@@ -252,7 +254,9 @@ export class Workspace extends EventEmitter {
     this.attachments = new Attachments(store);
     this.agents = { papilot: others.papilot || new WriterAgent(), pi: others.pi || new PiAgent(), codex, claude: others.claude || new ClaudeAgent(), cursor: others.cursor || new CursorAgent(), copilot: others.copilot || new AcpAgent(ACP_PROFILES.copilot), grok: others.grok || new GrokAgent(), antigravity: others.antigravity || new AntigravityAgent(),
       kimi: others.kimi || new AcpAgent(ACP_PROFILES.kimi), glm: others.glm || new GlmAgent(), deepseek: others.deepseek || new AcpAgent(ACP_PROFILES.deepseek),
-      qwen: others.qwen || new AcpAgent(ACP_PROFILES.qwen), opencode: others.opencode || new AcpAgent(ACP_PROFILES.opencode), collaboration: others.collaboration || new Codex() };
+      qwen: others.qwen || new AcpAgent(ACP_PROFILES.qwen), opencode: others.opencode || new AcpAgent(ACP_PROFILES.opencode),
+      qoder: others.qoder || new AcpAgent(ACP_PROFILES.qoder), codebuddy: others.codebuddy || new CodeBuddyAgent(), workbuddy: others.workbuddy || new WorkBuddyAgent(),
+      collaboration: others.collaboration || new Codex() };
     this.runtimes.collaboration.hidden = !this.collaborationEnabled;
     store.on('change', () => this.emit('change'));
     for (const id of AGENTS) {
@@ -473,6 +477,7 @@ export class Workspace extends EventEmitter {
     }
     if (input.agent === 'collaboration' && !this.collaborationEnabled) throw new Error('Enable collaboration mode in Settings → About Papilot → Experiments first.');
     if (input.agent === 'collaboration' && input.prepareReview) throw new Error('Choose Codex for an AI review. Collaboration mode edits annotations.');
+    if (input.prepareReview) this.requireReviewAgent(input.agent || 'codex');
     this.validateTaskPermissions(input.permissions ?? 'workspace', input.agent || 'codex', Boolean(input.prepareReview));
     if (input.prepareReview && (input.annotations?.length || input.attachments?.length)) throw new Error('AI review uses the manuscript PDF. Start a separate editing task to send notes or attachments.');
     // Pin the model shown to the author, including for clients using the default.
@@ -535,6 +540,7 @@ export class Workspace extends EventEmitter {
     }
     if (input.agent === 'collaboration' && !this.collaborationEnabled) throw new Error('Enable collaboration mode before selecting it.');
     if (input.agent === 'collaboration' && original.mode === 'review') throw new Error('Choose Codex for an AI review. Collaboration mode edits annotations.');
+    if (original.mode === 'review') this.requireReviewAgent(input.agent);
     const runtime = this.runtimes[input.agent];
     if (!runtime?.connected || !runtime.authenticated) throw new Error('Connect and sign in to the destination agent before restarting.');
     const model = runtime.models.find(model => input.model ? model.id === input.model : model.isDefault);
@@ -614,6 +620,7 @@ export class Workspace extends EventEmitter {
   // Retry after a failed preparation; any other task is returned as it is.
   retryTask(taskId: string) {
     const task = this.store.task(taskId);
+    if (task.mode === 'review') this.requireReviewAgent(this.agentOf(task));
     if (task.preparation && task.status === 'failed') void this.prepareTask(taskId);
     return this.store.task(taskId);
   }
@@ -818,6 +825,9 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   }
   private async startRun(run: Run) {
     let task = this.store.task(run.taskId);
+    // Saved reviews can predate an adapter's capability check. Refuse them
+    // before loading a thread or sending a prompt, including loaded sessions.
+    if (task.mode === 'review') this.requireReviewAgent(this.agentOf(task));
     if (task.titleSource === 'prompt' && !task.titleGeneration) {
       try { this.requestTaskTitle(task.id); } catch { /* Naming remains optional when the agent reconnects. */ }
     }
@@ -1645,16 +1655,20 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   // The agent that writes a commit message or resolves a merge: the one the
   // author chose, or else the first that is signed in, with the chosen model
   // or the default one; light asks for the agent's small model when it has one.
-  private helper(choice: { agent?: AgentId; model?: string }, task: string, light = false) {
-    const usable = (id: AgentId) => this.agents[id].ready && this.runtimes[id].authenticated;
+  private helper(choice: { agent?: AgentId; model?: string }, task: string, options: { light?: boolean; readOnly?: boolean } = {}) {
+    const usable = (id: AgentId) => this.agents[id].ready && this.runtimes[id].authenticated && (!options.readOnly || this.agents[id].supportsReadOnlyTasks !== false);
     const id = choice.agent && usable(choice.agent) ? choice.agent : AGENTS.find(usable);
-    if (!id) throw new Error(`Sign in to an agent, such as Codex, to ${task}.`);
+    if (!id) {
+      if (options.readOnly) throw new Error('Connect an agent that supports read-only tasks, such as Codex.');
+      throw new Error(`Sign in to an agent, such as Codex, to ${task}.`);
+    }
     const models = this.runtimes[id].models;
-    return { id, model: (light ? lightModel(models) : undefined) || models.find(item => item.id === choice.model) || models.find(item => item.isDefault) };
+    return { id, model: (options.light ? lightModel(models) : undefined) || models.find(item => item.id === choice.model) || models.find(item => item.isDefault) };
   }
   async diagnoseLatexBuild(root: string, prompt: string, choice: { agent: AgentId; model?: string }) {
     const id = choice.agent, runtime = this.runtimes[id];
     if (!this.agents[id].ready || !runtime.authenticated) throw new Error('Connect the selected agent before diagnosing compilation problems.');
+    if (this.agents[id].supportsReadOnlyTasks === false) throw new Error('The selected agent does not support read-only compilation diagnosis. Select another agent.');
     const model = runtime.models.find(item => item.id === choice.model) || runtime.models.find(item => item.isDefault);
     return this.oneOff(id, { cwd: root, sandbox: 'read-only', model, timeout: 120000, what: 'diagnose the LaTeX build', instructions: latexRepairInstructions, prompt });
   }
@@ -1725,7 +1739,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     if (task.status === 'deleting') throw new Error('This task is being deleted.');
     const pending = this.titles.get(taskId);
     if (pending) return pending;
-    const { id, model } = this.helper({ agent: this.agentOf(task), model: task.model || undefined }, 'generate a task title', true);
+    const { id, model } = this.helper({ agent: this.agentOf(task), model: task.model || undefined }, 'generate a task title', { light: true, readOnly: true });
     const items = this.store.items(taskId), first = items.find(item => item.type === 'user');
     const outcome = items.findLast(item => item.type === 'assistant' && item.text);
     const prompt = JSON.stringify({ request: first?.text || '', taskContext: task.instructions, existingOutcome: outcome?.text || '' });
@@ -1751,7 +1765,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   // lightest reasoning it offers. The same changes get the message already
   // written, or being written, for them unless the author asks for a fresh one.
   async commitMessage(projectId: string, paths: string[], choice: { agent?: AgentId; fresh?: boolean; staged?: boolean; taskId?: string } = {}) {
-    const project = this.store.project(projectId), { id, model } = this.helper(choice, 'write a commit message', true);
+    const project = this.store.project(projectId), { id, model } = this.helper(choice, 'write a commit message', { light: true, readOnly: true });
     const task = choice.taskId ? this.store.task(choice.taskId) : undefined;
     if (task && task.projectId !== projectId) throw new Error('Invalid task ID.');
     const { files, patch, recent } = task ? await this.taskCommitChanges(task) : await commitChanges(project.path, paths, choice.staged);
@@ -1847,6 +1861,9 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     this.committing.add(projectId);
     try { return await work(); } finally { this.committing.delete(projectId); }
   }
+  private requireReviewAgent(agent: AgentId) {
+    if (this.agents[agent].supportsReadOnlyTasks === false) throw new Error('The selected agent does not support read-only AI review. Select another agent.');
+  }
   private validateTaskPermissions(value: unknown, agent: AgentId, reviewing: boolean) {
     if (typeof value !== 'string' || !value) throw new Error('Invalid task permissions.');
     if (value === 'workspace') return;
@@ -1912,10 +1929,11 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     this.deletions.add(taskId);
     this.store.updateTask(taskId, { status: 'deleting', pauseVersion: (task.pauseVersion || 0) + 1, error: null });
     try {
-      // The conversation goes with the task. Ending it first releases what the
-      // agent keeps open in the worktree; if it fails, the engine reports a
-      // folder still in use and a retry finishes the cleanup.
-      if (task.threadId) await this.agents[this.agentOf(task)].closeThread?.(task.threadId).catch(() => {});
+      // Native workers must release the worktree even when startup failed
+      // before returning a thread ID. Archiving the conversation is best effort.
+      const agent = this.agents[this.agentOf(task)];
+      await agent.closeWorktree?.(task.worktree);
+      if (task.threadId) await agent.closeThread?.(task.threadId).catch(() => {});
       // The engine never saw a task whose preparation was not submitted.
       const client = unprepared && !task.preparation?.submitted ? null : await this.connectReview(this.store.project(task.projectId).path);
       const finish = async () => {

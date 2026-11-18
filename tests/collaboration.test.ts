@@ -390,6 +390,17 @@ test('saved routes default to Codex with the task model and reject unknown worke
   assert.match(instructions, /polish: .*Antigravity \(gemini-4-argon, high reasoning effort\)/);
   assert.match(instructions, /rigorous: .*Codex \(the task's model\)/);
 });
+test('local ACP task agents remain selectable without becoming isolated collaboration workers', () => {
+  const ready: RuntimeStatus = { connected: true, authenticated: true, models: [], account: null, error: null };
+  for (const agent of ['qoder', 'codebuddy', 'workbuddy'] as const) {
+    const runtimes = { [agent]: ready }, offered = offeredAgents(runtimes);
+    assert.deepEqual(offered, [agent]);
+    assert.equal(chosenAgent(agent, offered, runtimes), agent);
+    const saved = { ...routes, quick: { agent, model: 'selected-model', effort: 'high' } };
+    assert.equal(validRoutes(saved), false);
+    assert.deepEqual(collaborationRoutes(saved), { ...routes, quick: { agent: 'codex', model: null, effort: null } });
+  }
+});
 test('stopping a native helper closes its process and ignores late results', async () => {
   const helper = new Helper(), controller = new AbortController();
   helper.request = async (method, params) => { if (method === 'model/list') return { data: [] }; if (method === 'thread/start') { helper.cwd = params.cwd; return { thread: { id: 'helper' } }; } if (method === 'turn/start') controller.abort(); return {}; };

@@ -239,6 +239,11 @@
     "textHash": "1e56b74ede2ed8e95bce7ae72ea92350011d757c1853e9744a1153b0d8119a43",
     "model": "manual"
   },
+  "No WorkBuddy ACP launcher is configured.": {
+    "revision": "190d1e8ef7e29f0cdf736601beb5677c3046d88e5639331e6f1970e6f5516a02",
+    "textHash": "ed0bd9d4b8099852e8f39d39bf38e9f2c324f2d8f92854aef49bd3cd6c7d2526",
+    "model": "manual"
+  },
   "No access to the project": {
     "revision": "07c91342801f80e24159c5c1e04f721b0c559ea07141509c6479fd08bb3fadd3",
     "textHash": "9cd709b562be686ed52a7ffa9deb725ec63c47a139e0d0f769adb087aa1c682c",
@@ -374,6 +379,11 @@
     "textHash": "7532cbdab7128ee7b37e1ca5ffc70a4e9e8a1977d01e7fe62b84fabb662bfe93",
     "model": "gemini-4-argon-medium"
   },
+  "Plan changes; may write planning files": {
+    "revision": "79b17297bac867706217f76c2d028d6da76531a4621881aac89f922c8e5cf3b2",
+    "textHash": "c6a7960d55d21226e94ca0555edad8cb59d44e9df51a4011c82e4e98736735f1",
+    "model": "manual"
+  },
   "Previous anchor": {
     "revision": "6d728f2df013a96d762d6fb94f32869b28c811807f8337a8a693b6710c044042",
     "textHash": "15cd8a6d1e7ce2530d6a3bc01bb18b460c682891fe42a9cad38b15852acf2653",
@@ -424,6 +434,11 @@
     "textHash": "9fc78d812fb2c9b9cb36a0c45cd6b60a85018d6b126d480282811cb4b4505d7f",
     "model": "gemini-4-argon-medium"
   },
+  "Set {variable} to a WorkBuddy ACP launcher, then restart Papilot.": {
+    "revision": "d9614616a3814d93462a080f54da8f1984a6a2564f1d01c1d00fa97a23168305",
+    "textHash": "d3f0398e6c5d6715340bcbe1a9100165d99d6fcb241fd5225af12c5e34927ff3",
+    "model": "manual"
+  },
   "Sign in to {server}": {
     "revision": "d974c4496924ce07730fc59e93635d66b00a4d3f6730710ad9740f5fdab42be9",
     "textHash": "d6593a8b962bce7efd2d4466dd3a36cdb4e015166212109c3ad4a821bde09658",
@@ -433,6 +448,11 @@
     "revision": "536963ef038e9c9764e2a23f12e6b3f6f0b176cbc69e9f0270e420bc29d6b2e7",
     "textHash": "d0b8f27a7116688bf3ebdcf69bcf7c8302672b8e2d16fb387f56f9d35334270d",
     "model": "gemini-4-argon-medium"
+  },
+  "Skip approval prompts; native rules still apply": {
+    "revision": "eaed6f5827622569d9d7d1dd8996fbb45222cf203834f9ae8cca46ce361ac781",
+    "textHash": "edf11720a106c483c3cb745457e5c8cf7437f6aacd0fb7d58f6df62fae7472f4",
+    "model": "manual"
   },
   "Source unavailable": {
     "revision": "fd2569595bada5b0d232b2a13a8d3827da6753d955aeae5c607374d2f52d78ee",
@@ -517,6 +537,21 @@
   "Use this folder": {
     "revision": "01cd6c4b069780adb9a3f48e167747d36240dcc13d30f83be5745875ef8e894f",
     "textHash": "f7ea020d823294dcbde6a3403139c551913489ddc3511ff391078ddbcc5b63a4",
+    "model": "manual"
+  },
+  "Uses CodeBuddy CLI and its saved login through ACP.": {
+    "revision": "5cea796d77cbef6ea05da62abd110fe4646be44000726eda6ba72fddc518db05",
+    "textHash": "52ee065df2e1dcbd3c477e8fa4e56265a3733d0d5893b84f8182694dba131156",
+    "model": "manual"
+  },
+  "Uses Qoder CLI and its saved login through ACP.": {
+    "revision": "beb28e165fc28ca824dae86c59a6c069c2b3e105a27c682a77ec876c9edde100",
+    "textHash": "7570f7dee1f5fe8b7ca8b2ba7b942ff0badf686cca71ff9a3bc8ff8529a76efe",
+    "model": "manual"
+  },
+  "Uses a configured WorkBuddy ACP launcher. Its login must be available to the launcher.": {
+    "revision": "92e8558aebff5eea871003b16e031f96a454b08ea6efb3861d2a17e2af77599e",
+    "textHash": "5afaea8ea62bc02ee4ef235065218b02fdd1fe13fded9a76c69391a9a47949ab",
     "model": "manual"
   },
   "Uses your Pi CLI, providers, skills and extensions. Tools run on the host with Pi’s permissions.": {

@@ -6478,5 +6478,40 @@
     "revision": "d5b01580dd4a6e721379c05fc2650741a4d3febdb01fb024cf2370f04cf2f56a",
     "textHash": "4b5c575af222cbad60871e21205eaae6952f47715edfebddf6341efd2e76b1b2",
     "model": "gemini-4-argon-medium"
+  },
+  "No WorkBuddy ACP launcher is configured.": {
+    "revision": "0913f1dd3fe1de3a271fed362a59d7eb55043d38caec6959db367d1ae2da1439",
+    "textHash": "5cfb25fee42d8c6a19ef273c6de501cfad35d5c81c765302f6bcad89bd18632f",
+    "model": "manual"
+  },
+  "Plan changes; may write planning files": {
+    "revision": "05d82e618119c44759c9d7048cd0e3e1e329a92b3bdd28a78d7fd424eacf72e3",
+    "textHash": "d26e398a4003dc15cd3a88d393ae78183aeadf60cd643a73e9cda4c006242eb2",
+    "model": "manual"
+  },
+  "Set {variable} to a WorkBuddy ACP launcher, then restart Papilot.": {
+    "revision": "13f868444f840b4241da6c3bf9a8db6aa968085558b33f541e6b678c91d5a917",
+    "textHash": "bfc2643d9f3c3ed88b0b89f6de0657940e3401f4fe01a488afa4cb00b7acb24d",
+    "model": "manual"
+  },
+  "Skip approval prompts; native rules still apply": {
+    "revision": "20b7074ba3b0807c1e9618a8286513d70b1b09d448a4742e19ab23bf7a80d1df",
+    "textHash": "a7ee5f6a5f94999f6b76db0f5c4d1a4f8c9cc48649a5222b0021cfc44ebb0b22",
+    "model": "manual"
+  },
+  "Uses CodeBuddy CLI and its saved login through ACP.": {
+    "revision": "c5960220d0c194b5f5e60040710418eedc312a2e50a77cd3a5110bcf43a83d15",
+    "textHash": "27da3d1a7c11b77dbdf91bf7f4582668745438a7d42cb657b3be9fee5a11088d",
+    "model": "manual"
+  },
+  "Uses Qoder CLI and its saved login through ACP.": {
+    "revision": "90981b78e217d694c704b2139b829bdb3967351b653ff0ad56514469165f9280",
+    "textHash": "237c05a3ae25bf95563bd0263ebe7eef8e2410198a9b9dc3e1c214d0c9428993",
+    "model": "manual"
+  },
+  "Uses a configured WorkBuddy ACP launcher. Its login must be available to the launcher.": {
+    "revision": "053acb8ec29463a70fa9ec1c04b14cdeed6ff38a3f8fe4c71259fbc8f1b3073b",
+    "textHash": "c4210bf556b9cd664443f24ed10984611b99f6855e8f7cf3251cf2caae5ae60e",
+    "model": "manual"
   }
 }

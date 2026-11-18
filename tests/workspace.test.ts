@@ -133,6 +133,7 @@ const feedback = { cursor: 7, feedback: [{ body: 'Preserve the boundary conditio
 const summary = { state: 'reviewing', round: 1, counts: { pending: 1 } };
 
 class FakeCodex extends EventEmitter {
+  supportsReadOnlyTasks?: boolean;
   permissionOptions = Codex.prototype.permissionOptions;
   closeThread = Codex.prototype.closeThread;
   async taskPermissionConfig(value: string, _cwd: string) {
@@ -1568,6 +1569,34 @@ test('deletion ends the task conversation before the engine removes its worktree
   }
 });
 
+for (const hasThread of [false, true]) test(`deletion waits for worktree release ${hasThread ? 'with' : 'without'} a thread ID`, async () => {
+  const f = fixture(deletionReview), stopped = deferred<void>();
+  let attempts = 0, archived = false;
+  try {
+    f.store.updateTask(f.task.id, { agent: 'codebuddy', threadId: hasThread ? f.task.threadId : null });
+    f.workspace.agents.codebuddy.closeWorktree = async cwd => {
+      assert.equal(cwd, f.task.worktree);
+      attempts++;
+      if (attempts === 1) throw new Error('CodeBuddy did not exit.');
+      await stopped.promise;
+    };
+    f.workspace.agents.codebuddy.closeThread = async () => { archived = true; throw new Error('Archive unavailable'); };
+    await assert.rejects(f.workspace.deleteTask(f.task.id), /CodeBuddy did not exit/);
+    assert.equal(archived, false);
+    assert.equal(f.calls.length, 0, 'the engine must not remove a worktree still owned by an agent');
+    assert.equal(f.store.task(f.task.id).status, 'deleting');
+    assert.match(f.store.task(f.task.id).error!, /CodeBuddy did not exit/);
+    const retry = f.workspace.deleteTask(f.task.id);
+    await tick();
+    assert.equal(archived, false, 'archiving follows successful worktree release');
+    assert.equal(f.calls.length, 0, 'retry must also await process exit');
+    stopped.resolve();
+    assert.deepEqual(await retry, { ok: true });
+    assert.equal(archived, hasThread);
+    assert.equal(f.store.tasks().length, 0);
+  } finally { stopped.resolve(); f.close(); }
+});
+
 test('deletion waits for every pending comment and then removes only the selected task', async () => {
   const first = deferred<void>(), second = deferred<void>();
   const f = fixture(deletionReview);
@@ -2080,8 +2109,83 @@ test('an agent writes a commit message from the chosen changes, in a read-only t
     assert.equal(turns(), 2);
     assert.equal((await f.workspace.commitMessage(f.task.projectId, ['main.tex'])).message, 'Shorten the opening sentence');
     f.codex.ready = false;
-    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex']), /Sign in to an agent, such as Codex/);
+    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex']), /Connect an agent that supports read-only tasks, such as Codex/);
   } finally { f.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('read-only helpers fall back to a capable agent while write helpers keep the selected agent', async () => {
+  const claude = new FakeCodex(); claude.ready = true; claude.supportsReadOnlyTasks = false;
+  const f = fixture(undefined, { claude });
+  try {
+    f.codex.ready = true;
+    f.workspace.runtimes.claude.authenticated = true;
+    f.store.updateTask(f.task.id, { agent: 'claude', titleSource: 'prompt' });
+    for (const [id, agent] of [['codex', f.codex], ['claude', claude]] as const) agent.handler = async method => {
+      if (method === 'thread/start') return { thread: { id: `${id}-helper` } };
+      if (method !== 'turn/start') return {};
+      setImmediate(() => {
+        agent.emit('notification', { method: 'item/completed', params: { threadId: `${id}-helper`, item: { type: 'agentMessage', text: 'Clarify the introduction' } } });
+        agent.emit('notification', { method: 'turn/completed', params: { threadId: `${id}-helper`, turn: { id: 'helper-turn', status: 'completed' } } });
+      });
+      return { turn: { id: 'helper-turn' } };
+    };
+    const named = await f.workspace.generateTaskTitle(f.task.id);
+    assert.equal(named?.title, 'Clarify the introduction');
+    assert.equal(named?.titleGeneration, null);
+    assert.equal(claude.calls.length, 0);
+    (f.workspace as any).taskCommitChanges = async () => ({ files: [{ path: 'main.tex', status: 'M' }], patch: '-Old opening\n+Clear opening', recent: [] });
+    assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'claude', taskId: f.task.id }), { message: 'Clarify the introduction', agent: 'codex' });
+    assert.equal(claude.calls.length, 0, 'A signed-in agent without read-only support is not selected for either helper');
+    const starts = f.codex.calls.filter(call => call.method === 'thread/start');
+    assert.equal(starts.length, 2);
+    for (const { params } of starts) {
+      assert.equal(params.sandbox, 'read-only');
+      assert.notEqual(params.cwd, '/unused');
+      assert.equal(fs.existsSync(params.cwd), false);
+    }
+    assert.equal(await f.workspace.repairImport('/unused', 'Missing command', { agent: 'claude' }), 'Clarify the introduction');
+    const repair = claude.calls.find(call => call.method === 'thread/start')!.params;
+    assert.deepEqual([repair.cwd, repair.sandbox], ['/unused', 'workspace-write']);
+  } finally { f.close(); }
+});
+
+test('missing read-only helpers leave titles unchanged and do not prevent editing', async () => {
+  const claude = new FakeCodex(); claude.ready = true; claude.supportsReadOnlyTasks = false;
+  const f = fixture(undefined, { claude });
+  try {
+    f.workspace.runtimes.claude.authenticated = true;
+    f.store.updateTask(f.task.id, { agent: 'claude', titleSource: 'prompt' });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      assert.throws(() => f.workspace.requestTaskTitle(f.task.id), /Connect an agent that supports read-only tasks, such as Codex\./);
+      assert.equal(f.store.task(f.task.id).titleGeneration, undefined);
+      assert.equal(f.store.task(f.task.id).title, f.task.title);
+    }
+    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'claude' }), /Connect an agent that supports read-only tasks, such as Codex\./);
+    assert.equal(claude.calls.length, 0);
+    await f.workspace.enqueue(f.task.id, 'Edit the introduction.', 'unsupported-title-helper', false);
+    await tick(); await tick();
+    assert.equal(f.store.task(f.task.id).status, 'running');
+    assert.equal(f.store.task(f.task.id).titleGeneration, undefined);
+    assert.ok(claude.calls.some(call => call.method === 'turn/start'));
+    assert.equal(claude.calls.some(call => call.params.ephemeral), false, 'Automatic naming does not launch a helper that is guaranteed to fail');
+  } finally { f.close(); }
+});
+
+test('compilation diagnosis rejects unsupported selected agents without switching providers', async () => {
+  const claude = new FakeCodex(); claude.ready = true; claude.supportsReadOnlyTasks = false;
+  const f = fixture(undefined, { claude });
+  try {
+    f.codex.ready = true;
+    f.workspace.runtimes.claude.authenticated = true;
+    const diagnose = () => f.workspace.diagnoseLatexBuild('/unused', 'Compiler output', { agent: 'claude' });
+    await assert.rejects(diagnose(), /The selected agent does not support read-only compilation diagnosis\. Select another agent\./);
+    claude.ready = false;
+    await assert.rejects(diagnose(), /Connect the selected agent before diagnosing compilation problems/);
+    claude.ready = true; f.workspace.runtimes.claude.authenticated = false;
+    await assert.rejects(diagnose(), /Connect the selected agent before diagnosing compilation problems/);
+    assert.equal(claude.calls.length, 0);
+    assert.equal(f.codex.calls.length, 0);
+  } finally { f.close(); }
 });
 
 test('a helper turn lets go of its Codex thread and removes its folder once Codex has closed the thread', async () => {
@@ -2612,6 +2716,50 @@ for (const asynchronous of [false, true]) test(`agents with ${asynchronous ? 'as
   } finally { workspace.close(); store.close(); }
 });
 
+test('AI review refuses an adapter without read-only support before creating a task or manuscript copy', async () => {
+  const f = fixture();
+  try {
+    f.codex.supportsReadOnlyTasks = false;
+    let prepared = false;
+    await assert.rejects(f.workspace.createTask({ id: 'unsupported-review-task', projectId: f.task.projectId, title: 'Review', instructions: 'Check assumptions.',
+      prepareReview: async () => { prepared = true; return { key: 'never', lines: [] }; } }), /The selected agent does not support read-only AI review\. Select another agent\./);
+    assert.equal(f.store.findTask('unsupported-review-task'), undefined);
+    assert.equal(prepared, false);
+    assert.equal(f.calls.length, 0);
+    assert.equal(f.codex.calls.length, 0);
+  } finally { f.close(); }
+});
+
+test('saved AI reviews cannot retry or run on an adapter without read-only support', async () => {
+  const f = fixture();
+  try {
+    f.codex.supportsReadOnlyTasks = false;
+    f.codex.ready = true;
+    f.store.updateTask(f.task.id, { mode: 'review', worktree: reviewCopy(), aiReview: { key: 'saved-review' } });
+    f.store.saveReviewInput(f.task.id, { key: 'saved-review', lines: [] });
+    assert.throws(() => f.workspace.retryTask(f.task.id), /The selected agent does not support read-only AI review\. Select another agent\./);
+    // The fixture's thread is already loaded, so this exercises the path that
+    // never asks the adapter for thread/start or thread/resume again.
+    const run = await f.workspace.enqueue(f.task.id, 'Continue this review.', 'unsupported-saved-review', false);
+    await tick(); await tick();
+    assert.equal(f.store.runByKey(run.requestKey)?.status, 'failed');
+    assert.equal(f.store.task(f.task.id).error, 'The selected agent does not support read-only AI review. Select another agent.');
+    assert.equal(f.codex.calls.some(call => ['thread/start', 'thread/resume', 'turn/start'].includes(call.method)), false);
+    assert.equal(f.calls.length, 0);
+  } finally { f.close(); }
+});
+
+test('an adapter that refuses read-only tasks can still run editing turns', async () => {
+  const f = fixture();
+  try {
+    f.codex.supportsReadOnlyTasks = false;
+    f.codex.ready = true;
+    await f.workspace.enqueue(f.task.id, 'Edit the introduction.', 'supported-editing-turn', false);
+    await tick(); await tick();
+    assert.ok(f.codex.calls.some(call => call.method === 'turn/start'));
+  } finally { f.close(); }
+});
+
 test('AI review uses normal agent tools and approvals, saves PDF notes, and never publishes or delivers edits', async () => {
   const f = fixture();
   try {
@@ -2741,7 +2889,13 @@ test('creating an AI review skill task persists its snapshot and queues review-o
     assert.equal(f.calls.filter(call => call.route === '/api/tasks').length, 1);
     await assert.rejects(f.workspace.createTask({ ...input, prepareReview: undefined, instructions: 'Edit it.' }), /Invalid task ID/);
     for (const agent of AGENT_IDS.filter(id => id !== 'collaboration')) {
-      const task = await f.workspace.createTask({ ...input, id: `ai-review-client-${agent}`, agent });
+      const selection = { ...input, id: `ai-review-client-${agent}`, agent };
+      if (['qoder', 'codebuddy', 'workbuddy'].includes(agent)) {
+        await assert.rejects(f.workspace.createTask(selection), /The selected agent does not support read-only AI review\. Select another agent\./);
+        assert.equal(f.store.findTask(selection.id), undefined);
+        continue;
+      }
+      const task = await f.workspace.createTask(selection);
       assert.equal(task.agent, agent);
       assert.equal(task.mode, 'review');
       await f.workspace.prepareTask(task.id);
@@ -3467,6 +3621,20 @@ test('restart of a failed preparation cancels its saved queue and safely prepare
     assert.equal(f.store.runByKey(f.run.requestKey)?.status, 'interrupted');
     assert.equal(f.store.task(replacement.id).worktree, '/replacement');
     assert.equal(f.store.task(f.task.id).status, 'failed');
+  } finally { f.close(); }
+});
+
+test('AI review cannot restart on an adapter without read-only support or stop the original task', async () => {
+  const f = restartFixture();
+  try {
+    Object.defineProperty((f.workspace as any).agents.claude, 'supportsReadOnlyTasks', { value: false });
+    f.store.updateTask(f.task.id, { mode: 'review', status: 'running', turnId: 'original-turn' });
+    const original = f.store.task(f.task.id);
+    await assert.rejects(f.workspace.restartTask(f.task.id, { ...f.choice, stop: true }), /The selected agent does not support read-only AI review\. Select another agent\./);
+    assert.deepEqual(f.store.task(f.task.id), original);
+    assert.equal(f.store.findTask(f.choice.id), undefined);
+    assert.equal(f.codex.calls.length, 0);
+    assert.equal(f.calls.length, 0);
   } finally { f.close(); }
 });
 

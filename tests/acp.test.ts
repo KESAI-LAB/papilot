@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { EventEmitter } from 'node:events';
+import { EventEmitter, once } from 'node:events';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -10,6 +11,7 @@ import { ACP_PROFILES, AcpAgent, KimiAgent, opencodeConfig, type AcpProfile } fr
 import { workflowOpenCodeProfile } from '../src/server/collaboration.ts';
 import { findExecutable } from '../src/server/agents.ts';
 import { GrokAgent } from '../src/server/grok.ts';
+import { CodeBuddyAgent } from '../src/server/codebuddy.ts';
 import { RpcResponseError } from '../src/server/codex.ts';
 
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
@@ -127,6 +129,21 @@ test('Kimi resumes persisted IDs after restart and ignores replayed history', { 
     f.agent.close(); await f.agent.start(); await run(f.agent, id);
     assert.equal(f.calls.filter(call => call.method === 'session/load').length, 2);
     assert.equal(f.notifications.some(n => n.params.delta === 'Historical reply'), false);
+  } finally { f.agent.close(); }
+});
+
+test('ACP retains initial instructions when a known unprompted session reconnects', { timeout: 5000 }, async () => {
+  const f = fixture();
+  try {
+    await f.agent.start(); const id = await thread(f.agent);
+    assert.equal((await run(f.agent, id, { effort: 'unsupported' })).status, 'failed');
+    assert.equal(f.calls.some(call => call.method === 'session/prompt'), false);
+    f.agent.close(); await f.agent.start();
+    await f.agent.request('thread/resume', { threadId: id, cwd: '/paper', developerInstructions: 'Only edit this paper.' });
+    await run(f.agent, id);
+    assert.equal(f.calls.find(call => call.method === 'session/prompt').params.prompt[0].text, 'Only edit this paper.\n\n---\n\nFix it.');
+    await run(f.agent, id);
+    assert.equal(f.calls.filter(call => call.method === 'session/prompt').at(-1).params.prompt[0].text, 'Fix it.');
   } finally { f.agent.close(); }
 });
 
@@ -927,6 +944,406 @@ test('ACP agents are detected by their executable', () => {
     }
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+for (const cancel of [false, true]) {
+  test(`ACP waits for probe cleanup before ${cancel ? 'honoring a startup cancellation' : 'publishing availability'}`, { timeout: 5000 }, async t => {
+    const f = profileFixture(ACP_PROFILES.qoder, { modes: { availableModes: [{ id: 'default' }] } }, () => assert.fail('No prompt expected'));
+    const remove = fs.promises.rm.bind(fs.promises);
+    let release: (() => void) | undefined;
+    t.mock.method(fs.promises, 'rm', async (folder: fs.PathLike, options: fs.RmOptions) => {
+      assert.equal(f.agent.ready, false);
+      assert.ok(f.calls.some(call => call.method === 'session/close'));
+      assert.equal(options.maxRetries, 5);
+      assert.equal(options.retryDelay, 100);
+      await new Promise<void>(resolve => { release = resolve; });
+      await remove(folder, options);
+    });
+    try {
+      const starting = f.agent.start();
+      const settled = cancel ? assert.rejects(starting, /disconnected/) : starting;
+      while (!release) await tick();
+      assert.equal(f.agent.ready, false);
+      assert.equal((await f.agent.request('account/read')).account, null);
+      if (cancel) f.agent.close();
+      release();
+      await settled;
+      assert.equal(f.agent.ready, !cancel);
+    } finally { release?.(); await f.agent.shutdown(); }
+  });
+}
+
+test('ACP stops its process when probe cleanup fails and can reconnect after the lock clears', { timeout: 5000 }, async t => {
+  const f = profileFixture(ACP_PROFILES.qoder, { modes: { availableModes: [{ id: 'default' }] } }, () => assert.fail('No prompt expected'));
+  const remove = fs.promises.rm.bind(fs.promises), folders = new Set<fs.PathLike>();
+  let closed = false;
+  const cleanup = t.mock.method(fs.promises, 'rm', async (folder: fs.PathLike) => {
+    assert.equal(f.agent.ready, false);
+    if (!folders.size) f.rpc().child.once('close', () => { closed = true; });
+    else assert.equal(closed, true, 'retry cleanup only after the process releases its handles');
+    folders.add(folder);
+    throw Object.assign(new Error('EPERM: directory is still locked'), { code: 'EPERM' });
+  });
+  try {
+    await assert.rejects(f.agent.start(), /EPERM.*cleanup failed/);
+    assert.equal(closed, true);
+    assert.equal(f.agent.ready, false);
+    assert.equal((await f.agent.request('account/read')).requiresOpenaiAuth, true);
+    cleanup.mock.restore();
+    await f.agent.start();
+    assert.equal(f.agent.ready, true);
+    assert.equal(f.launches.length, 2);
+  } finally {
+    cleanup.mock.restore(); await f.agent.shutdown();
+    for (const folder of folders) await remove(folder, { recursive: true, force: true });
+  }
+});
+
+test('ACP can reconnect after a shutdown deadline once the old process actually exits', { timeout: 5000 }, async t => {
+  const f = profileFixture(ACP_PROFILES.qoder, { modes: { availableModes: [{ id: 'default' }] } }, () => assert.fail('No prompt expected'));
+  try {
+    await f.agent.start();
+    const child = f.rpc().child;
+    child.kill = () => true; // Both TERM and KILL fail to release the process.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const stopped = assert.rejects(f.agent.shutdown(), /did not exit/);
+    t.mock.timers.tick(10000);
+    await stopped;
+    await assert.rejects(f.agent.start(), /did not exit/);
+    child.exitCode = 0;
+    child.emit('close', 0); // The user closes it after the deadline.
+    await f.agent.start();
+    assert.equal(f.agent.ready, true);
+    assert.equal(f.launches.length, 2);
+  } finally { f.agent.close(); }
+});
+
+for (const endedBy of ['exitCode', 'signalCode'] as const) for (const error of [false, true]) {
+  test(`ACP waits for close after parent ${endedBy} before ${error ? 'a transport error' : 'shutdown'}`, { timeout: 5000 }, async t => {
+    const f = profileFixture(ACP_PROFILES.qoder, { modes: { availableModes: [{ id: 'default' }] } }, () => assert.fail('No prompt expected'));
+    try {
+      await f.agent.start();
+      const child = f.rpc().child, signals: string[] = [];
+      child.kill = (signal: string) => { signals.push(signal); return true; };
+      child[endedBy] = endedBy === 'exitCode' ? 0 : 'SIGTERM';
+      child.emit('exit', child.exitCode ?? null, child.signalCode ?? null);
+      t.mock.timers.enable({ apis: ['setTimeout'] });
+      if (error) child.emit('error', new Error('Transport closed after parent exit'));
+      let finished = false;
+      const stopped = f.agent.shutdown().finally(() => { finished = true; });
+      const failure = assert.rejects(stopped, /did not exit/);
+      await tick();
+      assert.equal(finished, false, 'parent exit must not release inherited streams');
+      t.mock.timers.tick(10000);
+      await failure;
+      assert.deepEqual(signals, [], 'never signal a parent that has already exited');
+      await assert.rejects(f.agent.start(), /did not exit/);
+      assert.equal(f.launches.length, 1);
+      child.emit('close', child.exitCode ?? null, child.signalCode ?? null);
+      await f.agent.start();
+      assert.equal(f.agent.ready, true);
+      assert.equal(f.launches.length, 2);
+    } finally { f.agent.close(); }
+  });
+}
+
+test('ACP keeps waiting after a transport error and stops signalling once its parent exits', { timeout: 5000 }, async t => {
+  const f = profileFixture(ACP_PROFILES.qoder, { modes: { availableModes: [{ id: 'default' }] } }, () => assert.fail('No prompt expected'));
+  try {
+    await f.agent.start();
+    const child = f.rpc().child, signals: string[] = [];
+    child.kill = (signal: string) => { signals.push(signal); return true; };
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    child.emit('error', new Error('Transport failed'));
+    assert.deepEqual(signals, ['SIGTERM']);
+    child.exitCode = 0;
+    child.emit('exit', 0);
+    let finished = false;
+    const stopped = f.agent.shutdown().then(() => { finished = true; });
+    t.mock.timers.tick(5000);
+    await tick();
+    assert.equal(finished, false);
+    assert.deepEqual(signals, ['SIGTERM'], 'force shutdown must not signal the exited parent');
+    child.emit('close', 0);
+    await stopped;
+    await f.agent.start();
+    assert.equal(f.agent.ready, true);
+  } finally { f.agent.close(); }
+});
+
+test('ACP shutdown after a natural close does not wait for another close or signal the parent', { timeout: 5000 }, async () => {
+  const f = profileFixture(ACP_PROFILES.qoder, { modes: { availableModes: [{ id: 'default' }] } }, () => assert.fail('No prompt expected'));
+  try {
+    await f.agent.start();
+    const child = f.rpc().child;
+    child.kill = () => assert.fail('A closed process must not be signalled');
+    child.exitCode = 0;
+    child.emit('close', 0);
+    await f.agent.shutdown();
+    await f.agent.start();
+    assert.equal(f.launches.length, 2);
+  } finally { f.agent.close(); }
+});
+
+for (const ending of ['shutdown', 'parent exit', 'cancel timeout', 'forced shutdown'] as const) {
+  test(`ACP ${ending} waits for tools with independent stdio before releasing their worktree`, { skip: process.platform === 'win32', timeout: 15000 }, async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-acp-tool-tree-'));
+    const ready = path.join(cwd, 'tool-ready'), writes = path.join(cwd, 'tool-writes'), stopped = path.join(cwd, 'tool-stopped');
+    const stopping = path.join(cwd, 'tool-stopping'), release = path.join(cwd, 'tool-release');
+    const tool = `
+      const fs = require('node:fs');
+      setInterval(() => fs.appendFileSync(${JSON.stringify(writes)}, 'write\\n'), 10);
+      process.on('SIGTERM', () => {
+        if (${JSON.stringify(ending)} === 'forced shutdown') return;
+        fs.writeFileSync(${JSON.stringify(stopping)}, 'stopping');
+        setInterval(() => {
+          if (fs.existsSync(${JSON.stringify(release)})) { fs.writeFileSync(${JSON.stringify(stopped)}, 'stopped'); process.exit(0); }
+        }, 10);
+      });
+      fs.writeFileSync(${JSON.stringify(ready)}, String(process.pid));
+    `;
+    const script = `
+      const { spawn } = require('node:child_process');
+      const { createInterface } = require('node:readline');
+      let serial = 0;
+      createInterface({ input: process.stdin }).on('line', line => {
+        const message = JSON.parse(line);
+        if (message.method === 'session/prompt') {
+          spawn(process.execPath, ['-e', ${JSON.stringify(tool)}], { stdio: 'ignore' }).unref();
+          return;
+        }
+        if (message.method === 'test/exit') { process.exit(0); return; }
+        if (message.method === 'session/cancel') return;
+        const result = message.method === 'initialize' ? { protocolVersion: 1, agentCapabilities: {} }
+          : message.method === 'session/new' ? { sessionId: 'session-' + ++serial, modes: { availableModes: [{ id: 'default' }] } } : {};
+        if (message.id !== undefined) process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + '\\n');
+      });
+    `;
+    const children: ChildProcess[] = [];
+    const agent = new CodeBuddyAgent('fake-codebuddy', (_binary, _args, options) => {
+      const child = spawn(process.execPath, ['-e', script], options || {});
+      children.push(child); return child;
+    });
+    const unrelated = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    const unrelatedClosed = once(unrelated, 'close');
+    const untilFile = async (file: string) => {
+      const deadline = Date.now() + 5000;
+      while (!fs.existsSync(file)) {
+        if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${path.basename(file)}`);
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+    };
+    let toolPid: number | undefined;
+    try {
+      await agent.start();
+      const { thread } = await agent.request('thread/start', { cwd });
+      const { turn } = await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Run the tool.' }] });
+      await untilFile(ready); await untilFile(writes);
+      toolPid = Number(fs.readFileSync(ready, 'utf8'));
+      const worker = children.at(-1)!, closed = once(worker, 'close');
+      if (ending === 'parent exit') worker.stdin!.write(JSON.stringify({ method: 'test/exit' }) + '\n');
+      if (ending === 'cancel timeout') await agent.request('turn/interrupt', { turnId: turn.id });
+      let released = false;
+      let releasing = ending === 'shutdown' || ending === 'forced shutdown' ? agent.closeWorktree(cwd).then(() => { released = true; }) : undefined;
+      await closed;
+      releasing ??= agent.closeWorktree(cwd).then(() => { released = true; });
+      if (ending !== 'forced shutdown') {
+        await untilFile(stopping); await tick();
+        assert.equal(fs.existsSync(stopped), false, 'the tool remains alive until the test explicitly releases it');
+        assert.equal(released, false, 'parent close must not release a worktree still being written by its tool');
+        fs.writeFileSync(release, 'release');
+      }
+      await releasing;
+      assert.equal(fs.existsSync(stopped), ending !== 'forced shutdown', 'cooperative tools must finish their shutdown before releasing the worktree');
+      const completedWrites = fs.readFileSync(writes, 'utf8');
+      await new Promise(resolve => setTimeout(resolve, 50));
+      assert.equal(fs.readFileSync(writes, 'utf8'), completedWrites);
+      assert.doesNotThrow(() => process.kill(unrelated.pid!, 0), 'cleanup must not signal an unrelated process');
+    } finally {
+      agent.close();
+      for (const child of children) if (child.pid) {
+        try { process.kill(-child.pid, 'SIGKILL'); } catch { /* no owned group */ }
+        if (child.exitCode == null && child.signalCode == null) child.kill('SIGKILL');
+      }
+      if (toolPid) try { process.kill(toolPid, 'SIGKILL'); } catch { /* already gone */ }
+      unrelated.kill('SIGKILL'); await unrelatedClosed;
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+}
+
+test('awaited ACP shutdown keeps a standalone caller alive until its orphaned tool exits', { skip: process.platform === 'win32', timeout: 15000 }, async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-acp-shutdown-anchor-'));
+  const ready = path.join(cwd, 'tool-ready'), writes = path.join(cwd, 'tool-writes'), finished = path.join(cwd, 'shutdown-finished');
+  const tool = `
+    const fs = require('node:fs');
+    process.on('SIGTERM', () => {});
+    setInterval(() => fs.appendFileSync(${JSON.stringify(writes)}, 'write\\n'), 10);
+    fs.writeFileSync(${JSON.stringify(ready)}, String(process.pid));
+  `;
+  const server = `
+    const { spawn } = require('node:child_process');
+    const { createInterface } = require('node:readline');
+    let serial = 0;
+    createInterface({ input: process.stdin }).on('line', line => {
+      const message = JSON.parse(line);
+      if (message.method === 'session/prompt') {
+        spawn(process.execPath, ['-e', ${JSON.stringify(tool)}], { stdio: 'ignore' }).unref(); return;
+      }
+      const result = message.method === 'initialize' ? { protocolVersion: 1, agentCapabilities: {} }
+        : message.method === 'session/new' ? { sessionId: 'session-' + ++serial, modes: { availableModes: [{ id: 'default' }] } } : {};
+      if (message.id !== undefined) process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + '\\n');
+    });
+  `;
+  const harness = `
+    import fs from 'node:fs';
+    import { spawn } from 'node:child_process';
+    import { AcpAgent, ACP_PROFILES } from ${JSON.stringify(new URL('../src/server/acp.ts', import.meta.url).href)};
+    const agent = new AcpAgent(ACP_PROFILES.qoder, 'fake-qoder', (_binary, _args, options) => spawn(process.execPath, ['-e', ${JSON.stringify(server)}], options), ${JSON.stringify(cwd)});
+    await agent.start();
+    const { thread } = await agent.request('thread/start', { cwd: ${JSON.stringify(cwd)} });
+    await agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Run the tool.' }] });
+    const deadline = Date.now() + 5000;
+    while (!fs.existsSync(${JSON.stringify(ready)}) || !fs.existsSync(${JSON.stringify(writes)})) {
+      if (Date.now() >= deadline) throw new Error('Tool did not start');
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    // No server, unrelated children, or other referenced timers remain after
+    // the ACP parent closes. Only shutdown itself can keep this process alive.
+    await agent.shutdown();
+    fs.writeFileSync(${JSON.stringify(finished)}, 'finished');
+  `;
+  const caller = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', harness], { cwd: ROOT, stdio: ['ignore', 'ignore', 'pipe'] });
+  const closed = once(caller, 'close');
+  let stderr = '';
+  caller.stderr!.on('data', chunk => { stderr += String(chunk); });
+  try {
+    const [code] = await closed;
+    assert.equal(code, 0, stderr);
+    assert.equal(fs.existsSync(finished), true, 'the awaited cleanup must finish before the caller exits');
+    const completedWrites = fs.readFileSync(writes, 'utf8');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    assert.equal(fs.readFileSync(writes, 'utf8'), completedWrites, 'the orphaned tool must no longer write');
+  } finally {
+    if (caller.exitCode == null && caller.signalCode == null) caller.kill('SIGKILL');
+    if (fs.existsSync(ready)) try { process.kill(Number(fs.readFileSync(ready, 'utf8')), 'SIGKILL'); } catch { /* already gone */ }
+    await closed;
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('ACP shutdown and reconnect wait for a real descendant to release inherited streams', { skip: process.platform === 'win32', timeout: 5000 }, async () => {
+  const script = `
+    const { spawn } = require('node:child_process');
+    const { createInterface } = require('node:readline');
+    createInterface({ input: process.stdin }).on('line', line => {
+      const message = JSON.parse(line);
+      if (message.method === 'test/exit') {
+        const descendant = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); process.stdin.resume(); process.stdin.once("end", () => process.exit(0)); process.send("ready");'], { stdio: [3, 'inherit', 'inherit', 'ipc'] });
+        descendant.once('message', () => process.exit(0));
+        return;
+      }
+      const result = message.method === 'initialize' ? { protocolVersion: 1, agentCapabilities: {} }
+        : message.method === 'session/new' ? { sessionId: 'probe', modes: { availableModes: [{ id: 'default' }] } } : {};
+      if (message.id !== undefined) process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + '\\n');
+    });
+  `;
+  const processes: { child: ChildProcess; closed: Promise<unknown>; didClose: boolean }[] = [];
+  const agent = new AcpAgent(ACP_PROFILES.qoder, 'fake-qoder', (_binary, _args, options) => {
+    const child = spawn(process.execPath, ['-e', script], { ...options, stdio: ['pipe', 'pipe', 'pipe', 'pipe'] });
+    const entry = { child, closed: Promise.resolve() as Promise<unknown>, didClose: false };
+    entry.closed = once(child, 'close').then(() => { entry.didClose = true; });
+    processes.push(entry);
+    return child;
+  });
+  const release = (child: ChildProcess) => (child.stdio[3] as NodeJS.WritableStream).end();
+  let stopping: Promise<void> | undefined, starting: Promise<void> | undefined;
+  try {
+    await agent.start();
+    const entry = processes[0], exited = once(entry.child, 'exit');
+    entry.child.stdin!.write(JSON.stringify({ method: 'test/exit' }) + '\n');
+    await exited;
+    assert.equal(entry.child.exitCode, 0);
+    assert.equal(entry.didClose, false);
+    let stopped = false;
+    stopping = agent.shutdown().then(() => { stopped = true; });
+    starting = agent.start();
+    void stopping.catch(() => {}); void starting.catch(() => {});
+    await tick();
+    assert.equal(stopped, false, 'the descendant still owns inherited streams');
+    assert.equal(processes.length, 1, 'reconnect must not overlap the descendant');
+    release(entry.child);
+    await entry.closed;
+    await stopping;
+    await starting;
+    assert.equal(processes.length, 2);
+    assert.equal(agent.ready, true);
+  } finally {
+    agent.close();
+    for (const { child } of processes) {
+      release(child);
+      if (child.exitCode == null && child.signalCode == null) child.kill('SIGKILL');
+    }
+    await Promise.all(processes.map(entry => entry.closed));
+    await Promise.allSettled([stopping, starting]);
+    await agent.shutdown();
+  }
+});
+
+test('ACP close cancels startup before the process is launched', { timeout: 5000 }, async () => {
+  const f = profileFixture(ACP_PROFILES.qoder, { modes: { availableModes: [{ id: 'default' }] } }, () => assert.fail('No prompt expected'));
+  try {
+    const starting = f.agent.start();
+    f.agent.close();
+    await assert.rejects(starting, /disconnected/);
+    assert.equal(f.launches.length, 0);
+    assert.equal(f.agent.ready, false);
+    await f.agent.start();
+    assert.equal(f.launches.length, 1);
+    assert.equal(f.agent.ready, true);
+  } finally { f.agent.close(); }
+});
+
+// Qoder CLI 1.1.91 advertises camel-case acceptEdits and yolo, while
+// CodeBuddy Code 2.185.0 calls its broader mode bypassPermissions.
+for (const [provider, broader] of [['qoder', 'yolo'], ['codebuddy', 'bypassPermissions']] as const) {
+  test(`${provider} pins manual permissions, forwards approvals and rejects read-only sessions`, { timeout: 5000 }, async () => {
+    const modes = ['default', 'acceptEdits', 'auto', 'dontAsk', broader, ...(provider === 'codebuddy' ? ['plan', 'fullAccess'] : [])];
+    const f = profileFixture(ACP_PROFILES[provider], {
+      modes: { currentModeId: broader, availableModes: modes.map(id => ({ id })) },
+      models: { currentModelId: 'auto', availableModels: [{ modelId: 'auto', name: 'Auto' }] },
+    }, (message, rpc) => {
+      rpc.send({ id: 'permission', method: 'session/request_permission', params: { sessionId: message.params.sessionId,
+        toolCall: { kind: 'execute', title: 'Build the PDF', rawInput: { command: 'latexmk main.tex' } },
+        options: [{ optionId: 'once', kind: 'allow_once' }, { optionId: 'deny', kind: 'reject_once' }] } });
+    }, { loadSession: true, promptCapabilities: { image: true } }, ['browser-login']);
+    try {
+      await f.agent.start();
+      assert.deepEqual(f.launches[0].args, ['--acp', '--permission-mode', 'default']);
+      assert.equal(f.calls.some(call => call.method === 'authenticate' || call.method === 'session/prompt'), false);
+      assert.equal((await f.agent.request('model/list')).data[0].model, 'auto');
+      assert.deepEqual(f.agent.permissionOptions().map(option => option.value), ['workspace', 'acceptEdits', 'full', ...(provider === 'codebuddy' ? ['plan'] : [])]);
+      const { thread } = await f.agent.request('thread/start', { cwd: '/paper', taskPermissions: 'full' });
+      assert.equal(f.calls.filter(call => call.method === 'session/set_mode').at(-1)?.params.modeId, broader);
+      await f.agent.request('thread/resume', { threadId: thread.id, cwd: '/paper', taskPermissions: 'workspace' });
+      assert.equal(f.calls.filter(call => call.method === 'session/set_mode').at(-1)?.params.modeId, 'default');
+      const done = completion(f.agent), requested = new Promise<any>(resolve => f.agent.once('request', resolve));
+      await f.agent.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: 'Build it.' }] });
+      const approval = await requested;
+      assert.equal(approval.method, 'item/commandExecution/requestApproval');
+      f.agent.respond(approval.id, { decision: 'decline' });
+      await tick();
+      assert.deepEqual(f.calls.find(call => call.id === 'permission' && !call.method).result.outcome, { outcome: 'selected', optionId: 'deny' });
+      const prompt = f.calls.find(call => call.method === 'session/prompt');
+      f.rpc().update(thread.id, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Build declined.' } });
+      f.rpc().reply(prompt.id, { stopReason: 'end_turn' });
+      assert.equal((await done).status, 'completed');
+      const count = f.calls.filter(call => call.method === 'session/new' || call.method === 'session/load').length;
+      await assert.rejects(f.agent.request('thread/start', { cwd: '/paper', sandbox: 'read-only' }), /The selected agent does not support read-only tasks through ACP\. Select another agent\./);
+      await assert.rejects(f.agent.request('thread/resume', { threadId: thread.id, cwd: '/paper', sandbox: 'read-only' }), /The selected agent does not support read-only tasks through ACP\. Select another agent\./);
+      assert.equal(f.calls.filter(call => call.method === 'session/new' || call.method === 'session/load').length, count);
+    } finally { f.agent.close(); }
+  });
+}
 
 test('empty and whitespace-only text chunks never become empty messages', { timeout: 5000 }, async () => {
   const f = profileFixture(ACP_PROFILES.qwen, { modes: { availableModes: [{ id: 'auto-edit' }] } }, (m, rpc) => {

@@ -1580,5 +1580,12 @@
   "Same as coordinator": "與協調者相同",
   "Typos, word choice and small LaTeX fixes": "錯別字、遣詞用字與小型 LaTeX 修正",
   "Stop worker": "停止工作程序",
-  "Stopped": "已停止"
+  "Stopped": "已停止",
+  "No WorkBuddy ACP launcher is configured.": "尚未設定 WorkBuddy ACP 啟動器。",
+  "Plan changes; may write planning files": "規劃變更；可能寫入計畫檔案",
+  "Set {variable} to a WorkBuddy ACP launcher, then restart Papilot.": "將 {variable} 設為 WorkBuddy ACP 啟動器的路徑，然後重新啟動 Papilot。",
+  "Skip approval prompts; native rules still apply": "略過核准提示；仍遵循原生規則",
+  "Uses CodeBuddy CLI and its saved login through ACP.": "透過 ACP 使用 CodeBuddy CLI 及其已儲存的登入資訊。",
+  "Uses Qoder CLI and its saved login through ACP.": "透過 ACP 使用 Qoder CLI 及其已儲存的登入資訊。",
+  "Uses a configured WorkBuddy ACP launcher. Its login must be available to the launcher.": "使用已設定的 WorkBuddy ACP 啟動器。該啟動器必須能使用登入資訊。"
 }
