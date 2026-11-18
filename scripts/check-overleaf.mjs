@@ -23,7 +23,7 @@ page.on('pageerror', error => errors.push(error.message));
 const project = { id: 'paper', name: 'Example paper', path: '/tmp/overleaf-fixture', createdAt: 1 };
 const runtime = { connected: true, authenticated: true, account: null, error: null, models: [{ id: 'model', name: 'Model', isDefault: true, efforts: ['high'], defaultEffort: 'high' }] };
 const OVERLEAF = 'https://www.overleaf.com', projectId = '0123456789abcdef01234567';
-let overleaf = { accounts: [], syncs: [] };
+let overleaf = { accounts: [], syncs: [] }, emptyWorkspace = true;
 const linked = () => ({ projectId: 'paper', origin: OVERLEAF, overleafId: projectId, name: 'Thesis draft', url: `${OVERLEAF}/project/${projectId}`, state: 'synced', readOnly: false, pending: 0, syncedAt: Date.now(),
   collaborators: [{ id: 'u1', name: 'Ada Lovelace', file: 'chapters/intro.tex' }, { id: 'u2', name: 'Grace Hopper' }, { id: 'me', name: 'Author', you: true, file: 'main.tex' }],
   cursors: [{ client: 'P.ada', id: 'u1', name: 'Ada Lovelace', file: 'chapters/intro.tex', line: 1, column: 4 }, { client: 'P.me', id: 'me', name: 'Author', you: true, file: 'chapters/intro.tex', line: 0, column: 0 }],
@@ -32,14 +32,14 @@ let importNeedsSignIn = true, browserSessions = [];
 let projectSessionExpired = false, compareSessionExpired = false;
 const poster = 'f'.repeat(24);
 const intro = 'Intro line one.\nAda wrote this sentence.\nThird line.\n';
-await context.route('**/api/**', async route => {
+const routeApi = async route => {
   const url = new URL(route.request().url()), json = data => route.fulfill({ json: data });
   const body = route.request().method() === 'POST' ? route.request().postDataJSON() : undefined;
   if (body !== undefined) posts.push({ path: url.pathname, body });
   if (url.pathname === '/api/note-alternatives') return json({ noteAlternatives: true, noteAlternativeRange: 'few' });
   if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname === '/api/runtime/requirements') return json(readyRequirements);
-  if (url.pathname === '/api/state') return json({ version: 'test', csrf: 'fixture', projects: [project], tasks: [], requests: [], runtime, gitAvailable: true, overleaf });
+  if (url.pathname === '/api/state') return json({ version: 'test', csrf: 'fixture', projects: emptyWorkspace ? [] : [project], tasks: [], requests: [], runtime, gitAvailable: true, overleaf });
   if (url.pathname === '/api/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture\n\n' });
   if (url.pathname === '/api/updates') return json({ currentVersion: 'test', latestVersion: 'test', phase: 'idle', checkedAt: 1, error: null, canUpdate: true });
   if (url.pathname.endsWith('/files')) return json({ document: null, files: [] });
@@ -69,6 +69,9 @@ await context.route('**/api/**', async route => {
   if (url.pathname === '/api/projects/paper/overleaf/link') { overleaf = { ...overleaf, syncs: [body.replace ? { ...linked(), name: 'Workshop poster', overleafId: poster, url: `${OVERLEAF}/project/${poster}`, conflicts: [] } : linked()] }; return json(overleaf); }
   if (url.pathname === '/api/projects/paper/overleaf/conflicts/c1/use-mine') { overleaf = { ...overleaf, syncs: [{ ...linked(), conflicts: [] }] }; return json(overleaf); }
   if (url.pathname === '/api/projects/paper/overleaf/unlink') { overleaf = { ...overleaf, syncs: [] }; return json(overleaf); }
+  if (url.pathname === '/api/imports/ordinary-draft') return json({ id: 'ordinary-draft', path: '/tmp/papers/zip-paper', copied: true, name: 'ZIP paper', candidates: ['main.tex'], main: 'main.tex', engine: 'pdflatex', phase: 'ready', versioned: true });
+  if (url.pathname === '/api/imports/overleaf-draft') return json({ id: 'overleaf-draft', path: '/tmp/papers/overleaf-paper', copied: true, name: 'Overleaf paper', candidates: ['main.tex'], main: 'main.tex', engine: 'pdflatex', phase: 'ready', versioned: true, overleaf: 'link' });
+  if (url.pathname === '/api/imports/overleaf-draft/finish') return json(project);
   const draft = { id: '00000000-0000-4000-8000-000000000001', path: '/tmp/papers/thesis', copied: true, name: 'Thesis draft', candidates: ['main.tex'], main: 'main.tex', engine: 'xelatex', phase: 'choose', overleaf: 'link' };
   if (url.pathname === '/api/imports') {
     if (importNeedsSignIn) { importNeedsSignIn = false; return route.fulfill({ status: 401, json: { error: 'Sign in to this Overleaf server first.', signIn: OVERLEAF } }); }
@@ -76,16 +79,69 @@ await context.route('**/api/**', async route => {
   }
   if (url.pathname.startsWith(`/api/imports/${draft.id}`)) return json({ ...draft, phase: 'ready', versioned: true });
   return json({});
-});
+};
+await context.route('**/api/**', routeApi);
 
 try {
   await page.goto(origin);
+  const homeSync = page.locator('.home-integrations').getByRole('button', { name: 'Sync with Overleaf', exact: true });
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme);
+    for (const width of [1440, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(homeSync).toBeInViewport();
+      const firstRow = await page.locator('.home-paper-actions').boundingBox(), secondRow = await homeSync.boundingBox();
+      assert.ok(secondRow.y >= firstRow.y + firstRow.height + 8, 'Overleaf sync has its own second row below the paper actions');
+      await expect(homeSync.locator('[data-brand="overleaf"]')).toBeVisible();
+      await page.screenshot({ path: `test-results/overleaf-home-${width}-${colorScheme}.png`, animations: 'disabled' });
+    }
+  }
+  await page.evaluate(() => localStorage.setItem('papilot:paper-import', 'ordinary-draft'));
+  await homeSync.click();
+  const importDialog = page.getByRole('dialog', { name: 'Sync with Overleaf', exact: true });
+  const projectLink = importDialog.getByRole('textbox', { name: 'Paste the link of an Overleaf project.', exact: true });
+  await expect(projectLink).toBeFocused();
+  await expect(importDialog.getByRole('switch', { name: 'Keep in sync with Overleaf' })).toBeChecked();
+  await projectLink.fill('https://github.com/example/paper');
+  await importDialog.getByRole('button', { name: 'Import link', exact: true }).click();
+  await expect(importDialog.getByRole('alert')).toHaveText('Paste the link of an Overleaf project.');
+  assert.equal(posts.filter(item => item.path === '/api/imports').length, 0);
+  await projectLink.fill(`${OVERLEAF}/project/${projectId}`);
+  await importDialog.getByRole('button', { name: 'Import link', exact: true }).click();
+  await expect(importDialog.getByLabel('Session cookie from overleaf.com')).toBeVisible();
+  assert.deepEqual(posts.filter(item => item.path === '/api/imports').at(-1), { path: '/api/imports', body: { url: `${OVERLEAF}/project/${projectId}`, sync: true } });
+  await expect(projectLink).toHaveValue(`${OVERLEAF}/project/${projectId}`);
+  await importDialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(homeSync).toBeFocused();
+  assert.equal(await page.evaluate(() => localStorage.getItem('papilot:paper-import')), 'ordinary-draft');
+  await page.evaluate(() => localStorage.setItem('papilot:overleaf-import', 'overleaf-draft'));
+  await page.locator('.home-paper-actions').getByRole('button', { name: 'Import or open', exact: true }).click();
+  const ordinaryImport = page.getByRole('dialog', { name: 'New paper', exact: true });
+  await expect(ordinaryImport.getByRole('textbox', { name: 'Paper name', exact: true })).toHaveValue('ZIP paper');
+  assert.equal(await page.evaluate(() => localStorage.getItem('papilot:overleaf-import')), 'overleaf-draft');
+  await ordinaryImport.getByRole('button', { name: 'Choose different files', exact: true }).click();
+  await ordinaryImport.getByRole('button', { name: 'Close', exact: true }).click();
+  assert.equal(await page.evaluate(() => localStorage.getItem('papilot:paper-import')), null);
+  importNeedsSignIn = true; emptyWorkspace = false;
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.reload();
+  // The generic entry can resume an Overleaf import after a different paper opens.
   await page.locator('.project-switcher').click();
-  await page.getByRole('menuitem', { name: 'Sync with Overleaf…' }).click();
+  await page.getByRole('menuitem', { name: 'Import or open', exact: true }).click();
+  await expect(ordinaryImport.getByRole('textbox', { name: 'Paper name', exact: true })).toHaveValue('Overleaf paper');
+  await ordinaryImport.getByRole('button', { name: 'Open paper', exact: true }).click();
+  await expect(ordinaryImport).toBeHidden();
+  assert.equal(await page.evaluate(() => localStorage.getItem('papilot:overleaf-import')), null);
+  await homeSync.click();
   const dialog = page.getByRole('dialog', { name: 'Sync with Overleaf' });
   await expect(dialog).toBeVisible();
   // Signed out in a browser: a session cookie signs in.
   await expect(dialog.getByLabel('Session cookie from overleaf.com')).toBeVisible();
+  await expect(dialog.getByLabel('Session cookie from overleaf.com')).toHaveCSS('font-size', '12px');
+  await expect(dialog.getByLabel('Session cookie from overleaf.com')).toHaveCSS('height', '28px');
+  await expect(dialog.getByRole('button', { name: 'Sign in' })).toHaveCSS('height', '28px');
   // Where to find the cookie opens in place instead of leaving the app.
   const steps = dialog.locator('.overleaf-help');
   await expect(steps.locator('ol')).toBeHidden();
@@ -105,7 +161,26 @@ try {
   await page.keyboard.press('Escape');
   projectSessionExpired = true;
   await page.locator('.project-switcher').click();
-  await page.getByRole('menuitem', { name: 'Sync with Overleaf…' }).click();
+  const syncMenu = page.getByRole('menuitem', { name: 'Sync with Overleaf…' });
+  const syncIcon = syncMenu.locator('.brand-icon');
+  await expect(syncIcon).toHaveCount(1);
+  await expect(syncIcon).toHaveAttribute('data-brand', 'overleaf');
+  await expect(syncIcon).toHaveAttribute('aria-hidden', 'true');
+  for (const theme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme: theme });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+    await page.mouse.move(1000, 600);
+    await page.keyboard.press('Home');
+    await page.screenshot({ path: `test-results/overleaf-menu-${theme}.png`, animations: 'disabled' });
+    await syncMenu.hover();
+    await expect(syncIcon).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await page.mouse.move(1000, 600);
+    await page.keyboard.press('End');
+    await expect(syncMenu).toBeFocused();
+    await expect(syncIcon).toHaveCSS('color', 'rgb(255, 255, 255)');
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+  await syncMenu.click();
   await expect(dialog.getByLabel('Session cookie from overleaf.com')).toBeFocused();
   await expect(dialog.getByText('Loading projects…')).toBeHidden();
   await page.screenshot({ path: 'test-results/overleaf-reauth.png', animations: 'disabled' });
@@ -132,6 +207,7 @@ try {
   // The sidebar row and the details panel.
   const row = page.getByRole('button', { name: /^Overleaf:/ });
   await expect(row).toBeVisible();
+  await expect(row).toHaveCSS('margin-top', '0px');
   await expect(row.locator('.count')).toHaveText('1');
   await row.click();
   const panel = page.getByRole('dialog', { name: 'Sync with Overleaf' });
@@ -223,6 +299,11 @@ try {
   await page.getByPlaceholder('Paste a link…').fill(`${OVERLEAF}/project/${projectId}`);
   const keep = page.getByRole('switch', { name: 'Keep in sync with Overleaf' });
   await expect(keep).toBeChecked();
+  await expect(keep).toHaveCSS('width', '28px');
+  await expect(keep).toHaveCSS('height', '16px');
+  await expect(page.locator('.import-sync')).toHaveCSS('font-size', '12px');
+  await expect(page.locator('.import-sync')).toHaveCSS('font-weight', '400');
+  await expect(page.locator('.import-sync')).toHaveCSS('gap', '8px');
   // A browser on this computer already signed in comes first, one click.
   browserSessions = [{ id: 'chrome:Profile 1', browser: 'Chrome' }, { id: 'firefox:Profiles/ab12.default-release', browser: 'Firefox' }];
   await page.getByRole('button', { name: 'Import link' }).click();
@@ -239,6 +320,55 @@ try {
   await expect(page.getByRole('button', { name: 'Open paper' })).toBeVisible();
   assert.deepEqual(posts.filter(post => post.path === '/api/imports').at(-1).body, { url: `${OVERLEAF}/project/${projectId}`, sync: true });
   await page.keyboard.press('Escape');
+  // Real touch media queries must keep the shared phone input typography.
+  const touch = await browser.newContext({ locale: 'en-US', viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await touch.route('**/api/**', routeApi);
+  const phone = await touch.newPage();
+  phone.on('pageerror', error => errors.push(error.message));
+  await phone.addInitScript(() => localStorage.setItem('papilot:language', 'en'));
+  overleaf = { accounts: [], syncs: [] }; browserSessions = [];
+  await phone.goto(origin);
+  await phone.getByRole('button', { name: 'Show task list', exact: true }).click();
+  await phone.locator('.project-switcher').click();
+  await phone.getByRole('menuitem', { name: 'Sync with Overleaf…' }).click();
+  const phoneDialog = phone.getByRole('dialog', { name: 'Sync with Overleaf' });
+  const cookie = phoneDialog.getByLabel('Session cookie from overleaf.com');
+  await expect(cookie).toBeVisible();
+  assert.equal(await phone.evaluate(() => matchMedia('(pointer: coarse)').matches), true);
+  for (const width of [390, 320]) {
+    await phone.setViewportSize({ width, height: 844 });
+    for (const colorScheme of ['light', 'dark']) {
+      await phone.emulateMedia({ colorScheme });
+      await expect(phone.locator('html')).toHaveAttribute('data-theme', colorScheme);
+      await expect(cookie).toHaveCSS('font-size', '16px');
+      await expect(cookie).toHaveCSS('height', '44px');
+      await expect(phoneDialog.getByRole('button', { name: 'Sign in' })).toHaveCSS('height', '44px');
+      await phone.screenshot({ path: `test-results/overleaf-sign-in-touch-${width}-${colorScheme}.png`, animations: 'disabled' });
+      const inputBox = await cookie.boundingBox(), buttonBox = await phoneDialog.getByRole('button', { name: 'Sign in' }).boundingBox();
+      assert.ok(inputBox.x >= 0 && inputBox.x + inputBox.width <= buttonBox.x && buttonBox.x + buttonBox.width <= width, 'the sign-in row fits without overlapping controls');
+    }
+  }
+  await phoneDialog.getByRole('button', { name: 'Use another Overleaf server' }).click();
+  await expect(phoneDialog.getByLabel('Overleaf server')).toHaveCSS('font-size', '16px');
+  await phone.keyboard.press('Escape');
+  await expect(phoneDialog).toBeHidden();
+  if (!await phone.locator('.project-switcher').isVisible()) await phone.getByRole('button', { name: 'Show task list', exact: true }).click();
+  await phone.locator('.project-switcher').click();
+  await phone.getByRole('menuitem', { name: 'Import or open' }).click();
+  await phone.getByPlaceholder('Paste a link…').fill(`${OVERLEAF}/project/${projectId}`);
+  const phoneKeep = phone.getByRole('switch', { name: 'Keep in sync with Overleaf' });
+  await expect(phoneKeep).toBeChecked();
+  await expect(phoneKeep).toHaveCSS('width', '40px');
+  await expect(phoneKeep).toHaveCSS('height', '24px');
+  await expect(phone.locator('.import-sync')).toHaveCSS('font-size', '13px');
+  await expect(phone.locator('.import-sync')).toHaveCSS('font-weight', '400');
+  await expect(phone.locator('.import-sync')).toHaveCSS('gap', '8px');
+  await phoneKeep.focus(); await phone.keyboard.press('Space');
+  await expect(phoneKeep).not.toBeChecked();
+  await phone.getByText('Keep in sync with Overleaf', { exact: true }).click();
+  await expect(phoneKeep).toBeChecked();
+  await phone.screenshot({ path: 'test-results/overleaf-import-touch-320-dark.png', animations: 'disabled' });
+  await touch.close();
   assert.deepEqual(errors, []);
   console.log('Overleaf sync UI checks passed.');
 } finally {

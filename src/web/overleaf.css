@@ -3,8 +3,8 @@
 .overleaf-dialog h2 .brand-icon { flex: none; }
 .overleaf-dialog label, .modal.overleaf-dialog form > label, .modal .overleaf-sign-in form > label { display: block; font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 6px; }
 .overleaf-row { display: flex; align-items: stretch; gap: 8px; }
-.overleaf-row input, .modal .overleaf-row input, .settings-dialog .overleaf-row input { flex: 1; min-width: 0; margin: 0; height: 34px; font-size: 13.5px; }
-.overleaf-row .button, .overleaf-row .button.compact { flex: none; height: 34px; }
+.overleaf-row input, .modal .overleaf-row input, .settings-dialog .overleaf-row input { flex: 1; min-width: 0; margin: 0; height: auto; }
+.overleaf-row .button, .overleaf-row .button.compact { flex: none; height: 28px; }
 .overleaf-sign-in { margin-top: 14px; display: grid; gap: 8px; justify-items: start; }
 .import-copy .overleaf-sign-in { margin: -8px 0 22px; }
 .overleaf-sign-in form { width: 100%; }
@@ -21,16 +21,15 @@
 .overleaf-help code { font-size: 11.5px; overflow-wrap: anywhere; }
 .overleaf-help kbd { display: inline-block; min-width: 18px; padding: 0 5px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; background: var(--bg-subtle); color: var(--text-2); font: 500 11px/16px var(--sans); text-align: center; }
 @media (prefers-reduced-motion: reduce) { .overleaf-help summary svg { transition: none; } }
-.overleaf-link { margin-top: 18px; }
+form.overleaf-link { margin-top: 16px; }
 .overleaf-server { display: block; width: 100%; font-size: 13px; font-weight: 500; }
-.modal .overleaf-server input { height: 34px; font-size: 13.5px; }
 .overleaf-other { padding: 0; font-size: 12.5px; color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; }
 .overleaf-other:hover { color: var(--text); }
 .overleaf-quiet { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
 
 .overleaf-projects { margin-top: 18px; }
 .overleaf-projects-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; font-size: 12px; font-weight: 500; color: var(--text-3); }
-.overleaf-projects-head input { width: 180px; height: 28px; margin: 0; font-size: 12.5px; }
+.overleaf-projects-head input { width: 180px; margin: 0; }
 .overleaf-projects ul { overscroll-behavior: contain; list-style: none; margin: 0; padding: 4px; max-height: 280px; overflow: auto; border-radius: var(--r-lg); background: var(--bg-subtle); box-shadow: inset 0 0 0 1px var(--line); }
 .overleaf-projects li > button { display: flex; align-items: baseline; gap: 12px; width: 100%; padding: 8px 10px; border-radius: var(--r); text-align: left; font-size: 13.5px; color: var(--text); }
 .overleaf-projects li > button:hover:not(:disabled), .overleaf-projects li > button:focus-visible { background: var(--bg-hover); }
@@ -51,7 +50,7 @@
 .overleaf-choice { margin-top: 14px; }
 
 /* Sidebar row */
-.overleaf-link { min-height: 36px; gap: 8px; font-weight: 400; }
+.nav-link.overleaf-link { gap: 8px; font-weight: 400; }
 .overleaf-link .brand-icon { flex: none; }
 .overleaf-link .nav-meta { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .overleaf-link.attention .nav-label { color: var(--amber-text); }
@@ -97,7 +96,7 @@ button.overleaf-person-file:focus-visible { outline: 2px solid var(--accent); ou
 .overleaf-footer .overleaf-stop, .overleaf-footer .danger { margin-right: auto; }
 .overleaf-footer .overleaf-stop { padding-inline: 0; color: var(--text-2); }
 .overleaf-footer .overleaf-stop:hover { color: var(--red); }
-.overleaf-add input { margin-top: 6px; height: 32px; max-width: 260px; }
+.overleaf-add input { margin-top: 6px; max-width: 260px; }
 
 @media (max-width: 520px) {
   .overleaf-versions { grid-template-columns: 1fr; }

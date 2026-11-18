@@ -63,6 +63,8 @@ await page.route('**/api/**', async route => {
   throw Error(`Unexpected fixture request ${url.pathname}`);
 });
 const rail = () => page.getByRole('toolbar', { name: 'Marking tools' });
+// The tools float as a bar inside the rail's gutter; the bar's edges are the toolbar's.
+const railBar = () => rail().locator('.rail-items');
 const tool = name => rail().getByRole('button', { name, exact: true });
 const words = () => page.locator('.page[data-page-number="1"] .textLayer span').filter({ hasText: /\S/ });
 async function selectText(index, release = true) {
@@ -94,13 +96,16 @@ try {
   await expect(rail().locator('.rail-separator')).toHaveCount(1);
   await expect(tool('Undo')).toBeDisabled(); await expect(tool('Redo')).toBeDisabled();
   assert.deepEqual(await rail().getByRole('button').evaluateAll(buttons => buttons.slice(-4).map(button => button.getAttribute('aria-label'))), ['Undo', 'Redo', 'Anchors', 'Add anchor']);
-  const railBox = await rail().boundingBox(), addBox = await tool('Add anchor').boundingBox();
+  const railBox = await railBar().boundingBox(), addBox = await tool('Add anchor').boundingBox();
   const bottomGap = railBox.y + railBox.height - addBox.y - addBox.height;
   assert.ok(bottomGap >= 0 && bottomGap < 12, 'Anchors follow history at the end of the rail');
   // Retracting the rail gives the width back to the PDF, keeps the selected
-  // tool and keyboard shortcuts, and remembers the preference on reload.
+  // tool and keyboard shortcuts. Reopening the page starts expanded.
   const collapse = () => tool('Collapse marking tools'), expand = () => tool('Expand marking tools');
   const expandedWidth = (await settled(page.locator('.pdf-container'))).width;
+  const toggleBox = await collapse().boundingBox();
+  assert.ok(toggleBox.y + toggleBox.height <= railBox.y, 'Collapse comes before the tools visually as well as in keyboard order');
+  await page.screenshot({ path: 'test-results/pdf-tools-expanded.png' });
   await key('q');
   await collapse().click();
   await expect(expand()).toHaveAttribute('aria-expanded', 'false');
@@ -108,20 +113,36 @@ try {
   await expect(rail().getByRole('button')).toHaveCount(1);
   await expect(page.locator('.pdf-view')).toHaveClass(/tool-magic/);
   assert.ok((await settled(page.locator('.pdf-container'))).width > expandedWidth + 40);
+  const reopenBox = await expand().boundingBox();
+  assert.ok(reopenBox.width >= 24 && reopenBox.height >= 24, 'The reopen button is a full pointer target');
+  assert.ok(Math.abs(toggleBox.x + toggleBox.width / 2 - reopenBox.x - reopenBox.width / 2) < 1
+    && Math.abs(toggleBox.y + toggleBox.height / 2 - reopenBox.y - reopenBox.height / 2) < 1, 'The toggle stays in the same place when the rail folds away');
   await key('h');
   await expect(page.locator('.pdf-view')).toHaveClass(/tool-hand/);
   await expand().click();
   await expect(tool('Hand')).toHaveAttribute('aria-pressed', 'true');
   await collapse().click();
+  await page.evaluate(() => localStorage.setItem('papilot:pdf-tools-collapsed', 'true'));
   await page.reload();
   await words().first().waitFor();
+  await expect(collapse()).toHaveAttribute('aria-expanded', 'true');
+  await expect(rail().getByRole('button')).toHaveCount(15);
+  await collapse().click();
   await expect(expand()).toBeVisible();
   await page.screenshot({ path: 'test-results/pdf-tools-collapsed.png' });
+  await page.mouse.move(1000, 250);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(expand()).toHaveCSS('background-color', 'rgb(51, 51, 51)');
+  await page.screenshot({ path: 'test-results/pdf-tools-collapsed-dark.png' });
   await expand().focus();
   await page.keyboard.press('Enter');
   await expect(collapse()).toHaveAttribute('aria-expanded', 'true');
   await expect(collapse()).toBeFocused();
   await expect(rail().getByRole('button')).toHaveCount(15);
+  await settled(rail());
+  await page.screenshot({ path: 'test-results/pdf-tools-expanded-dark.png' });
+  await page.emulateMedia({ colorScheme: 'light' });
   // The note tool is its own color picker: a click picks it, a second opens colors.
   await tool('Note').click();
   await expect(tool('Note')).toHaveAttribute('aria-pressed', 'true');
@@ -149,7 +170,7 @@ try {
   // Short windows scroll the tools while history stays visible and clickable.
   for (const height of [400, 320]) {
     await page.setViewportSize({ width: 1440, height });
-    const railBox = await settled(rail()), undoBox = await tool('Undo').boundingBox(), addBox = await tool('Add anchor').boundingBox();
+    const railBox = await settled(railBar()), undoBox = await tool('Undo').boundingBox(), addBox = await tool('Add anchor').boundingBox();
     const gap = railBox.y + railBox.height - addBox.y - addBox.height;
     assert.ok(gap >= 0 && gap < 12 && undoBox.y >= railBox.y);
     await tool('Undo').click(); await expect.poll(() => notes.length).toBe(0);
@@ -277,6 +298,10 @@ try {
   await key('5');
   await expect(page.locator('.stamp-lock')).toContainText('Verify');
   await expect(rail().locator('.rail-badge')).toHaveText('5');
+  await collapse().click();
+  const penBox = await settled(expand()), lockBox = await page.locator('.stamp-lock').boundingBox();
+  assert.ok(lockBox.x >= penBox.x + penBox.width, 'The quick-note status stays clear of the reopen button');
+  await expand().click();
   await selectText(3);
   await expect.poll(() => notes.length).toBe(3);
   await expect(wheel).toHaveCount(0);
@@ -447,6 +472,7 @@ try {
   await expect(rail().getByRole('button', { name: 'Hand', exact: true })).toHaveCount(0);
   const mobileRailBox = await settled(rail());
   assert.ok(mobileRailBox.x >= 0 && mobileRailBox.x + mobileRailBox.width <= 390 && mobileRailBox.y > 700, 'Phone marking capsule floats within the bottom viewport');
+  await page.screenshot({ path: 'test-results/pdf-tools-mobile-expanded.png' });
   await tool('Note').click(); await tool('Note').click();
   const palette = page.getByRole('menu', { name: 'Annotation group color' });
   await expect(palette).toBeVisible();
@@ -459,9 +485,15 @@ try {
   await expect(expand()).toBeVisible();
   const pillBox = await settled(rail());
   assert.ok(pillBox.height <= 34 && pillBox.y > mobileRailBox.y, 'Collapsed phone pill shrinks down to the bottom edge');
+  await page.screenshot({ path: 'test-results/pdf-tools-mobile-collapsed.png' });
   await expect(page.locator('.pdf-view')).toHaveClass(/tool-select/);
   await expand().click();
   await expect(rail()).toHaveAttribute('data-collapsed', 'false');
+  await expect(rail().getByRole('button')).toHaveCount(14);
+  await collapse().click();
+  await page.reload();
+  await page.getByRole('group', { name: 'Manuscript view' }).getByRole('button', { name: 'PDF', exact: true }).click();
+  await expect(collapse()).toHaveAttribute('aria-expanded', 'true');
   await expect(rail().getByRole('button')).toHaveCount(14);
   assert.deepEqual(errors, []);
   console.log('PASS: collapsible rail, bottom undo/redo, history retries and keyboard shortcuts, native text undo, deletions with replacements, the magic pen wheel, number lock, menu and settings, points, sticky notes, hand and Space, tool-after-selection, and phone collapsible bottom capsule.');

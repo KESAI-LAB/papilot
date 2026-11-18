@@ -5,7 +5,6 @@ import { StampMenu } from './stamp-menu.tsx';
 import { loadStamps, slotKey, type Stamp } from './stamps.ts';
 import { Icon } from './icons.tsx';
 import { t } from './i18n.ts';
-import { browserStorage } from './storage.ts';
 import './pdf-tools.css';
 
 // The tool rail, after an image editor's: each tool stays chosen until another
@@ -47,7 +46,7 @@ export function PdfToolRail({ tool, onTool, group, onGroup, disabled, suspended,
   history?: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
 }) {
   const suspendedRef = useRef(suspended); suspendedRef.current = suspended;
-  const railId = useId(), [collapsed, setCollapsed] = useState(() => browserStorage.getItem('papilot:pdf-tools-collapsed') === 'true');
+  const railId = useId(), [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 680px)').matches);
   const mobileRef = useRef(mobile); mobileRef.current = mobile;
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
@@ -56,7 +55,6 @@ export function PdfToolRail({ tool, onTool, group, onGroup, disabled, suspended,
   const railTipTarget = useRef<Element | null>(null);
   function toggleCollapse(next = !collapsed) {
     setCollapsed(next);
-    browserStorage.setItem('papilot:pdf-tools-collapsed', String(next));
     if (mobile && next && tool !== 'select') onTool('select');
   }
   useImperativeHandle(controller, () => ({ expand: () => toggleCollapse(false) }));
@@ -126,9 +124,7 @@ export function PdfToolRail({ tool, onTool, group, onGroup, disabled, suspended,
       <button type="button" className="rail-tool rail-toggle" aria-expanded={!collapsed} aria-controls={railId}
         aria-label={collapsed ? t('Expand marking tools') : t('Collapse marking tools')} title={collapsed ? t('Expand marking tools') : t('Collapse marking tools')}
         onClick={() => toggleCollapse()}>
-        {mobile
-          ? collapsed ? <><Icon name="toolNote" size={14}/><Icon name="chevronUp" size={14}/></> : <Icon name="chevronDown" size={16}/>
-          : <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} size={16}/>}
+        <Icon name={collapsed === mobile ? 'chevronUp' : 'chevronDown'} size={14}/>
       </button>
       <div id={railId} className="rail-items" hidden={collapsed}>
       <div className="rail-tools">

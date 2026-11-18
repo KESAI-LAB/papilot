@@ -196,7 +196,7 @@ try {
   await expect(deletingCard).toBeVisible();
   await expect(deleted).toHaveCount(0);
   assert.equal(restores, restoresBefore + 1);
-  await page.locator('.note-selection-head span').click();
+  await page.locator('.side-tabs [data-task-home]').click();
   await page.keyboard.press('ControlOrMeta+z');
   await page.waitForTimeout(300);
   assert.equal(restores, restoresBefore + 1, 'A later ⌘Z must not replay an undone deletion');
@@ -263,7 +263,9 @@ try {
   await expect(personalCard.getByText('Revise n1.', { exact: true })).toBeVisible();
   const quoteMobile = personalCard.getByRole('button', { name: 'Include note 1 in this task', exact: true });
   await expect(quoteMobile).toHaveAttribute('aria-pressed', 'true');
-  await quoteMobile.click();
+  // The selected button scales in. Retrying its click must not scroll the
+  // already-visible card's anchor offscreen while waiting for that animation.
+  await quoteMobile.click({ scroll: 'none' });
   await expect(quoteMobile).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('.new-task-panel [data-note]')).toHaveCount(0);
   const cardBox = await personalCard.boundingBox(), pdfBox = await page.locator('.pdf-container').boundingBox();
@@ -292,6 +294,7 @@ try {
   const editTaskNote = () => taskCard.getByRole('button', { name: 'Edit note 1', exact: true });
   const taskText = () => taskCard.locator('.note-edit-trigger');
   const taskEditor = taskCard.getByRole('textbox', { name: 'Edit note 1', exact: true });
+  await expect(page.locator('.manuscript-side-header').getByRole('button', { name: 'Remove all from task', exact: true })).toHaveText('Remove all from task');
   await editTaskNote().focus(); await page.keyboard.press('Enter');
   await expect(taskEditor).toBeFocused();
   await expect(taskEditor).toHaveValue('Revise n1.');
@@ -299,7 +302,7 @@ try {
   await expect(taskCard.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);
   await expect(taskCard.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
   await expect(send()).toBeDisabled();
-  await expect(page.locator('.task-notes-panel').getByRole('button', { name: 'Remove all from task', exact: true })).toBeDisabled();
+  await expect(page.locator('.manuscript-side-header').getByRole('button', { name: 'Remove all from task', exact: true })).toBeDisabled();
   await taskEditor.fill('   ');
   await expect(taskCard.getByRole('button', { name: 'Remove note 1 from task', exact: true })).toBeDisabled();
   await taskEditor.press('Escape');
@@ -639,7 +642,7 @@ try {
   assert.notEqual(backgrounds[0], backgrounds[1], 'Selected cards must have a distinct highlight');
   await expect(all()).toHaveAttribute('aria-pressed', 'mixed');
   await expect(group('Yellow')).toHaveAttribute('aria-pressed', 'mixed');
-  await expect(page.getByText('Added to task: 4', { exact: true })).toBeVisible();
+  await expect(page.locator('.side-tabs .count')).toHaveText('4');
   await page.reload(); await notesReady();
   await expect(instruction('Yellow')).toHaveValue('Explain the reasoning step by step.');
   await expect(instruction('Purple')).toHaveValue('Shorten this wording.');

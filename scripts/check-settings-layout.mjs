@@ -59,12 +59,27 @@ try {
           continue;
         }
         if (!await category.isVisible()) await page.locator('.settings-mobile-back').click();
+        if (language === 'en' && name === 'about' && width < 500) {
+          await category.scrollIntoViewIfNeeded();
+          const sidebar = await page.locator('.settings-sidebar').boundingBox();
+          const title = await page.locator('.settings-sidebar-title').boundingBox();
+          const footer = await page.locator('.settings-footer').boundingBox();
+          assert.ok(Math.abs(title.y - sidebar.y) <= 1, `${width}px: the phone settings heading stays visible at the end of the category list`);
+          assert.ok(footer.y + footer.height <= sidebar.y + sidebar.height, `${width}px: the settings footer stays in view`);
+          await expect(category).toBeInViewport();
+          await page.screenshot({ animations: 'disabled', path: `test-results/settings-navigation-${width}.png` });
+        }
         await category.click();
         if (name === 'latex') await page.locator('.latex-installation-facts').waitFor();
         if (name === 'updates') await page.locator('.settings-content-updates [role=alert]').waitFor();
         if (name === 'skills') await expect(page.locator('.skill-library-new')).toBeEnabled();
         if (name === 'quickNotes') await page.locator('.quick-note-text strong').getByText('Literaturverzeichnis', { exact: true }).waitFor();
         await page.evaluate(() => document.fonts.ready);
+        if (width > 760) {
+          const sidebar = await page.locator('.settings-sidebar').boundingBox();
+          const title = await page.locator('.settings-sidebar-title').boundingBox();
+          assert.ok(Math.abs(title.y - sidebar.y) <= 1, `${language}/${width}/${name}: scrolling to a category keeps the sidebar heading in place`);
+        }
         const content = page.locator('.settings-content');
         const overflow = await content.evaluate(root => {
           const issues = [root, ...root.querySelectorAll('*')].filter(element => {
@@ -80,6 +95,19 @@ try {
         const label = `${language}/${width}/${name}`;
         if (overflow.length) await page.screenshot({ path: `test-results/settings-overflow-${language}-${width}-${name}.png` });
         assert.deepEqual(overflow, [], label);
+        if (language === 'en' && name === 'general' && [320, 1280].includes(width)) {
+          const slider = page.locator('.settings-effort input[type="range"]');
+          for (const colorScheme of ['light', 'dark']) {
+            await page.emulateMedia({ colorScheme });
+            await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme);
+            await slider.focus();
+            // The native hit target sits above the drawn track and thumb;
+            // a text-field focus fill would hide both while using the keyboard.
+            await expect(slider).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+            await page.screenshot({ animations: 'disabled', path: `test-results/settings-slider-${width}-${colorScheme}.png` });
+          }
+          await page.emulateMedia({ colorScheme: 'light' });
+        }
         if (name === 'review') {
           const alternatives = page.locator('.settings-note-options');
           await expect(alternatives.getByRole('slider', { name: await alternatives.locator('label').innerText(), exact: true })).toHaveCount(1);

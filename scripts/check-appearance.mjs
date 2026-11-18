@@ -67,6 +67,11 @@ try {
   await rootHas('--bg', '#faf9f6');
   await choose('Accent', 'graphite');
   await rootHas('--primary', '#55565a');
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Research Tools', exact: true }).press('ArrowDown');
+  await expect(page.getByRole('menuitem', { name: 'Reference check', exact: true })).toHaveCSS('background-color', 'rgb(71, 72, 76)');
+  await page.keyboard.press('Escape');
+  await open();
   const background = dialog.getByRole('textbox', { name: 'Background', exact: true });
   await background.fill('#fef9ed');
   await background.press('Enter');
@@ -138,7 +143,7 @@ try {
   }
   await dialog.getByRole('button', { name: 'Reset appearance', exact: true }).click();
   await rootHas('--bg', '#ffffff');
-  await rootHas('--primary', '#2563eb');
+  await rootHas('--primary', '#0b8af0');
   await expect(reviewOptions.getByRole('radio', { name: 'PDF', exact: true })).toBeChecked();
   await other.waitForFunction(() => document.documentElement.style.getPropertyValue('--bg') === '#ffffff');
   // The theme select follows the select-only combobox pattern: Escape cancels

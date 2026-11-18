@@ -63,6 +63,9 @@ try {
     // Each role picks a worker from the host's catalogs, then its reasoning effort.
     const roles = disclosure.locator('.collaboration-route');
     await expect(roles).toHaveCount(3);
+    for (const title of await roles.locator('.settings-name').all()) {
+      await expect(title).not.toHaveCSS('cursor', 'pointer');
+    }
     const polish = disclosure.locator('[data-role="polish"]'), quick = disclosure.locator('[data-role="quick"]');
     await expect(polish.locator('[role="combobox"]')).toContainText('Codex');
     await expect(polish.getByRole('slider')).toHaveCount(0);

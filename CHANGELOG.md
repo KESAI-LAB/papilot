@@ -26,7 +26,15 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 - Add a folder button (**Browse…**) inside folder path fields in the browser, for opening an existing paper or choosing where to save a new one. On the computer running Papilot it opens the system folder picker; on other devices, such as a phone over Tailscale, it lists that computer's folders. When several TeX files are found, choose the main file from a themed list showing each file's folder.
 - Clarify **Import or open**: opening an existing folder edits its original files, while **Import a copy** keeps originals unchanged. The original-folder option is visible immediately. Folder and ZIP uploads stream to disk without the former 64 MiB / 5,000-file caps.
+
+- **A canvas-style interface.** The PDF lies on a light grey canvas between white panels joined by thin rules, like a design tool's canvas. Interface text is 12px and reading text 13px; buttons and fields are 28px and filled; menus, tooltips and dialogs float as white surfaces with rounder corners. Blue marks selection, focus and primary actions; other colours only carry meaning, such as changes, warnings and stamps. The marking tools float as a vertical tool bar beside the pages. Settings, dialogs, version control, notes and the review viewer use the same controls, in light and dark themes.
+- Mark a task's PDF before it has a review: until the agent's changes are ready, the task view offers every marking tool, and the marks go to the agent with the next follow-up, like comments. **Accept all** and **Reject all** are separate action buttons beside the view switches. The gallery's **Example project** shows its first page. **Open review in new tab** is gone; the review stays in the workspace. **Share** moved into the PDF toolbar, and **Remove all from task** is a text button beside the panel's tabs, one row higher; the tab shows how many notes the task has as a badge.
+- Selecting text in **Changes** works as it does in the PDF: a drag can cross lines and blank space without jumping to the end of the passage, a double-click selects a word and a triple-click a line, and the selection reads as one band per line.
 - Simplify PDF reading controls: remove back/forward history buttons and their separator, align the outline bookmark, anchor numbers and **+** in one compact column, and show a corner delete button on hover or keyboard focus. Phones also show **+** for direct anchor creation. Deletion keeps the current reading position and moves keyboard focus to the next anchor or **+**. Contents, page controls and internal links remain available.
+- Start the PDF toolbar expanded each time the view opens and keep its collapse control at the top. Collapsing leaves a single floating arrow in the same place to reopen it, clear of review headings and change controls. Research Tools uses a book icon.
+- Highlight newly sent tasks with a soft row background, removing the left accent stripe and flashing outline.
+- Show **Sync with Overleaf** with its logo on the opening page’s second action row, below the new-task composer and in the paper menu. The opening-page shortcut imports an Overleaf project with syncing enabled.
+
 - Show common AI conference templates before theses, with conference cards, compact search and a GitHub **Contribute** link. Retry catalog failures without losing a draft; **Blank** stays available, and late template links respect an explicit choice.
 - Simplify the PDF toolbars with one separator before Undo and Redo, keeping the other tools together.
 - Add a [Universe](https://papilot.ai/universe/) template-library link with a blue planet icon beside the homepage logo, visible on desktop and phones. Simplify the left navigation to Universe and Blog, and add translated template links below the downloads and in the footer. The orbit turns once on hover or keyboard focus and respects reduced motion; the online demo uses a play icon in narrow headers.
@@ -37,6 +45,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Fixed
 
+- Keep space above task search while the workspace loads or no paper is open, so the field does not touch the sidebar divider.
+- Move keyboard focus into a skill after its details finish rendering, so opening it on a busy device does not leave focus on a hidden list item.
+- Align Overleaf sign-in fields, import switches and sidebar spacing with the workspace controls, including larger touch inputs and consistent labels on phones. Long settings category lists scroll without hiding the heading, search or footer.
+- Keep reasoning sliders visible while focused: the input no longer covers the track, knob and keyboard focus ring. Collaboration role headings use ordinary text spacing and cursors; the enable switch retains its touch target.
 - Keep pdfLaTeX selected when Unicode package or class examples appear only in comments, including comments inside multiline package lists. Escaped percent signs no longer hide active XeLaTeX hints during import or compilation. ([#123](https://github.com/PapilotAI/papilot/pull/123))
 
 - **Long lines no longer widen the chat.** A diff in the chat with a long source line, such as a LaTeX paragraph, now scrolls inside its box instead of stretching the conversation past the screen.

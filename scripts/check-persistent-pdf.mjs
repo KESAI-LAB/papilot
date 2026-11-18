@@ -63,6 +63,7 @@ await page.route('**/api/**', async route => {
 await page.route('**/review/**', route => route.fulfill({ contentType: 'text/html', body: brokenReview ? '<html><body>Unavailable</body></html>' : '<html><body><div id="root"><main id="paper"><div class="waiting">Building</div></main></div><script>window.addEventListener("papilot:review:view-changed", event => { document.documentElement.dataset.view = event.detail; });</script></body></html>' }));
 const preview = page.locator('.task-document-preview');
 const canvas = preview.locator('.pdfViewer canvas').first();
+const pdfPage = preview.locator('.pdfViewer .page').first();
 const views = page.getByRole('group', { name: 'Workspace view' });
 async function readable() {
   await expect(preview).toBeVisible();
@@ -87,7 +88,7 @@ try {
   await page.goto(`http://127.0.0.1:${server.server.address().port}`);
   await readable();
   await expect(page.locator('.task-grid')).toHaveClass(/layout-split/);
-  const original = await canvas.elementHandle();
+  let original = await pdfPage.elementHandle();
   for (const status of ['queued', 'waiting_input', 'building', 'failed', 'reviewing']) {
     task.status = status;
     task.error = status === 'failed' ? 'Compile failed' : null;
@@ -103,11 +104,59 @@ try {
     await expect(preview.getByRole('button', { name: 'Generate PDF comparison', exact: true })).toHaveCount(['building', 'failed'].includes(status) ? 1 : 0);
   }
   await expect(page.getByRole('button', { name: 'Generate PDF comparison', exact: true })).toHaveCount(0);
+  // Until a task has a review, its PDF takes every marking tool. Marks join
+  // the chat's unsent message, drawn on the PDF they were made on; undo takes
+  // them back, and a written note opens the chat with it.
+  const rail = preview.getByRole('toolbar', { name: 'Marking tools' });
+  await expect(rail.getByRole('button', { name: 'Note', exact: true })).toBeVisible();
+  const word = preview.locator('.page[data-page-number="1"] .textLayer span').filter({ hasText: /\S/ }).first();
+  // pdf.js redraws the pages under a selection when the reader resizes, such
+  // as when a failed build's message appears; select again until the page
+  // offers its tools.
+  const addNote = preview.locator('.add-note');
+  const selectWord = () => expect.poll(async () => {
+    if (!await addNote.isVisible()) await word.evaluate(element => {
+      const range = document.createRange(); range.selectNodeContents(element);
+      const selection = document.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+      document.dispatchEvent(new Event('selectionchange'));
+    });
+    return addNote.isVisible();
+  }).toBe(true);
+  const unsent = () => page.evaluate(() => JSON.parse(localStorage.getItem('papilot:review-notes:task') || '{"notes":[]}').notes);
+  await selectWord(); await rail.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect.poll(async () => (await unsent()).map(note => [note.kind, note.paper?.key, note.strip])).toEqual([['delete', 'baseline', 'paper:0']]);
+  await expect(preview.locator('.note-mark[data-kind="delete"]').first()).toBeVisible();
+  await rail.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(async () => (await unsent()).length).toBe(0);
+  await expect(preview.locator('.note-mark')).toHaveCount(0);
+  await rail.getByRole('button', { name: 'Select', exact: true }).click();
+  await selectWord(); await rail.getByRole('button', { name: 'Note', exact: true }).click();
+  const noteText = page.getByRole('textbox', { name: 'Edit note 1', exact: true });
+  await noteText.fill('Say this more plainly.'); await noteText.press('Enter');
+  await expect.poll(async () => (await unsent()).map(note => [note.comment, note.paper?.key])).toEqual([['Say this more plainly.', 'baseline']]);
+  await expect(page.getByLabel('Review feedback')).toContainText('Say this more plainly.');
+  await expect(preview.locator('.note-tag')).toHaveCount(1);
+  await rail.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(async () => (await unsent()).length).toBe(0);
+  await expect(preview.locator('.note-mark')).toHaveCount(0);
+  // Resizing redraws the canvas inside a retained page. Track the page itself
+  // to distinguish a new document from a new raster at the current width.
+  await readable();
+  original = await pdfPage.elementHandle();
   // A new, unavailable PDF must leave the successfully loaded pages intact.
   manuscript.build = { status: 'failed', key: 'broken', current: false, error: 'Compile failed' };
   await sync();
   await expect.poll(() => requests.some(url => url.includes('key=broken'))).toBe(true);
   await readable(); assert.ok(await original.evaluate(el => el.isConnected));
+  // The retained PDF still takes marks: they name its build, show on it, and
+  // undo takes them back.
+  await rail.getByRole('button', { name: 'Select', exact: true }).click();
+  await selectWord(); await rail.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect.poll(async () => (await unsent()).map(note => [note.kind, note.paper?.key])).toEqual([['delete', 'baseline']]);
+  await expect(preview.locator('.note-mark[data-kind="delete"]').first()).toBeVisible();
+  await rail.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(async () => (await unsent()).length).toBe(0);
+  await expect(preview.locator('.note-mark')).toHaveCount(0);
   manuscript.build.key = 'baseline';
   task.status = 'building'; task.review = { state: 'building', round: 1, counts: {} }; await sync();
   await expect(page.locator('.review-viewport')).toHaveClass(/review-pending/);
@@ -151,6 +200,8 @@ try {
   fs.mkdirSync('test-results', { recursive: true });
   for (const [size, viewport] of [['desktop', { width: 1440, height: 900 }], ['mobile', { width: 390, height: 844 }]]) {
     await page.setViewportSize(viewport);
+    // Writing a note opens Chat; explicitly return to the PDF on a phone.
+    if (size === 'mobile') await views.getByRole('button', { name: 'Review', exact: true }).click();
     for (const theme of ['light', 'dark']) {
       await page.emulateMedia({ colorScheme: theme });
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
@@ -203,7 +254,7 @@ try {
     await frame.locator('#paper').evaluate(el => { el.innerHTML = '<p class="comparison-waiting" data-state="failed">Comparison unavailable</p>'; });
     await readable();
   }
-  const firstRetained = await canvas.elementHandle();
+  const firstRetained = await pdfPage.elementHandle();
   await publish(3);
   await expect(problems.locator('pre')).toHaveText(firstProblems.join('\n\n'));
   assert.ok(await firstRetained.evaluate(el => el.isConnected));
@@ -215,7 +266,7 @@ try {
   await expect(problems.locator('pre')).toHaveText(retained.get(3).errors[0]);
   await readable();
   assert.equal(await firstRetained.evaluate(el => el.isConnected), false);
-  const replacement = await canvas.elementHandle();
+  const replacement = await pdfPage.elementHandle();
   const failedPdf = page.waitForResponse(response => response.url().endsWith('round=4&build=round-4'));
   await publish(4); assert.equal((await failedPdf).status(), 404);
   await expect(problems.locator('pre')).toHaveText(retained.get(3).errors[0]);
@@ -275,7 +326,7 @@ try {
   await expect(page.locator('.task-grid')).toHaveClass(/layout-split/);
   assert.equal(await page.evaluate(() => localStorage.getItem('papilot:layout')), null, 'An earlier saved view is cleared');
   assert.deepEqual(errors, []);
-  console.log('PASS: Persistent PDF across task states, build-bound diagnostics, delayed/failed/repaired replacements, keyboard disclosure, desktop/mobile themes, PDF-mode escape, hidden Chat shortcuts/place retention, and reload');
+  console.log('PASS: Persistent PDF across task states, marking before review, build-bound diagnostics, delayed/failed/repaired replacements, keyboard disclosure, desktop/mobile themes, PDF-mode escape, hidden Chat shortcuts/place retention, and reload');
 } catch (error) {
   console.error(error);
   await page.screenshot({ path: 'test-results/persistent-pdf-failure.png' }).catch(() => {});
