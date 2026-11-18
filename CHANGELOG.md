@@ -36,7 +36,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 - Simplify PDF reading controls: remove back/forward history buttons and their separator, align the outline bookmark, anchor numbers and **+** in one compact column, and show a corner delete button on hover or keyboard focus. Phones also show **+** for direct anchor creation. Deletion keeps the current reading position and moves keyboard focus to the next anchor or **+**. Contents, page controls and internal links remain available.
 - Start the PDF toolbar expanded each time the view opens and keep its collapse control at the top. Collapsing leaves a single floating arrow in the same place to reopen it, clear of review headings and change controls. Research Tools uses a book icon.
 - Highlight newly sent tasks with a soft row background, removing the left accent stripe and flashing outline.
-- Show **Sync with Overleaf** with its logo on the opening page’s second action row, below the new-task composer and in the paper menu. The opening-page shortcut imports an Overleaf project with syncing enabled.
+- Show **Sync with Overleaf** with its logo on the empty opening page’s second action row and in the paper menu. The opening-page shortcut imports an Overleaf project with syncing enabled.
 
 - Show common AI conference templates before theses, with conference cards, compact search and a GitHub **Contribute** link. Retry catalog failures without losing a draft; **Blank** stays available, and late template links respect an explicit choice.
 - Simplify the PDF toolbars with one separator before Undo and Redo, keeping the other tools together.
@@ -49,6 +49,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Fixed
 
+- Keep the Overleaf project-picker heading on one line beside search, including Chinese labels; let controls wrap when space is limited.
 - Keep space above task search while the workspace loads or no paper is open, so the field does not touch the sidebar divider.
 - Move keyboard focus into a skill after its details finish rendering, so opening it on a busy device does not leave focus on a hidden list item.
 - Align Overleaf sign-in fields, import switches and sidebar spacing with the workspace controls, including larger touch inputs and consistent labels on phones. Long settings category lists scroll without hiding the heading, search or footer.
