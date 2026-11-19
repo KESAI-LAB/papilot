@@ -20,7 +20,7 @@
   --line:#ebebeb;--line-strong:#d6d6d6;--line-hover:#c4c4c4;
   --text:#171717;--text-2:#525252;--text-3:#8a8a8a;
   --accent:#2563eb;--accent-hover:#1d4ed8;--accent-soft:#eff6ff;--accent-line:#bfdbfe;
-  --green:#15803d;--red:#b91c1c;--star:#b45309;
+  --green:#15803d;--red:#b91c1c;
   --backdrop:linear-gradient(135deg,#e3ebfd 0%,#f7f8fb 50%,#e9e7fd 100%);
   --glass:rgb(255 255 255/.78);--mark:#dbe6fd;--button:#2563eb;--button-hover:#1d4ed8;
   --r:8px;--r-md:10px;--r-lg:16px;--r-xl:24px;
@@ -36,7 +36,7 @@
   --line:#2a2b30;--line-strong:#3a3b41;--line-hover:#4a4b52;
   --text:#ececed;--text-2:#a9aaaf;--text-3:#7d7e84;
   --accent:#5b8cff;--accent-hover:#7ba3ff;--accent-soft:#162139;--accent-line:#2c4170;
-  --green:#4ade80;--red:#f87171;--star:#f5b83d;
+  --green:#4ade80;--red:#f87171;
   --backdrop:linear-gradient(135deg,#161c2e 0%,#111214 50%,#1b1830 100%);
   --glass:rgb(17 18 20/.74);--mark:rgb(91 140 255/.3);--button:#3466e8;--button-hover:#4a78ee;
   --float:0 1px 2px rgb(0 0 0/.3),0 24px 48px -16px rgb(0 0 0/.6);
@@ -47,7 +47,7 @@
   --line:#2a2b30;--line-strong:#3a3b41;--line-hover:#4a4b52;
   --text:#ececed;--text-2:#a9aaaf;--text-3:#7d7e84;
   --accent:#5b8cff;--accent-hover:#7ba3ff;--accent-soft:#162139;--accent-line:#2c4170;
-  --green:#4ade80;--red:#f87171;--star:#f5b83d;
+  --green:#4ade80;--red:#f87171;
   --backdrop:linear-gradient(135deg,#161c2e 0%,#111214 50%,#1b1830 100%);
   --glass:rgb(17 18 20/.74);--mark:rgb(91 140 255/.3);--button:#3466e8;--button-hover:#4a78ee;
   --float:0 1px 2px rgb(0 0 0/.3),0 24px 48px -16px rgb(0 0 0/.6);
@@ -526,12 +526,12 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
 .download-list a:hover,.download-list a:focus-visible{background:var(--bg-hover);outline:none;text-decoration:none}
 .hero-note{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:4px 18px;margin-top:16px;text-align:center;font-size:13.5px;color:var(--text-3)}
 .hero-universe{padding-block:3px;text-wrap:balance}
-.hero-star{display:inline-flex;align-items:center;gap:5px;padding-block:3px;color:var(--text-2);font-weight:500;white-space:nowrap}
-.hero-star:hover,.hero-star:focus-visible{color:var(--text)}
-.github-link{position:relative;gap:6px}
-.github-link svg,.hero-star svg{flex:none}
-.github-star,.star-icon{color:var(--star)}
-.github-count{color:var(--text-3);font-variant-numeric:tabular-nums}
+/* The header's GitHub button: the mark and, from deploys, the star count. */
+.hero-star{display:inline-flex;align-items:center;gap:5px;padding-block:3px;white-space:nowrap}
+.hero-star svg{flex:none}
+.github-link:has(.github-count){display:inline-flex;align-items:center;gap:6px;width:auto;padding:0 12px 0 10px}
+.github-link svg{flex:none}
+.github-count{font-size:13.5px;font-weight:500;font-variant-numeric:tabular-nums}
 
 /* Sections share one header: a serif title. */
 .section{padding:112px 0}
@@ -970,10 +970,6 @@ html[lang=ja] .hero h1{overflow-wrap:normal;line-break:strict}
 .privacy-controls[hidden],.privacy-controls [hidden]{display:none}
 
 /* Narrow headers keep their room for the demo and GitHub; Discord stays in the footer. */
-@media(max-width:920px){
-  .topbar .github-link{padding:0 11px;gap:5px}
-  .topbar .github-link>[lang]{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-}
 @media(max-width:720px){.topbar .discord-link{display:none}}
 @media(max-width:360px){
   .m-tools>i{width:27px}
@@ -982,12 +978,12 @@ html[lang=ja] .hero h1{overflow-wrap:normal;line-break:strict}
 }
 @media(max-width:600px){
   .topbar-inner{gap:8px}
-  .topbar .brand-name,.topbar .github-star{display:none}
+  .topbar .brand-name{display:none}
   .topbar-actions{gap:2px}
   .topbar-universe{min-height:34px;gap:5px;padding:5px 10px 5px 8px;font-size:13px}
   .universe-icon{width:22px;height:22px}
   .topbar .icon-button{width:30px;height:32px}
-  .topbar .github-link{min-width:30px;height:32px;padding:0 7px;border-color:transparent;background:transparent}
+  .topbar .github-link:has(.github-count){width:auto;padding:0 8px 0 6px;gap:4px}
   .topbar-demo{justify-content:center;width:30px;min-height:34px;margin-right:2px}
   .topbar-demo .demo-icon{display:block}
   .topbar-demo>[lang]{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}

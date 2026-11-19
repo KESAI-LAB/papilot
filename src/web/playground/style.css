@@ -8,8 +8,7 @@
 .demo-reset.button { gap: 6px; }
 .demo-bar-links, .demo-downloads { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .demo-platform.button, .demo-star.button { padding: 0 9px; gap: 6px; }
-.demo-star > svg { color: #b45309; fill: currentColor; }
-:root[data-theme="dark"] .demo-star > svg { color: #f5b83d; }
+.demo-star > svg { fill: currentColor; }
 .demo-platform > svg:last-child { color: var(--text-3); }
 .demo-linux-icon { width: 15px; height: 15px; flex-shrink: 0; background: currentColor; mask: url('../brand-icons/linux.svg') center / contain no-repeat; }
 .playground-root { position: fixed; inset: auto 0 auto 0; top: var(--viewport-top, 0px); height: var(--viewport-height, 100dvh); display: flex; flex-direction: column; overflow: hidden; }
