@@ -3,8 +3,9 @@ import { AgentPicker, type AgentOption } from './agent-picker.tsx';
 import { agentLabel } from './agent-choice.ts';
 import { saveCommitMessageAgent, useCommitMessageAgent, type CommitMessageChoice } from './commit-agent-preferences.ts';
 import { t } from './i18n.ts';
+import type { RefreshUsage } from './usage.tsx';
 
-export function CommitAgentSettings({ current, agents, reconnect }: { current: CommitMessageChoice; agents: AgentOption[]; reconnect?: () => Promise<void> }) {
+export function CommitAgentSettings({ current, agents, reconnect, refreshUsage }: { current: CommitMessageChoice; agents: AgentOption[]; reconnect?: () => Promise<void>; refreshUsage?: RefreshUsage }) {
   const id = useId(), preference = useCommitMessageAgent();
   const [reconnecting, setReconnecting] = useState(false), [error, setError] = useState('');
   const following = preference === 'conversation';
@@ -21,7 +22,7 @@ export function CommitAgentSettings({ current, agents, reconnect }: { current: C
     </div>
     <div className="settings-row settings-choice">
       <div className="settings-text"><span className="settings-name">{t('Commit-message agent')}</span>{error && <p role="alert">{error}</p>}</div>
-      <AgentPicker agents={options} agent={current.agent} model={current.model} effort={current.effort} fast={Boolean(current.serviceTier && current.serviceTier !== 'default')}
+      <AgentPicker refreshUsage={refreshUsage} agents={options} agent={current.agent} model={current.model} effort={current.effort} fast={Boolean(current.serviceTier && current.serviceTier !== 'default')}
         reconnecting={reconnecting} onReconnect={() => { if (!reconnect) return; setReconnecting(true); setError(''); void reconnect().catch(error => setError(error instanceof Error ? error.message : String(error))).finally(() => setReconnecting(false)); }}
         onSelect={(agent, selected) => {
           const next = options.find(item => item.value === agent)?.runtime?.models.find(item => selected ? item.id === selected : item.isDefault);
