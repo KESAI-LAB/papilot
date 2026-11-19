@@ -103,7 +103,7 @@ try {
     if (width === 390) await page.getByRole('group', { name: 'Manuscript view' }).getByRole('button', { name: 'PDF', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme);
     await expect(tags).toHaveCount(4);
-    await page.keyboard.press('Tab'); await tags.first().focus();
+    await tags.first().hover();
     const label = tags.first().locator('.in-flight-label');
     await expect(label).toBeVisible();
     const box = await label.boundingBox(); assert.ok(box.x >= 0 && box.x + box.width <= width, 'status label fits the viewport');

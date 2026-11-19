@@ -379,7 +379,7 @@ test('manuscript keeps sent notes as read-only in-flight marks until their task 
       f.store.updateTask('thesis-task', { status });
       assert.deepEqual(await poll(), [{ note, taskId: 'thesis-task', title: 'thesis-task', status }]);
     }
-    f.store.updateTask('thesis-task', { status: 'building', review: { state: 'reviewing', round: 1, counts: { pending: 1 }, ready: true } });
+    f.store.updateTask('thesis-task', { status: 'building', review: { state: 'reviewing', round: 1, counts: { pending: 1 }, ready: 1 } });
     assert.equal((await poll())[0].ready, true, 'a usable review stays ready while optional previews build');
     // Archiving organizes the sidebar without cancelling unfinished work.
     f.store.updateTask('thesis-task', { archivedAt: 1 });
