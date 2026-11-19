@@ -6,6 +6,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Added
 
+- Keep sent PDF notes visible on the manuscript as translucent dashed marks while their task is unfinished. Status dots distinguish running and ready tasks; click a mark to open its review. Marks disappear after completion or delivery to the manuscript.
 - Peek at internal PDF references with a 400 ms hover, Alt-click (Option-click on macOS), or keyboard focus. Equations, tables, figures and bibliography entries preview in place without changing your reading position; ordinary clicks still navigate.
 
 - Choose the language of generated commit messages in **Settings → Git**, independently of the interface language. **Auto** keeps following recent commits; an explicit language applies to Git, staged commits and task commits.

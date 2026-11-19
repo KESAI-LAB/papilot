@@ -798,6 +798,18 @@ body.resizing iframe{pointer-events:none}
 /* Numbered pins beside the text, like a design tool's comment pins. */
 .note-tag{position:absolute;z-index:1;transform:translateY(-50%);min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--primary);color:#fff;font-size:11px;font-weight:600;line-height:20px;text-align:center;box-shadow:var(--shadow-xs);pointer-events:auto;cursor:pointer}
 .note-tag.active{box-shadow:0 0 0 1.5px var(--pdf-page),0 0 0 3px var(--accent)}
+.in-flight-mark{position:absolute;box-sizing:border-box;border:1.5px dashed color-mix(in srgb,var(--accent) 60%,transparent);border-radius:3px;background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.in-flight-tag{position:absolute;z-index:1;display:grid;place-items:center;min-width:24px;min-height:24px;padding:0;border-radius:50%;transform:translateY(-50%);color:var(--accent);pointer-events:auto;cursor:pointer}
+.in-flight-dot{width:8px;height:8px;box-sizing:border-box;border:2px solid currentColor;border-radius:50%;background:var(--pdf-page);box-shadow:0 0 0 2px var(--pdf-page)}
+.in-flight-tag[data-status=reviewing]{color:var(--green)}
+.in-flight-tag[data-status=reviewing] .in-flight-dot{background:currentColor}
+.in-flight-tag:is([data-status=failed],[data-status=uncertain],[data-status=waiting_input],[data-status=interrupted]){color:var(--amber-text)}
+.in-flight-tag:is(:hover,:focus-visible){z-index:2;background:var(--bg-muted)}
+.in-flight-tag:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+.in-flight-label{display:none;position:absolute;top:100%;max-width:min(240px,60vw);width:max-content;padding:4px 8px;border-radius:5px;background:var(--raised);color:var(--text);box-shadow:var(--float);font:11px/1.5 var(--sans);overflow-wrap:anywhere;pointer-events:none}
+.in-flight-tag[data-side=left] .in-flight-label{left:0}
+.in-flight-tag[data-side=right] .in-flight-label{right:0}
+.in-flight-tag:is(:hover,:focus-visible) .in-flight-label{display:block}
 /* Selection actions already use transforms for placement. Keep their hit
    areas still as they appear, so aiming at a button cannot expose a PDF link. */
 @keyframes pdf-action-in{from{opacity:0}}
