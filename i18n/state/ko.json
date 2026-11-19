@@ -3655,7 +3655,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Refresh": {
-    "revision": "02754a0696a9337eed2e2e3a8162be2ccc10958502f123f6ff898b69c65bac24",
+    "revision": "b14e6e5a1050d95528f7160c6e06c3d91afe45bf837a74f859219ebf6a6f6ba2",
     "textHash": "8259f9d353516e60d2990fbd0630ae3c0d082f46a47b18426f9fa6025af79f52",
     "model": "gemini-4-argon-medium"
   },
@@ -3675,7 +3675,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Refreshing…": {
-    "revision": "6e2f43a56d16529730163ea42e5cd3a1a0e0cff829ff2f15b7e43d6e1a76037a",
+    "revision": "753c2d8b12709a90c829107ee2efeedbf5ea8c2acf25a2c077fea41009704fe2",
     "textHash": "7d7c37bfd35073ec9eba1942ea39ac9f17d85906a9b61761845b94c23066fa95",
     "model": "gemini-4-argon-medium"
   },
@@ -5310,7 +5310,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Usage not reported": {
-    "revision": "b8d10fb543aece9229cf38899fad85d5ce2f5a81dfecef3269ec4d10db38c1fe",
+    "revision": "04e44c3d4f06cb2ac9c3a6ae0f100546736953c775b1bcac2c22c39953c290d8",
     "textHash": "cb460a72f1093f6d4ba3ed977e3ece98c4e3493d5f93f8f36e782f5a5fa67e32",
     "model": "gemini-4-argon-medium"
   },
@@ -5620,7 +5620,7 @@
     "model": "codex-reviewed"
   },
   "Write a commit message for the chosen files with {agent}": {
-    "revision": "4e9f7f2326937dcbd41abe6e34f6ebbd41ab590f95da2ece980f00d0dd1f7e37",
+    "revision": "db7e74829366ca2e543aec11633c252a121b53d0ebb31b11ef3df9e60a33a5dc",
     "textHash": "39a6794c3f6e4997f1014f09b713b9749e854ce85ba36f2568e3e64f121220d4",
     "model": "gemini-4-argon-medium"
   },
@@ -6538,6 +6538,21 @@
     "revision": "dbe2b227fdd45f89727873d4110e599c55e2f9554268827aaf2309cd6fc64b22",
     "textHash": "4752797feea16fb262d5fef3f66fcfa8b1ab095310ad8f79d600a7c628406db9",
     "model": "gemini-4-argon-medium"
+  },
+  "Commit-message agent": {
+    "revision": "143666cde58616859647dad021722b30db3e7ce3c20451df4d8a627975ae6994",
+    "textHash": "bf3afff53d13a84458ba5be408e495d80f733349351878711ae228638ef4045f",
+    "model": "manual"
+  },
+  "Follow current conversation": {
+    "revision": "701dd6cc3456303687dc4884d0c7df794ed82d78d2edd3b8fa9a5479e5f1aba3",
+    "textHash": "86e722116d815dd61730ec442a63c95f42eec27a84701da597b93b6a0bffe737",
+    "model": "manual"
+  },
+  "Use the conversation’s model and reasoning effort, or the new-task settings if none. An explicit choice applies only to commit messages and is saved in this browser.": {
+    "revision": "d64142cc63f98c25b6a89eb64d27b99ceed552f9f599f8501282d8bf3082dd50",
+    "textHash": "2f06934de3f7ca933e3ab20380dc50853b61cae99afdf9ae0826b96e52478c94",
+    "model": "manual"
   },
   "Allow Papilot in macOS Accessibility settings.": {
     "revision": "8c4870821d437592af90d9a99cebfaddbbd884f6435e16659b1ae221aa25186f",

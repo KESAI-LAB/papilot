@@ -10,6 +10,10 @@ import { browserStorage } from './storage.ts';
 import { loadIndirectChanges, saveIndirectChanges, useIndirectChanges } from './effect-preferences.ts';
 import { loadNoteAlternatives } from './note-option-preferences.ts';
 import { NoteOptionSettings } from './note-option-settings.tsx';
+import { agentLabel, offeredAgents } from './agent-choice.ts';
+import { CommitAgentSettings } from './commit-agent-settings.tsx';
+import type { CommitMessageChoice } from './commit-agent-preferences.ts';
+import type { RefreshUsage } from './usage.tsx';
 import { saveAdvancedGit, useAdvancedGit } from './git-preferences.ts';
 import { saveDefaultReviewView, useDefaultReviewView } from './review-view.ts';
 import { ModeSwitch } from './mode-switch.tsx';
@@ -36,7 +40,7 @@ type SettingsEntry = { page: SettingsPage; label: string; icon: string; keywords
 // Shared with the review page's bibliography checks.
 const REFERENCE_CHECKS = 'papilot:review:references';
 
-export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, diagnostics, requirements, skills, updates, modelDefaults, workflow, overleaf, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; diagnostics?: DiagnosticsSettingsProps; requirements?: { state: RequirementsState; online: boolean }; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; workflow?: CollaborationSettingsProps; overleaf?: { api: UpdateApi; state: OverleafState | undefined }; initialPage?: SettingsInitialPage }) {
+export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, diagnostics, requirements, skills, updates, modelDefaults, workflow, overleaf, commitWriter, refreshUsage, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; diagnostics?: DiagnosticsSettingsProps; requirements?: { state: RequirementsState; online: boolean }; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; commitWriter: CommitMessageChoice; refreshUsage?: RefreshUsage; workflow?: CollaborationSettingsProps; overleaf?: { api: UpdateApi; state: OverleafState | undefined }; initialPage?: SettingsInitialPage }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const skillControls = useRef<SkillLibraryControls>(null);
   const { choice } = useLanguage();
@@ -88,7 +92,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
       ...(overleaf ? [{ page: 'overleaf' as const, label: 'Overleaf', icon: 'overleaf', keywords: `${t('Sync with Overleaf…')} ${t('Sign in')} ${t('Sign out')}` }] : []),
     ] },
     { label: t('Runtime'), entries: [
-      { page: 'git', label: 'Git', icon: 'git', keywords: `${t('Version history')} ${t('Show advanced Git features')}` },
+      { page: 'git', label: 'Git', icon: 'git', keywords: `${t('Version history')} ${t('Show advanced Git features')} ${t('Commit-message agent')}` },
       ...(diagnostics ? [
         { page: 'agents', label: t('Agents'), icon: 'terminal', keywords: `${t('Agent configuration')} ${t('Available models')} ${t('Usage & limits')}` },
         { page: 'latex', label: 'LaTeX', icon: 'paper', keywords: 'TeX Live MacTeX BasicTeX MiKTeX' },
@@ -172,6 +176,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
         {page === 'git' && <div className="settings-page">
           {requirements && <section className="settings-card settings-card-body"><ToolRequirement tool="git" {...requirements}/></section>}
           <section className="settings-card">
+            <CommitAgentSettings refreshUsage={refreshUsage} current={commitWriter} agents={diagnostics ? offeredAgents(diagnostics.runtimes).map(value => ({ value, label: agentLabel(value), runtime: diagnostics.runtimes[value] })) : modelDefaults.agents} reconnect={diagnostics?.reconnect}/>
             <div className="settings-row settings-toggle">
               <div className="settings-text">
                 <label className="settings-name" htmlFor="settings-advanced-git">{t('Show advanced Git features')}</label>

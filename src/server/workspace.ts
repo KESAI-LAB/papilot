@@ -66,8 +66,9 @@ export const agentModel = (m: any): AgentModel => {
 export function accountUsage(response: any): Usage | null {
   const limits = response?.rateLimits;
   if (!limits) return null;
-  const windows = [limits.primary, limits.secondary].filter((w: any) => typeof w?.usedPercent === 'number')
-    .map((w: any) => ({ usedPercent: Math.min(100, Math.max(0, w.usedPercent)), minutes: typeof w.windowDurationMins === 'number' ? w.windowDurationMins : null, resetsAt: typeof w.resetsAt === 'number' ? w.resetsAt * 1000 : null }));
+  const windows = (Array.isArray(limits.windows) ? limits.windows : [limits.primary, limits.secondary]).filter((w: any) => typeof w?.usedPercent === 'number' && Number.isFinite(w.usedPercent))
+    .map((w: any) => ({ usedPercent: Math.min(100, Math.max(0, w.usedPercent)), minutes: typeof w.windowDurationMins === 'number' && Number.isFinite(w.windowDurationMins) && w.windowDurationMins > 0 ? w.windowDurationMins : null, resetsAt: typeof w.resetsAt === 'number' && Number.isFinite(w.resetsAt) ? w.resetsAt * 1000 : null,
+      ...(typeof w.scope === 'string' ? { scope: w.scope } : {}), ...(typeof w.label === 'string' ? { label: w.label } : {}) }));
   const balance = Number(limits.credits?.balance);
   const credits = limits.credits?.hasCredits || limits.credits?.unlimited ? { unlimited: Boolean(limits.credits.unlimited), balance: Number.isFinite(balance) ? balance : null } : null;
   if (!windows.length && !credits) return null;
@@ -356,7 +357,10 @@ export class Workspace extends EventEmitter {
           runtime.models.push({ id: defaultId, name: defaultId, isDefault: true, efforts: [], defaultEffort: null });
         }
       }
-      await this.readUsage(id);
+      // agy's standalone quota command can be slow; account/model readiness
+      // must not wait for this optional display data.
+      if (id === 'antigravity') void this.readUsage(id);
+      else await this.readUsage(id);
     } catch (e) { runtime.error = errorText(e); runtime.connected = false; }
   }
   // A Codex that lost its sign-in is still running but cannot work. Showing
@@ -951,7 +955,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     this.liveItems.set(id, item);
     this.flushTimer ??= setTimeout(() => this.flush(), 350);
   }
-  // Usage is shown on the new-task page. Agents report changes after turns;
+  // Usage is shown in both composers. Agents report changes after turns;
   // read the full snapshot again rather than merging their sparse updates.
   async readUsage(id: AgentId = 'codex') {
     try { this.runtimes[id].usage = accountUsage(await this.agents[id].request('account/rateLimits/read', { excludeResetCreditDetails: true }, 20000)); }
@@ -1671,8 +1675,12 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   // The agent that writes a commit message or resolves a merge: the one the
   // author chose, or else the first that is signed in, with the chosen model
   // or the default one; light asks for the agent's small model when it has one.
-  private helper(choice: { agent?: AgentId; model?: string }, task: string, options: { light?: boolean; readOnly?: boolean } = {}) {
+  private helper(choice: { agent?: AgentId; model?: string }, task: string, options: { light?: boolean; readOnly?: boolean; strict?: boolean } = {}) {
     const usable = (id: AgentId) => this.agents[id].ready && this.runtimes[id].authenticated && (!options.readOnly || this.agents[id].supportsReadOnlyTasks !== false);
+    if (options.strict && choice.agent) {
+      if (!this.agents[choice.agent].ready || !this.runtimes[choice.agent].authenticated) throw new Error('The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.');
+      if (options.readOnly && this.agents[choice.agent].supportsReadOnlyTasks === false) throw new Error('The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.');
+    }
     const id = choice.agent && usable(choice.agent) ? choice.agent : AGENTS.find(usable);
     if (!id) {
       if (options.readOnly) throw new Error('Connect an agent that supports read-only tasks, such as Codex.');
@@ -1696,7 +1704,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   }
   // One turn on a thread the agent does not keep, outside any task: its
   // reply is returned and no chat shows it.
-  private async oneOff(id: AgentId, options: { cwd: string; sandbox: 'read-only' | 'workspace-write'; instructions: string; prompt: string; model?: AgentModel; effort?: string | null; timeout: number; what: string }) {
+  private async oneOff(id: AgentId, options: { cwd: string; sandbox: 'read-only' | 'workspace-write'; instructions: string; prompt: string; model?: AgentModel; effort?: string | null; serviceTier?: string; timeout: number; what: string }) {
     if (this.closing) throw new Error('The server is shutting down.');
     // A read-only helper (a title, a commit message) has everything in its
     // prompt. It runs in an empty folder, so an agent that does not enforce a
@@ -1706,7 +1714,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     // An empty folder left behind must not discard the reply.
     finally { if (scratch) await fs.promises.rm(scratch, { recursive: true, force: true, maxRetries: 5 }).catch(() => {}); }
   }
-  private async helperTurn(id: AgentId, options: { cwd: string; sandbox: 'read-only' | 'workspace-write'; instructions: string; prompt: string; model?: AgentModel; effort?: string | null; timeout: number; what: string }) {
+  private async helperTurn(id: AgentId, options: { cwd: string; sandbox: 'read-only' | 'workspace-write'; instructions: string; prompt: string; model?: AgentModel; effort?: string | null; serviceTier?: string; timeout: number; what: string }) {
     const agent = this.agents[id], name = AGENT_NAMES[id];
     // Codex unloads the thread as soon as it is released, not a minute later.
     const thread = await agent.request('thread/start', { cwd: options.cwd, approvalPolicy: 'never', sandbox: options.sandbox, ephemeral: true, config: { thread_unload_delay_secs: 0 }, developerInstructions: options.instructions, ...(options.model ? { model: options.model.id } : {}) }, options.timeout);
@@ -1716,7 +1724,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       return await this.helperReply(agent, name, threadId, options);
     } finally { await releaseThread(agent, threadId); }
   }
-  private helperReply(agent: AgentRuntime, name: string, threadId: string, options: { cwd: string; prompt: string; effort?: string | null; timeout: number; what: string }) {
+  private helperReply(agent: AgentRuntime, name: string, threadId: string, options: { cwd: string; prompt: string; effort?: string | null; serviceTier?: string; timeout: number; what: string }) {
     return new Promise<string>((resolve, reject) => {
       let text = '', turnId = '', settled = false;
       const listen = (message: any) => {
@@ -1738,7 +1746,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       const stop = () => finish(new Error('The server is shutting down.'));
       this.helperStops.add(stop); agent.on('disconnected', disconnected);
       agent.on('notification', listen);
-      agent.request('turn/start', { threadId, input: [{ type: 'text', text: options.prompt }], cwd: options.cwd, ...(options.effort ? { effort: options.effort } : {}) })
+      agent.request('turn/start', { threadId, input: [{ type: 'text', text: options.prompt }], cwd: options.cwd, ...(options.effort ? { effort: options.effort } : {}), ...(options.serviceTier ? { serviceTier: options.serviceTier } : {}) })
         .then(result => { turnId = result?.turn?.id || ''; }, error => finish(error instanceof Error ? error : new Error(String(error))));
     });
   }
@@ -1777,11 +1785,15 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     return written;
   }
   // Writes a commit message for the chosen manuscript files, like Cursor's
-  // generate button: one read-only turn on the agent's small model, with the
-  // lightest reasoning it offers. The same changes get the message already
+  // generate button: one read-only turn with the selected model and reasoning
+  // effort. The same changes get the message already
   // written, or being written, for them unless the author asks for a fresh one.
-  async commitMessage(projectId: string, paths: string[], choice: { agent?: AgentId; fresh?: boolean; staged?: boolean; taskId?: string } = {}) {
-    const project = this.store.project(projectId), { id, model } = this.helper(choice, 'write a commit message', { light: true, readOnly: true });
+  async commitMessage(projectId: string, paths: string[], choice: { agent?: AgentId; model?: string; effort?: string; serviceTier?: string; fresh?: boolean; staged?: boolean; taskId?: string } = {}) {
+    const project = this.store.project(projectId), { id, model } = this.helper(choice, 'write a commit message', { readOnly: true, strict: true });
+    if (choice.model && model?.id !== choice.model) throw new Error('Choose an available model for this agent.');
+    if (choice.effort && model && !model.efforts.includes(choice.effort)) throw new Error('This model does not support that reasoning effort.');
+    if (choice.serviceTier && choice.serviceTier !== 'default' && (id !== 'codex' || choice.serviceTier !== model?.fastMode?.serviceTier)) throw new Error('Fast mode is not available for this model.');
+    const effort = choice.effort || model?.defaultEffort, serviceTier = id === 'codex' ? choice.serviceTier : undefined;
     const task = choice.taskId ? this.store.task(choice.taskId) : undefined;
     if (task && task.projectId !== projectId) throw new Error('Invalid task ID.');
     const { files, patch, recent } = task ? await this.taskCommitChanges(task) : await commitChanges(project.path, paths, choice.staged);
@@ -1792,9 +1804,9 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       `Changed files:\n${files.map(file => `${file.status === '?' ? 'A' : file.status} ${file.from ? `${file.from} -> ` : ''}${file.path}`).join('\n')}`,
       `Diff:\n${patch}`,
     ].filter(Boolean).join('\n\n');
-    const key = createHash('sha256').update(`${id}\0${model?.id ?? ''}\0${prompt}`).digest('hex'), kept = this.messages.get(key);
+    const key = createHash('sha256').update(`${id}\0${model?.id ?? ''}\0${effort ?? ''}\0${serviceTier ?? ''}\0${prompt}`).digest('hex'), kept = this.messages.get(key);
     if (kept && !choice.fresh) return kept;
-    const written = this.oneOff(id, { cwd: project.path, sandbox: 'read-only', instructions: commitInstructions, prompt, model, effort: model?.efforts[0], timeout: 120000, what: 'write a commit message' }).then(reply => {
+    const written = this.oneOff(id, { cwd: project.path, sandbox: 'read-only', instructions: commitInstructions, prompt, model, effort, serviceTier, timeout: 120000, what: 'write a commit message' }).then(reply => {
       const message = commitMessageFrom(reply);
       if (!message) throw new Error(`${AGENT_NAMES[id]} did not return a commit message. Try again.`);
       return { message, agent: id };

@@ -1,7 +1,7 @@
 import type { TaskCommitReview } from '../shared.ts';
 // Shared by Chat and PDF. Completion comes from server state, so a successful
 // request never prevents retrying a later review or confirming a merge.
-type State = { commitReview: TaskCommitReview | null; busy: boolean; action: 'workspace' | 'commit'; error: string; message: string; writing: boolean };
+type State = { commitReview: TaskCommitReview | null; busy: boolean; action: 'workspace' | 'commit'; error: string; message: string; writing: boolean; writingAgent?: string };
 export class TaskApplyState {
   private state: State;
   private revision = 0;
@@ -12,10 +12,10 @@ export class TaskApplyState {
   getSnapshot = () => this.state;
   private update(value: Partial<State>) { this.state = { ...this.state, ...value }; for (const listener of this.listeners) listener(); }
   edit(message: string) { this.revision++; this.update({ message }); }
-  async write(generate: () => Promise<string>) {
+  async write(generate: () => Promise<string>, agent?: string) {
     if (this.state.busy || this.state.writing) return;
     const generation = ++this.generation, revision = this.revision;
-    this.update({ writing: true, error: '' });
+    this.update({ writing: true, writingAgent: agent, error: '' });
     try {
       const message = await generate();
       if (generation === this.generation && revision === this.revision) this.update({ message });

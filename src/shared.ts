@@ -172,7 +172,7 @@ export const isAgentId = (value: unknown): value is AgentId => AGENT_IDS.include
 /** source: where an agent with several model providers gets this model, such as a subscription. */
 export interface AgentModel { id: string; name: string; source?: string; isDefault: boolean; efforts: string[]; defaultEffort: string | null; fastMode?: { serviceTier: string; description: string } }
 // The account's included usage: rolling windows (minutes long, reset time in ms) and credits.
-export interface UsageWindow { usedPercent: number; minutes: number | null; resetsAt: number | null }
+export interface UsageWindow { usedPercent: number; minutes: number | null; resetsAt: number | null; scope?: string; label?: string }
 export interface Usage { plan: string | null; windows: UsageWindow[]; credits: { unlimited: boolean; balance: number | null } | null; reached: boolean }
 // installed is false when the agent was not found on the host (no CLI, SDK
 // credentials or key); such agents are not offered. Older servers omit it.

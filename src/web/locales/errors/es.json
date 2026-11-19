@@ -20,6 +20,7 @@
   "Another paper is already synced with this Overleaf project.": "Otro artículo ya está sincronizado con este proyecto de Overleaf.",
   "Answer every question before submitting.": "Responde a todas las preguntas antes de enviar.",
   "Antigravity cannot safely grant access to this image path. Move the Papilot data folder to a path without parentheses or wildcards.": "Antigravity no puede conceder acceso a esta ruta de imagen de forma segura. Mueva la carpeta de datos de Papilot a una ruta sin paréntesis ni comodines.",
+  "Antigravity did not report structured usage.": "Antigravity no informó datos de uso estructurados.",
   "Antigravity stopped because an operation needed permission.": "Antigravity se detuvo porque una operación requería permiso.",
   "Antigravity stopped because an operation needed permission. Ask it to continue without that operation, or select Always proceed (approves all tools) and ask it to continue.": "Antigravity se detuvo porque una operación requería permiso. Pídele que continúe sin esa operación o selecciona «Continuar siempre» (aprueba todas las herramientas) y pídele que continúe.",
   "Attachment not found.": "Archivo adjunto no encontrado.",
@@ -407,6 +408,7 @@
   "This template version is no longer available. Choose the template again.": "Esta versión de la plantilla ya no está disponible. Vuelve a elegir la plantilla.",
   "Unknown Git action.": "Acción de Git desconocida.",
   "Unknown PDF.": "PDF desconocido.",
+  "Unknown agent.": "Agente desconocido.",
   "Unknown provider.": "Proveedor desconocido.",
   "Unused attachments have reached 500 MB. Remove attachments from your drafts before uploading more.": "Los archivos adjuntos sin usar han alcanzado los 500 MB. Elimina archivos adjuntos de tus borradores antes de subir más.",
   "Updates are managed by Nix.": "Nix gestiona las actualizaciones.",
@@ -464,5 +466,8 @@
   "The selected agent does not support read-only AI review. Select another agent.": "El agente seleccionado no admite revisiones con IA en modo de solo lectura. Selecciona otro agente.",
   "The selected agent does not support read-only tasks through ACP. Select another agent.": "El agente seleccionado no admite tareas de solo lectura a través de ACP. Selecciona otro agente.",
   "Choose latexmk or PhiTeX.": "Elige latexmk o PhiTeX.",
-  "Enable collaboration mode in Settings → Experiments first.": "Primero active el modo colaborativo en Ajustes → Funciones experimentales."
+  "Enable collaboration mode in Settings → Experiments first.": "Primero active el modo colaborativo en Ajustes → Funciones experimentales.",
+  "The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.": "El agente seleccionado para los mensajes de commit no admite tareas de solo lectura. Elige otro en Ajustes → Git.",
+  "The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "El agente seleccionado para los mensajes de commit no está disponible. Conéctalo en Ajustes → Agentes o elige otro en Ajustes → Git.",
+  "Invalid agent.": "Agente no válido."
 }

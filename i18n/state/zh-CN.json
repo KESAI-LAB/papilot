@@ -714,6 +714,21 @@
     "textHash": "4c322f4b7d921c0fc50f269d3335f054c9730e9a81f0d5ba2ce22507de21a361",
     "model": "gemini-4-argon-medium"
   },
+  "Commit-message agent": {
+    "revision": "103b199545ce37ea3f97fd998455194db761ec22649179bb292e6008929585fe",
+    "textHash": "c2cad342cda99ca274103f00d6dd68b0b5daf2e0a5868ea53caeaca08ce8c330",
+    "model": "manual"
+  },
+  "Follow current conversation": {
+    "revision": "cb8d724a8069020c595349d92a66f83d42e6e7aafeeadebb72d22bed14922353",
+    "textHash": "05b557592ccdd6ad1eb56da1e623ca451a61998d9173186775c46275979fbf31",
+    "model": "manual"
+  },
+  "Use the conversation’s model and reasoning effort, or the new-task settings if none. An explicit choice applies only to commit messages and is saved in this browser.": {
+    "revision": "83e8e0fec1047ad15a09db64485dbd4a4e18c6a3c891b873506252ea93c2af0e",
+    "textHash": "b571b8974356668023294a21a1fa6445012da414c4c2889c3bb58d00c172c725",
+    "model": "manual"
+  },
   "Allow Papilot in macOS Accessibility settings.": {
     "revision": "37a921480e9b24885c16a31de4f00029cc0c92d30afee77e1c0696ab2be05aa4",
     "textHash": "2dfac6c4fcfefeed6657b2776010dd95399dc90e82a990472d6e611e773825b5",

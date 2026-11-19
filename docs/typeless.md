@@ -99,10 +99,17 @@ test, type checks, application and desktop compilation, locale checks, and macOS
 desktop smoke test passed. Light/dark and narrow-layout screenshots were inspected.
 The native Fn test is separate from these deterministic tests.
 
-The full root suite reported 1,307 passes and three failures in CodeBuddy cleanup,
+An earlier full root suite reported 1,307 passes and three failures in CodeBuddy cleanup,
 update-server startup, and Writer model naming. All three failures were also
 reproduced on the unchanged base with the same built review assets. The full UI
 suite stopped at a manuscript-source check; it is not reported as passing.
+After integrating `main` at `065ca3fe`, type checks, the app build, all 11 Typeless
+unit tests, the Typeless browser check and app translation checks passed again.
+
+Captured UI evidence: [settings](assets/typeless/settings.png),
+[note](assets/typeless/note.png), [sending](assets/typeless/sending.png),
+[sent](assets/typeless/sent.png), [dark error](assets/typeless/error-dark.png),
+and [narrow settings](assets/typeless/settings-narrow.png).
 
 The `switch`, `spinner` and `accessibility` Modern Web Guidance guides informed the
 labeled native checkbox, keyboard-operable button, busy state, focus handling and

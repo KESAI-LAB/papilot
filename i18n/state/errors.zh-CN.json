@@ -94,6 +94,11 @@
     "textHash": "f250300eeb5a25f7c1ad862eb696e638df4e2e219f4655d17067ad4be59ee4a6",
     "model": "gemini-4-argon-medium"
   },
+  "Antigravity did not report structured usage.": {
+    "revision": "8c52d3275afef144626087aff2d2f51bac93dd5b4398924e9d9bdfa21befcf45",
+    "textHash": "dd66eafb5f2d1697070251cb673d9fc7dca84942c7bb4918426129f890471051",
+    "model": "codex-reviewed"
+  },
   "Antigravity stopped because an operation needed permission.": {
     "revision": "31cc2a533f59f82c932791dcac1d4ac9e21cc6482bd8a13c9177141b6ceb3bf7",
     "textHash": "6d954ac471afa4b0a8a59700e684351e5e622d463113c321799a5aba79ecc4f8",
@@ -1609,6 +1614,11 @@
     "textHash": "3a41dedaee9f35441ac021b31a698aa43d1490112c2662bbf7c4fa1b01e2b493",
     "model": "gemini-4-argon-medium"
   },
+  "Unknown agent.": {
+    "revision": "b2517dfadc1d567e103522abec7dda9d74071b80246d1b2cd3dbcc22ad065427",
+    "textHash": "008f1661a0583aa5562235e1db3a4ccfba10331759998a5c8bb481cde58a04d0",
+    "model": "codex-reviewed"
+  },
   "Unused attachments have reached 500 MB. Remove attachments from your drafts before uploading more.": {
     "revision": "62b7e274f3fb91c6ed081ff8419c9ffbb063704ba59406e819bcc46cac322e10",
     "textHash": "4eb1c35b383e4f7c380265372df3d900e15d677640add479f5ce1770fd90d414",
@@ -1873,5 +1883,20 @@
     "revision": "eab550010a2f9dbc5bdeb9eba0e6a1053647d09c69873daf84f0a78c99742133",
     "textHash": "11a2e4a96f376649c3b7a229b20c6047797191558b329e8986590f05c81deef6",
     "model": "gemini-4-argon-medium"
+  },
+  "The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.": {
+    "revision": "f2e424700cb693d69d546d9d33fd8002af99da98bdd8c8c71071b5dc2c38a0c3",
+    "textHash": "b2b58e9ba71ee655ec6d7378f6bcbbc30358958dcc8d2c735b77a248abc78942",
+    "model": "manual"
+  },
+  "The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": {
+    "revision": "2188f784c7b47e56b04864ae2348ac681f58ec03640d4e7ed5ea14a8b91ca9e8",
+    "textHash": "4d87270104ea12dfa4298cbf74a59cba8b433651e92cf6fe1266afd402c89855",
+    "model": "manual"
+  },
+  "Invalid agent.": {
+    "revision": "f29a32a7782e14c3618920fe04668842a8ab5fc794f24dad5c3421058926ae06",
+    "textHash": "a85140264534e482b9842f55a437fa6c8ac8f5f5cadcc2d9fca207f4f041c2a9",
+    "model": "manual"
   }
 }

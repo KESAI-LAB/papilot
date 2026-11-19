@@ -70,6 +70,7 @@ import { taskSaveStatus } from './task-save-status.ts';
 import { TaskSaved } from './task-saved.tsx';
 import { GitRepository } from './git-overview.tsx';
 import { useAdvancedGit } from './git-preferences.ts';
+import { commitConversation, rememberCommitConversation, useCommitMessageAgent, type CommitMessageChoice } from './commit-agent-preferences.ts';
 import { GitDiffView } from './git-diff-view.tsx';
 import { VersionHistory, type HistorySelection } from './git-history.tsx';
 import type { GitHistory, GitVersionDetail } from '../shared.ts';
@@ -86,7 +87,7 @@ import { type TaskPermissions } from '../shared.ts';
 import { TaskModelPicker } from './task-model-picker.tsx';
 import { TaskFlight, type TaskFlightData } from './task-flight.tsx';
 import { returnNotes } from './note-flight.ts';
-import { UsageSummary } from './usage.tsx';
+import { UsageSummary, type RefreshUsage } from './usage.tsx';
 import { useNoteUndo } from './use-note-undo.ts';
 import { NoteResultsProvider, useNoteResults } from './note-results.tsx';
 import { usePanelWidth } from './panel-width.tsx';
@@ -109,6 +110,7 @@ async function api<T = any>(route: string, body?: unknown, signal?: AbortSignal)
   return requestApi<T>(route, token, body, signal);
 }
 connectStamps(api);
+const refreshUsage: RefreshUsage = async agent => import.meta.env.MODE === 'playground' ? null : (await api(`/runtime/${agent}/usage`, {})).usage;
 connectIndirectChanges(api);
 connectNoteAlternatives(api);
 connectNoteLocation(api);
@@ -463,7 +465,7 @@ function Activity({ runtimes, relatedTasks, onOpenTask, onRestarted, source, onR
       <Composer reviewContent={<ReviewDraftCards task={task} feedbackCount={feedbackCount} onReveal={onRevealQuote}/>} attachments={task.mode === 'review' ? undefined : files.draft} upload={(file, signal) => uploadAttachment(task.projectId, file, signal)} filesDisabled={sending || blocked || savingModel} imageHint={task.agent === 'antigravity' && files.files.some(file => file.mime.startsWith('image/'))} inputRef={input} label={t('Instructions for {agent}', { agent: agentName(task) })} value={draft} onChange={value => composer.edit(value)} onSubmit={() => void submit()} placeholder={task.mode === 'review' ? t('Ask for another review of this PDF version…') : active ? t('Queue instructions for the next turn…') : notes.notes.length || feedbackCount ? t('Add overall instructions (optional)') : t('Ask a question or request changes…')} skills={task.mode === 'review' ? [] : skills.filter(skill => skill.output !== 'annotations')} skill={skill} onSkill={savingModel ? undefined : setSkill}
         footer={attach => <div className="composer-options">
           {task.mode !== 'review' && <SkillPicker onAttach={attach} skills={skills.filter(skill => skill.output !== 'annotations')} selected={skill} disabled={sending || blocked || savingModel} onPick={value => { setSkill(value); input.current?.focus(); }}/>}
-          <TaskModelPicker task={task} runtime={runtime} runtimes={runtimes} disabled={sending || blocked || savingPermissions || files.blocked || notes.busy} reconnecting={reconnecting} onReconnect={onReconnect} save={settings => api<Task>(`/tasks/${task.id}/model`, settings)} onSaving={setSavingModel} refresh={refresh} reportError={reportError}
+          <TaskModelPicker refreshUsage={refreshUsage} task={task} runtime={runtime} runtimes={runtimes} disabled={sending || blocked || savingPermissions || files.blocked || notes.busy} reconnecting={reconnecting} onReconnect={onReconnect} save={settings => api<Task>(`/tasks/${task.id}/model`, settings)} onSaving={setSavingModel} refresh={refresh} reportError={reportError}
             restart={async settings => {
               if (isPlayground) { requestPlaygroundDownload(); return; }
               const replacement = await api<Task>(`/tasks/${task.id}/restart`, { ...settings, draftAttachments: files.draft.getSnapshot().files.map(file => file.id) });
@@ -498,7 +500,7 @@ function gitSummary(git: GitStatus | null) {
 // and what is not committed yet (accepted review changes land here).
 // Untracked build output is left out of a commit unless chosen, and can go
 // into .gitignore. An agent can write the commit message.
-type CommitWriter = { agent: AgentId; model?: string };
+type CommitWriter = { agent: AgentId; model?: string; effort?: string; serviceTier?: string };
 const ignorable = (file: GitFile) => file.status === '?' && Boolean(ignorePattern(file.path));
 type GitSelection = { path: string; list: 'staged' | 'changes' } | HistorySelection;
 const gitNames = (): Record<string, string> => ({ M: t('Modified'), A: t('Added'), D: t('Deleted'), R: t('Renamed'), C: t('Copied'), U: t('Conflict'), '?': t('Untracked'), T: t('Type changed') });
@@ -530,8 +532,12 @@ function DiscardDialog({ files, onCancel, onConfirm }: { files: GitFile[]; onCan
   </dialog>;
 }
 
-function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onOpenTask }: { navigation?: React.ReactNode; tasks: Task[]; onOpenTask: (id: string) => void; projectId: string; git: GitStatus | null; onStatus: (status: GitStatus) => void; writer: CommitWriter }) {
+function GitWorkspace({ projectId, navigation, git, onStatus, writer, messageWriter, tasks, onOpenTask }: { navigation?: React.ReactNode; tasks: Task[]; onOpenTask: (id: string) => void; projectId: string; git: GitStatus | null; onStatus: (status: GitStatus) => void; writer: CommitWriter; messageWriter: CommitMessageChoice }) {
   const advanced = useAdvancedGit();
+  const [writingAgent, setWritingAgent] = useState<AgentId | null>(null);
+  const displayedMessageAgent = writingAgent ?? messageWriter.agent;
+  const messageRequest = useRef(0);
+  useEffect(() => () => { messageRequest.current++; }, []);
   const loadOverview = useCallback((signal: AbortSignal) => api<GitOverview>(`/projects/${projectId}/git/overview`, undefined, signal), [projectId]);
   const loadHistory = useCallback((before: string | null, signal: AbortSignal) => api<GitHistory>(`/projects/${projectId}/git/history${before ? '?before=' + before : ''}`, undefined, signal), [projectId]);
   const loadVersion = useCallback((hash: string, signal: AbortSignal) => api<GitVersionDetail>(`/projects/${projectId}/git/history/${hash}`, undefined, signal), [projectId]);
@@ -624,10 +630,14 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
   // An empty box takes a message already written for them; a full one asks for a new one.
   async function generate() {
     if (busy || !chosen.length) return;
-    setBusy('message'); setError(''); setNotice('');
-    try { saveMessage((await api<{ message: string }>(`/projects/${projectId}/git/message`, { paths: chosen.map(file => file.path), staged: staged.length > 0, agent: writer.agent, fresh: Boolean(message.trim()) })).message); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(''); }
+    const request = ++messageRequest.current;
+    setBusy('message'); setWritingAgent(messageWriter.agent); setError(''); setNotice('');
+    try {
+      const result = await api<{ message: string }>(`/projects/${projectId}/git/message`, { paths: chosen.map(file => file.path), staged: staged.length > 0, ...messageWriter, fresh: Boolean(message.trim()) });
+      // Leaving and reopening Git may create a newer manual draft.
+      if (request === messageRequest.current) saveMessage(result.message);
+    } catch (e) { if (request === messageRequest.current) setError(e instanceof Error ? e.message : String(e)); }
+    finally { if (request === messageRequest.current) { setBusy(''); setWritingAgent(null); } }
   }
   const discard = (list: GitFile[]) => { setDiscarding(null); void run('discard', () => api<{ git: GitStatus }>(`/projects/${projectId}/git/discard`, { paths: list.map(file => file.path) }), () => tn(list.length, 'Discarded changes in {n} file.', 'Discarded changes in {n} files.')); };
   const reload = () => void run('reload', async () => ({ git: await api<GitStatus>(`/projects/${projectId}/git`) }), () => '');
@@ -654,7 +664,7 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
   const syncTitle = !git.remote ? t('This repository has no remote.') : !git.branch ? t('Check out a branch before syncing.') : t('Sync committed changes with the remote. Uncommitted changes are kept.');
   const primaryDisabled = syncPrimary ? Boolean(busy) || !needsSync : commitDisabled;
   const submitPrimary = () => { if (!primaryDisabled) { if (syncPrimary) syncRemote(); else commit(); } };
-  const placeholder = busy === 'message' ? t('{agent} is writing a commit message…', { agent: agentLabel(writer.agent) })
+  const placeholder = busy === 'message' ? t('{agent} is writing a commit message…', { agent: agentLabel(displayedMessageAgent) })
     : git.branch && !touch() ? t('Message ({key} to commit on “{branch}”)', { key: '↵', branch: git.branch }) : t('Commit message');
   // One row per file and list. The staged list shows the index's status.
   const row = (file: GitFile, list: 'staged' | 'changes') => {
@@ -731,7 +741,7 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
         <div className="git-message-box">
           <textarea aria-label={t('Commit message')} placeholder={placeholder} rows={1} value={message} readOnly={busy === 'commit' || busy === 'message'} onChange={event => saveMessage(event.target.value)} onKeyDown={event => { if (sendsMessage(event.nativeEvent, touch())) { event.preventDefault(); commit(); } }}/>
           <div className="git-compose-bar">
-            <button type="button" className="icon-button git-generate" aria-label={t('Generate commit message')} title={t('Write a commit message for the chosen files with {agent}', { agent: agentLabel(writer.agent) })} disabled={Boolean(busy) || !chosen.length} onClick={() => void generate()}>{busy === 'message' ? <span className="spinner"/> : <Icon name="spark" size={15}/>}</button>
+            <button type="button" className="icon-button git-generate" aria-label={t('Generate commit message')} title={t('Write a commit message for the chosen files with {agent}', { agent: agentLabel(displayedMessageAgent) })} disabled={Boolean(busy) || !chosen.length} onClick={() => void generate()}>{busy === 'message' ? <span className="spinner"/> : <Icon name="spark" size={15}/>}</button>
             <div className={'git-commit-split has-menu' + (busy === 'commit' || syncing ? ' is-busy' : '')}>
               <button className="button primary git-commit-button" aria-label={primaryLabel} title={syncPrimary ? needsSync ? syncTitle : t('Up to date with the remote.') : commitTitle} disabled={primaryDisabled}>{busy === 'commit' || syncing ? <span className="spinner light"/> : <Icon name={syncPrimary && needsSync ? 'refresh' : 'check'} size={14}/>}<span>{primaryLabel}</span>{syncPrimary && needsSync && sync}</button>
               <ActionMenu label={t('More commit actions')} className="button primary git-commit-more" disabled={Boolean(busy)} actions={[
@@ -1156,7 +1166,7 @@ function ManuscriptView({ notesRequest, taskCards, navigationGuard, collapsed, s
       {source.panel && <div className="side-pane" hidden={side !== 'source'}>{source.panel}</div>}
     </aside>
     {committing && <CommitDialog branch={git?.branch ?? null} files={staged} staged remote={Boolean(git?.remote)} agent={agentLabel(writer.agent)} onClose={() => setCommitting(false)}
-      generate={fresh => api<{ message: string }>(`/projects/${project.id}/git/message`, { paths: staged, staged: true, agent: writer.agent, fresh }).then(result => result.message)}
+      generate={fresh => api<{ message: string }>(`/projects/${project.id}/git/message`, { paths: staged, staged: true, ...writer, fresh }).then(result => result.message)}
       commit={async (message, push) => {
         const result = await api<{ commit: string; git: GitStatus; pushError?: string }>(`/projects/${project.id}/git/commit`, { message, staged: true, push });
         onGit(result.git); setCommitting(false);
@@ -1436,6 +1446,14 @@ function App() {
   if (task && !composers.current.has(task.id)) composers.current.set(task.id, new ComposerDraft('papilot:draft:' + task.id, browserStorage, uuid));
   const fullPdfUrl = task?.status !== 'deleting' && task?.review?.round ? pdfAsset(`/api/tasks/${task.id}/pdf?round=${task.review.round}`) : '';
   const project = state?.projects.find(p => p.id === (task?.projectId || projectId)) || state?.projects[0];
+  // Keep the last visited conversation for this paper when navigation clears
+  // selected. Resolve its live agent from the snapshot, never another paper's.
+  const commitContextKey = project ? `papilot:commit-context:${project.id}:${project.path}` : '';
+  useEffect(() => {
+    if (task && task.status !== 'deleting' && commitContextKey) rememberCommitConversation(commitContextKey, task.id);
+  }, [commitContextKey, task?.id, task?.status]);
+  const commitPreference = useCommitMessageAgent();
+  const commitContext = task || state?.tasks.find(item => item.id === commitConversation(commitContextKey) && item.projectId === project?.id && item.status !== 'deleting');
   // Remember the paper even when its manuscript is open, and replace stale
   // paper IDs only after the host has returned the accessible papers.
   useEffect(() => {
@@ -1536,6 +1554,7 @@ function App() {
   const chosenModel = models.length && !models.some(m => m.id === pref.model) ? '' : pref.model;
   const modelInfo = models.find(m => m.id === chosenModel) || models.find(m => m.isDefault);
   const agent = { agent: agentChoice, model: modelInfo?.id || chosenModel, effort: taskEffort(pref.effort, modelInfo), serviceTier: agentChoice === 'codex' ? (pref.fast && modelInfo?.fastMode ? modelInfo.fastMode.serviceTier : 'default') : undefined };
+  const commitWriter: CommitMessageChoice = commitPreference === 'conversation' ? (commitContext ? { agent: commitContext.agent || 'codex', model: commitContext.model || '', effort: commitContext.effort || '', ...(commitContext.serviceTier ? { serviceTier: commitContext.serviceTier } : {}) } : agent) : commitPreference;
   const remember = (change: Partial<{ model: string; effort: string; fast: boolean }>) => {
     setAgentPrefs(current => ({ ...current, [agentChoice]: { ...current[agentChoice], ...change } }));
     for (const [key, value] of Object.entries(change)) browserStorage.setItem(`papilot:${key}:${agentChoice}`, String(value));
@@ -1545,7 +1564,7 @@ function App() {
     setAgentChoice(id); browserStorage.setItem('papilot:agent', id);
     setAgentPrefs(current => ({ ...current, [id]: { ...current[id], model } })); browserStorage.setItem(`papilot:model:${id}`, model);
   };
-  const agentOptions = (disabled: boolean) => <AgentPicker disabled={disabled} noAgent={missingAgent} agent={agentChoice} model={agent.model} effort={agent.effort} fast={pref.fast}
+  const agentOptions = (disabled: boolean) => <AgentPicker refreshUsage={refreshUsage} disabled={disabled} noAgent={missingAgent} agent={agentChoice} model={agent.model} effort={agent.effort} fast={pref.fast}
     agents={offered.map(id => ({ value: id, label: agentLabel(id), runtime: runtimes[id] }))}
     permissionMode={newSkill?.output !== 'annotations' ? effectivePermissions : undefined}
     permissions={newSkill?.output !== 'annotations' && <PermissionOptions runtime={runtimes[agentChoice]} value={effectivePermissions} disabled={disabled} onChange={setNewPermissions}/>}
@@ -2034,7 +2053,7 @@ function App() {
     branch={projectGit?.branch ?? null} canCommit={Boolean(task.review?.files?.length || task.delivery?.mode === 'branch' || task.delivery?.pending)} preferred={merging?.intent?.mode}
     pending={task.delivery?.pending && task.delivery.mode !== 'branch' ? task.delivery.mode : undefined}
     apply={() => saveTask('workspace')} commit={(message, confirmation) => saveTask('commit', message, confirmation)}
-    generate={() => api<{ message: string }>(`/tasks/${task.id}/commit-message`, { fresh: true }).then(result => result.message)}
+    agent={agentLabel(commitWriter.agent)} generate={() => api<{ message: string }>(`/tasks/${task.id}/commit-message`, { ...commitWriter, fresh: true }).then(result => result.message)}
     shown={isPlayground ? undefined : () => void api(`/tasks/${task.id}/predict`, {}).catch(() => undefined)}/>
     : merging ? <TaskConflict status={task.status} waiting={mergeWaiting} onChat={() => selectLayout('conversation')}/>
     : saved === 'committed' && task.delivery ? savedResult(t('Committed {hash} to {branch}', { hash: task.delivery.commit?.slice(0, 7) || '', branch: task.delivery.branch || '' }))
@@ -2228,8 +2247,8 @@ function App() {
           </div> : chatOnly && task.mode !== 'review' && ['failed', 'interrupted'].includes(task.status) ? <div className="task-error-actions">
             <button type="button" className="button secondary compact" disabled={taskActionBusy} aria-busy={taskActionBusy} onClick={() => void action('/tasks/' + task.id + '/publish')}><Icon name="diff" size={14}/>{task.review?.round ? t('Regenerate PDF comparison') : t('Generate PDF comparison')}</button>
           </div> : null} onTaskSaved={acceptSavedTask} reportError={reportError} pause={pause} pausing={taskActionBusy} skills={projectSkills} feedback={chatOnly ? <>{reviewFeedback(true)}{applicationStep && <div className="review-feedback card commit-card task-delivery">{applicationStep}</div>}</> : null} openReview={chatOnly ? () => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); } : undefined}/></div>
-      : manuscriptOpen && project ? <ManuscriptView notesRequest={playgroundNotes} taskCards={taskCards} key={project.id + project.path} navigationGuard={manuscriptNavigationGuard} collapsed={manuscriptCollapsed} setCollapsed={setManuscriptCollapsed} navigation={!mobile ? sidebarToggle : null} project={project} data={shownManuscript} error={manuscriptData.error} view={manuscriptView} setView={setManuscriptView} region={region} setRegion={setRegion} active={activeNote} setActive={setActiveNote} actions={noteActions} newTask={newTaskPanel} tools={!mobile ? manuscriptTools : null} share={!mobile ? manuscriptShare : null} onFixProblems={fixProblems} diagnoseBuild={isPlayground ? undefined : failureId => api<BuildRepairResult>(`/projects/${project.id}/manuscript/repair`, { failureId, agent: agent.agent, model: agent.model })} onGit={status => updateGit(project.id, status)} writer={{ agent: agent.agent, model: agent.model }} reportError={reportError} openFile={openFile} onOpened={() => setOpenFile(null)} onEditing={setEditingFile}/>
-      : gitOpen && project ? <GitWorkspace key={project.id + project.path} projectId={project.id} navigation={sidebarToggle} git={projectGit} onStatus={status => updateGit(project.id, status)} writer={{ agent: agent.agent, model: agent.model }} tasks={state?.tasks.filter(task => task.projectId === project.id) || []} onOpenTask={id => { setSelected(id); setSidebar(false); }}/>
+      : manuscriptOpen && project ? <ManuscriptView notesRequest={playgroundNotes} taskCards={taskCards} key={project.id + project.path} navigationGuard={manuscriptNavigationGuard} collapsed={manuscriptCollapsed} setCollapsed={setManuscriptCollapsed} navigation={!mobile ? sidebarToggle : null} project={project} data={shownManuscript} error={manuscriptData.error} view={manuscriptView} setView={setManuscriptView} region={region} setRegion={setRegion} active={activeNote} setActive={setActiveNote} actions={noteActions} newTask={newTaskPanel} tools={!mobile ? manuscriptTools : null} share={!mobile ? manuscriptShare : null} onFixProblems={fixProblems} diagnoseBuild={isPlayground ? undefined : failureId => api<BuildRepairResult>(`/projects/${project.id}/manuscript/repair`, { failureId, agent: agent.agent, model: agent.model })} onGit={status => updateGit(project.id, status)} writer={commitWriter} reportError={reportError} openFile={openFile} onOpened={() => setOpenFile(null)} onEditing={setEditingFile}/>
+      : gitOpen && project ? <GitWorkspace key={project.id + project.path} projectId={project.id} navigation={sidebarToggle} git={projectGit} onStatus={status => updateGit(project.id, status)} writer={{ agent: agent.agent, model: agent.model }} messageWriter={commitWriter} tasks={state?.tasks.filter(task => task.projectId === project.id) || []} onOpenTask={id => { setSelected(id); setSidebar(false); }}/>
       : referencesOpen && project ? <section className="references-page" aria-label={t('Reference check')}>
           <header className="references-page-head"><h2>{t('Reference check')}</h2><span>{project.name}</span></header>
           <ReferencesPanel key={project.id} place={'references:' + project.id} data={bibliography} onInvestigate={draftInvestigation}/>
@@ -2238,7 +2257,7 @@ function App() {
       : <div className="home"><div className="home-inner"><PapilotMark size={52} className="home-logo"/><h1>{t('Add your first paper')}</h1><div className="home-paper-actions"><button className="button primary" onClick={createProject}><Icon name="plus" size={16}/>{t('New paper')}</button><button className="button secondary" onClick={importProject}><Icon name="download" size={16}/>{t('Import or open')}</button></div>{overleafEntry && <div className="home-integrations">{overleafEntry}</div>}</div></div>}
     </main>
     {error && !modal && <div role="alert" className="toast"><Icon name="alert" size={16}/><span>{error}</span><button className="icon-button" aria-label={t('Dismiss error')} onClick={() => setError('')}><Icon name="close" size={14}/></button></div>}
-    {settings && <SettingsDialog workflow={isPlayground ? undefined : { enabled: runtimes.collaboration?.hidden === false, online, runtimes, load: () => api<CollaborationSettingsState>('/collaboration'), save: async change => { const result = await api<CollaborationSettingsState>('/collaboration', change); await refresh(true); return result; } }} requirements={isPlayground ? undefined : { state: requirements, online }} modelDefaults={{ agents: offered.map(id => ({ value: id, label: agentLabel(id), runtime: runtimes[id] })), agent: agentChoice, model: chosenModel, effort: agent.effort, onSelect: chooseModel, onEffort: effort => remember({ effort }) }} updates={!isPlayground ? api : undefined} overleaf={!isPlayground ? { api, state: state?.overleaf } : undefined} initialPage={settings} theme={theme.theme} onTheme={theme.setTheme} resolved={theme.resolved} appearance={theme.appearance} onAppearance={theme.setAppearance} onClose={() => setSettings(false)} diagnostics={!isPlayground ? { online, runtimes, project, check: checkDiagnostics, latex: detectLatexInstallation, compiler: chooseCompiler, reconnect: async () => { await api('/reconnect', {}); await refresh(true); }, writer: (route: string, body?: unknown) => api('/writer' + route, body) } : undefined} skills={!isPlayground ? { project, api, onChanged: () => setSkillsRevision(value => value + 1) } : undefined}/>}
+    {settings && <SettingsDialog refreshUsage={refreshUsage} commitWriter={commitWriter} workflow={isPlayground ? undefined : { enabled: runtimes.collaboration?.hidden === false, online, runtimes, load: () => api<CollaborationSettingsState>('/collaboration'), save: async change => { const result = await api<CollaborationSettingsState>('/collaboration', change); await refresh(true); return result; } }} requirements={isPlayground ? undefined : { state: requirements, online }} modelDefaults={{ agents: offered.map(id => ({ value: id, label: agentLabel(id), runtime: runtimes[id] })), agent: agentChoice, model: chosenModel, effort: agent.effort, onSelect: chooseModel, onEffort: effort => remember({ effort }) }} updates={!isPlayground ? api : undefined} overleaf={!isPlayground ? { api, state: state?.overleaf } : undefined} initialPage={settings} theme={theme.theme} onTheme={theme.setTheme} resolved={theme.resolved} appearance={theme.appearance} onAppearance={theme.setAppearance} onClose={() => setSettings(false)} diagnostics={!isPlayground ? { online, runtimes, project, check: checkDiagnostics, latex: detectLatexInstallation, compiler: chooseCompiler, reconnect: async () => { await api('/reconnect', {}); await refresh(true); }, writer: (route: string, body?: unknown) => api('/writer' + route, body) } : undefined} skills={!isPlayground ? { project, api, onChanged: () => setSkillsRevision(value => value + 1) } : undefined}/>}
     {deleteTarget && <DeleteTaskDialog task={state?.tasks.find(t => t.id === deleteTarget.id) || deleteTarget} submit={() => api('/tasks/' + deleteTarget.id + '/delete', { confirm: true })} onClose={() => setDeleteTarget(null)} onDeleted={() => taskDeleted(deleteTarget.id)} refresh={() => void refresh(true)}/>}
     {bulkTarget && <BulkTaskDialog target={bulkTarget}
       submit={target => api('/tasks/' + target.id + '/' + bulkTarget.action, bulkTarget.action === 'archive' ? { archived: true } : { confirm: true })}

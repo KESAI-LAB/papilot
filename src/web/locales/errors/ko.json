@@ -20,6 +20,7 @@
   "Another paper is already synced with this Overleaf project.": "다른 논문이 이미 이 Overleaf 프로젝트와 동기화되어 있습니다.",
   "Answer every question before submitting.": "제출하기 전에 모든 질문에 답변하세요.",
   "Antigravity cannot safely grant access to this image path. Move the Papilot data folder to a path without parentheses or wildcards.": "Antigravity가 이 이미지 경로에 대한 접근 권한을 안전하게 부여할 수 없습니다. Papilot 데이터 폴더를 괄호나 와일드카드가 없는 경로로 이동하세요.",
+  "Antigravity did not report structured usage.": "Antigravity가 구조화된 사용량 데이터를 보고하지 않았습니다.",
   "Antigravity stopped because an operation needed permission.": "작업에 권한이 필요하여 Antigravity가 중지되었습니다.",
   "Antigravity stopped because an operation needed permission. Ask it to continue without that operation, or select Always proceed (approves all tools) and ask it to continue.": "작업에 권한이 필요하여 Antigravity가 중지되었습니다. 해당 작업 없이 계속하도록 요청하거나, ‘항상 실행’(모든 도구 승인)을 선택한 후 계속하도록 요청하세요.",
   "Attachment not found.": "첨부파일을 찾을 수 없습니다.",
@@ -407,6 +408,7 @@
   "This template version is no longer available. Choose the template again.": "이 템플릿 버전은 더 이상 사용할 수 없습니다. 템플릿을 다시 선택하세요.",
   "Unknown Git action.": "알 수 없는 Git 작업입니다.",
   "Unknown PDF.": "알 수 없는 PDF입니다.",
+  "Unknown agent.": "알 수 없는 에이전트입니다.",
   "Unknown provider.": "알 수 없는 제공업체입니다.",
   "Unused attachments have reached 500 MB. Remove attachments from your drafts before uploading more.": "미사용 첨부파일이 500MB에 도달했습니다. 더 업로드하려면 초안에서 첨부파일을 제거하세요.",
   "Updates are managed by Nix.": "업데이트는 Nix에서 관리합니다.",
@@ -464,5 +466,8 @@
   "The selected agent does not support read-only AI review. Select another agent.": "선택한 에이전트는 읽기 전용 AI 검토를 지원하지 않습니다. 다른 에이전트를 선택하세요.",
   "The selected agent does not support read-only tasks through ACP. Select another agent.": "선택한 에이전트는 ACP를 통한 읽기 전용 작업을 지원하지 않습니다. 다른 에이전트를 선택하세요.",
   "Choose latexmk or PhiTeX.": "latexmk 또는 PhiTeX를 선택하세요.",
-  "Enable collaboration mode in Settings → Experiments first.": "먼저 설정 → 실험 기능에서 협업 모드를 활성화하세요."
+  "Enable collaboration mode in Settings → Experiments first.": "먼저 설정 → 실험 기능에서 협업 모드를 활성화하세요.",
+  "The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.": "선택한 커밋 메시지 에이전트는 읽기 전용 작업을 지원하지 않습니다. 설정 → Git에서 다른 에이전트를 선택하세요.",
+  "The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "선택한 커밋 메시지 에이전트를 사용할 수 없습니다. 설정 → 에이전트에서 연결하거나 설정 → Git에서 다른 에이전트를 선택하세요.",
+  "Invalid agent.": "유효하지 않은 에이전트입니다."
 }

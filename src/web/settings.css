@@ -80,6 +80,16 @@
 .settings-content .select-anchor>.chip-select>svg:last-child{width:14px;height:14px;color:var(--text-2)}
 .settings-choice>button:not([class]){flex:none;height:28px;padding:0 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg);font-weight:500}
 .settings-choice>button:not([class]):hover{border-color:var(--line-hover);background:var(--bg-muted)}
+/* The shared model picker is a field here, rather than a flexible composer
+   item. Keep its own popover controls independent of modal input styles. */
+.settings-row>.agent-picker{flex:0 1 auto;max-inline-size:min(320px,100%);margin-inline-start:auto}
+.settings-content .agent-picker-trigger{height:28px;padding:0 6px 0 8px;border:1px solid transparent;background:var(--bg-muted);font-size:12px;color:var(--text)}
+.settings-content .agent-picker-trigger:hover,.settings-content .agent-picker-trigger[aria-expanded=true]{border-color:var(--line)}
+.settings-content .agent-picker-trigger:focus-visible{border-color:var(--accent);outline:none}
+.settings-content .agent-picker-trigger>.agent-picker-selection{flex:1}
+.settings-content .agent-picker-trigger>.agent-picker-agent{font-size:inherit}
+@media(max-width:680px){.settings-content .agent-picker-trigger{height:36px;font-size:14px}}
+@media(max-width:480px){.settings-row>.agent-picker{inline-size:100%;max-inline-size:none}.settings-content .agent-picker-trigger{inline-size:100%}}
 /* Default reasoning effort: title and description at the left, the slider at
    the right like the other controls. */
 .settings-content .settings-row.settings-effort{display:block}

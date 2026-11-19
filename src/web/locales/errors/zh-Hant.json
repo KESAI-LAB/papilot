@@ -20,6 +20,7 @@
   "Another paper is already synced with this Overleaf project.": "已有另一篇論文與此 Overleaf 專案同步。",
   "Answer every question before submitting.": "送出前請回答所有問題。",
   "Antigravity cannot safely grant access to this image path. Move the Papilot data folder to a path without parentheses or wildcards.": "Antigravity 無法安全地授予此圖片路徑的存取權限。請將 Papilot 資料夾移至不含括號或萬用字元的路徑。",
+  "Antigravity did not report structured usage.": "Antigravity 未回報結構化用量資料。",
   "Antigravity stopped because an operation needed permission.": "Antigravity 因某項操作需要權限而停止。",
   "Antigravity stopped because an operation needed permission. Ask it to continue without that operation, or select Always proceed (approves all tools) and ask it to continue.": "Antigravity 因某項操作需要權限而停止。請要求它在不執行該操作的情況下繼續，或選擇「一律執行」（核准所有工具）並要求它繼續。",
   "Attachment not found.": "找不到附件。",
@@ -407,6 +408,7 @@
   "This template version is no longer available. Choose the template again.": "此範本版本已無法使用。請重新選擇範本。",
   "Unknown Git action.": "未知的 Git 操作。",
   "Unknown PDF.": "未知的 PDF。",
+  "Unknown agent.": "未知的智慧代理。",
   "Unknown provider.": "未知的供應商。",
   "Unused attachments have reached 500 MB. Remove attachments from your drafts before uploading more.": "未使用的附件已達 500 MB。上傳更多檔案前，請先從草稿中移除附件。",
   "Updates are managed by Nix.": "更新由 Nix 管理。",
@@ -464,5 +466,8 @@
   "The selected agent does not support read-only AI review. Select another agent.": "所選智慧代理不支援唯讀 AI 審閱。請選擇其他智慧代理。",
   "The selected agent does not support read-only tasks through ACP. Select another agent.": "所選智慧代理不支援透過 ACP 執行唯讀任務。請選擇其他智慧代理。",
   "Choose latexmk or PhiTeX.": "請選擇 latexmk 或 PhiTeX。",
-  "Enable collaboration mode in Settings → Experiments first.": "請先在設定 → 實驗功能中啟用協作模式。"
+  "Enable collaboration mode in Settings → Experiments first.": "請先在設定 → 實驗功能中啟用協作模式。",
+  "The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.": "所選提交訊息代理不支援唯讀任務。請在設定 → Git 中選擇其他代理。",
+  "The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "所選提交訊息代理無法使用。請在設定 → 代理中連線，或在設定 → Git 中選擇其他代理。",
+  "Invalid agent.": "無效的代理。"
 }

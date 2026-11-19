@@ -20,6 +20,7 @@
   "Another paper is already synced with this Overleaf project.": "En annan artikel är redan synkroniserad med det här Overleaf-projektet.",
   "Answer every question before submitting.": "Besvara alla frågor innan du skickar in.",
   "Antigravity cannot safely grant access to this image path. Move the Papilot data folder to a path without parentheses or wildcards.": "Antigravity kan inte ge åtkomst till denna bildsökväg på ett säkert sätt. Flytta Papilots datamapp till en sökväg utan parenteser eller jokertecken.",
+  "Antigravity did not report structured usage.": "Antigravity rapporterade inga strukturerade användningsdata.",
   "Antigravity stopped because an operation needed permission.": "Antigravity stoppades eftersom en åtgärd krävde behörighet.",
   "Antigravity stopped because an operation needed permission. Ask it to continue without that operation, or select Always proceed (approves all tools) and ask it to continue.": "Antigravity stoppades eftersom en åtgärd krävde behörighet. Be den att fortsätta utan den åtgärden, eller välj Fortsätt alltid (godkänner alla verktyg) och be den att fortsätta.",
   "Attachment not found.": "Bilagan hittades inte.",
@@ -407,6 +408,7 @@
   "This template version is no longer available. Choose the template again.": "Den här mallversionen är inte längre tillgänglig. Välj mallen igen.",
   "Unknown Git action.": "Okänd Git-åtgärd.",
   "Unknown PDF.": "Okänd PDF.",
+  "Unknown agent.": "Okänd agent.",
   "Unknown provider.": "Okänd leverantör.",
   "Unused attachments have reached 500 MB. Remove attachments from your drafts before uploading more.": "Oanvända bilagor har nått 500 MB. Ta bort bilagor från dina utkast innan du laddar upp fler.",
   "Updates are managed by Nix.": "Uppdateringar hanteras av Nix.",
@@ -464,5 +466,8 @@
   "The selected agent does not support read-only AI review. Select another agent.": "Den valda agenten stöder inte AI-granskning med enbart läsåtkomst. Välj en annan agent.",
   "The selected agent does not support read-only tasks through ACP. Select another agent.": "Den valda agenten stöder inte uppgifter med enbart läsåtkomst via ACP. Välj en annan agent.",
   "Choose latexmk or PhiTeX.": "Välj latexmk eller PhiTeX.",
-  "Enable collaboration mode in Settings → Experiments first.": "Aktivera först samarbetsläget under Inställningar → Experimentella funktioner."
+  "Enable collaboration mode in Settings → Experiments first.": "Aktivera först samarbetsläget under Inställningar → Experimentella funktioner.",
+  "The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.": "Den valda agenten för commit-meddelanden stöder inte skrivskyddade uppgifter. Välj en annan under Inställningar → Git.",
+  "The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "Den valda agenten för commit-meddelanden är inte tillgänglig. Anslut den under Inställningar → Agenter eller välj en annan under Inställningar → Git.",
+  "Invalid agent.": "Ogiltig agent."
 }

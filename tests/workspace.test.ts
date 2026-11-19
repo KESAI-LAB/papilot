@@ -2065,7 +2065,7 @@ test('feedback alone cannot be sent when there is none, so the chat never shows 
   } finally { f.close(); }
 });
 
-test('a commit message goes to the small model each agent offers, when it offers one', () => {
+test('light helpers can select the small model each agent offers, when it offers one', () => {
   const model = (id: string, name = id) => ({ id, name, isDefault: false, efforts: [], defaultEffort: null });
   assert.equal(lightModel([model('gpt-6.1-sol'), model('gpt-6-luna'), model('gpt-5.6-luna')])?.id, 'gpt-6-luna');
   assert.equal(lightModel([model('opus', 'Opus 5.5'), model('sonnet', 'Sonnet 5.5'), model('haiku', 'Haiku 5.5')])?.id, 'haiku');
@@ -2101,9 +2101,9 @@ test('an agent writes a commit message from the chosen changes, in a read-only t
       });
       return { turn: { id: 'commit-turn' } };
     };
-    assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'claude' }), { message: 'Tighten the opening sentence', agent: 'codex' });
+    assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'codex' }), { message: 'Tighten the opening sentence', agent: 'codex' });
     const start = f.codex.calls.find(call => call.method === 'thread/start')!.params, turn = f.codex.calls.find(call => call.method === 'turn/start')!.params;
-    assert.deepEqual([start.sandbox, start.approvalPolicy, start.ephemeral, start.model, turn.effort], ['read-only', 'never', true, 'gpt-6-luna', 'low']);
+    assert.deepEqual([start.sandbox, start.approvalPolicy, start.ephemeral, start.model, turn.effort], ['read-only', 'never', true, 'gpt-6.1-sol', 'high']);
     // The helper runs in an empty folder of its own, never the manuscript, and the folder is removed.
     assert.notEqual(start.cwd, root); assert.equal(turn.cwd, start.cwd);
     assert.match(path.basename(start.cwd), /^papilot-helper-/); assert.equal(fs.existsSync(start.cwd), false);
@@ -2119,9 +2119,79 @@ test('an agent writes a commit message from the chosen changes, in a read-only t
     assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { fresh: true }), { message: 'Shorten the opening sentence', agent: 'codex' });
     assert.equal(turns(), 2);
     assert.equal((await f.workspace.commitMessage(f.task.projectId, ['main.tex'])).message, 'Shorten the opening sentence');
+    // A cached message must not bypass readiness/authentication or silently
+    // use Codex when a different agent was explicitly requested.
+    const beforeUnavailable = turns();
+    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'claude' }), /selected commit-message agent is unavailable/);
+    f.workspace.runtimes.codex.authenticated = false;
+    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'codex' }), /selected commit-message agent is unavailable/);
+    f.workspace.runtimes.codex.authenticated = true;
     f.codex.ready = false;
+    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'codex' }), /selected commit-message agent is unavailable/);
+    assert.equal(turns(), beforeUnavailable);
     await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex']), /Connect an agent that supports read-only tasks, such as Codex/);
   } finally { f.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('commit-message overrides use the requested agent and cache messages separately', async () => {
+  const claude = new FakeCodex(); claude.ready = true;
+  const f = fixture(undefined, { claude });
+  try {
+    f.codex.ready = true; f.workspace.runtimes.claude.authenticated = true;
+    const calls: string[] = [];
+    (f.workspace as any).taskCommitChanges = async () => ({ files: [{ path: 'main.tex', status: 'M' }], patch: '-Old\n+New', recent: [] });
+    (f.workspace as any).oneOff = async (agent: string) => { calls.push(agent); return `Message from ${agent}`; };
+    for (const agent of ['codex', 'claude', 'codex', 'claude'] as const) {
+      assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent, taskId: f.task.id }), { message: `Message from ${agent}`, agent });
+    }
+    assert.deepEqual(calls, ['codex', 'claude']);
+  } finally { f.close(); }
+});
+
+test('commit messages honor model, effort and Fast mode and cache each selection separately', async () => {
+  const f = fixture();
+  try {
+    f.codex.ready = true;
+    f.workspace.runtimes.codex.models = [
+      { id: 'full', name: 'Full', isDefault: true, efforts: ['low', 'high'], defaultEffort: 'high', fastMode: { serviceTier: 'priority', description: '' } },
+      { id: 'small', name: 'Small', isDefault: false, efforts: ['low', 'high'], defaultEffort: 'low' },
+    ];
+    const calls: unknown[] = [];
+    (f.workspace as any).taskCommitChanges = async () => ({ files: [{ path: 'main.tex', status: 'M' }], patch: '-Old\n+New', recent: [] });
+    (f.workspace as any).oneOff = async (agent: string, options: any) => { calls.push([agent, options.model.id, options.effort, options.serviceTier]); return 'Clarify the introduction'; };
+    const write = (choice: { model?: string; effort?: string; serviceTier?: string } = {}) => f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'codex', taskId: f.task.id, ...choice });
+    await write(); await write();
+    await write({ model: 'small', effort: 'high' }); await write({ model: 'small', effort: 'high' });
+    await write({ model: 'small', effort: 'low' });
+    await write({ model: 'full', effort: 'high', serviceTier: 'priority' });
+    assert.deepEqual(calls, [['codex', 'full', 'high', undefined], ['codex', 'small', 'high', undefined], ['codex', 'small', 'low', undefined], ['codex', 'full', 'high', 'priority']]);
+    await assert.rejects(write({ model: 'missing' }), /Choose an available model/);
+    await assert.rejects(write({ model: 'small', effort: 'ultra' }), /does not support that reasoning effort/);
+    await assert.rejects(write({ model: 'small', serviceTier: 'priority' }), /Fast mode is not available/);
+    assert.equal(calls.length, 4);
+  } finally { f.close(); }
+});
+
+test('commit-message model settings reach the actual helper turn', async () => {
+  const f = fixture();
+  try {
+    f.codex.ready = true;
+    f.workspace.runtimes.codex.models = [{ id: 'chosen', name: 'Chosen', isDefault: true, efforts: ['low', 'high'], defaultEffort: 'low', fastMode: { serviceTier: 'priority', description: '' } }];
+    (f.workspace as any).taskCommitChanges = async () => ({ files: [{ path: 'main.tex', status: 'M' }], patch: '-Old\n+New', recent: [] });
+    f.codex.handler = async method => {
+      if (method === 'thread/start') return { thread: { id: 'chosen-helper' } };
+      if (method !== 'turn/start') return {};
+      setImmediate(() => {
+        f.codex.emit('notification', { method: 'item/completed', params: { threadId: 'chosen-helper', item: { type: 'agentMessage', text: 'Clarify the introduction' } } });
+        f.codex.emit('notification', { method: 'turn/completed', params: { threadId: 'chosen-helper', turn: { id: 'helper-turn', status: 'completed' } } });
+      });
+      return { turn: { id: 'helper-turn' } };
+    };
+    await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'codex', taskId: f.task.id, model: 'chosen', effort: 'high', serviceTier: 'priority' });
+    assert.equal(f.codex.calls.find(call => call.method === 'thread/start')!.params.model, 'chosen');
+    const turn = f.codex.calls.find(call => call.method === 'turn/start')!.params;
+    assert.equal(turn.effort, 'high'); assert.equal(turn.serviceTier, 'priority');
+  } finally { f.close(); }
 });
 
 test('read-only helpers fall back to a capable agent while write helpers keep the selected agent', async () => {
@@ -2145,7 +2215,8 @@ test('read-only helpers fall back to a capable agent while write helpers keep th
     assert.equal(named?.titleGeneration, null);
     assert.equal(claude.calls.length, 0);
     (f.workspace as any).taskCommitChanges = async () => ({ files: [{ path: 'main.tex', status: 'M' }], patch: '-Old opening\n+Clear opening', recent: [] });
-    assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'claude', taskId: f.task.id }), { message: 'Clarify the introduction', agent: 'codex' });
+    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'claude', taskId: f.task.id }), /selected commit-message agent does not support read-only tasks/);
+    assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'codex', taskId: f.task.id }), { message: 'Clarify the introduction', agent: 'codex' });
     assert.equal(claude.calls.length, 0, 'A signed-in agent without read-only support is not selected for either helper');
     const starts = f.codex.calls.filter(call => call.method === 'thread/start');
     assert.equal(starts.length, 2);
@@ -2171,7 +2242,7 @@ test('missing read-only helpers leave titles unchanged and do not prevent editin
       assert.equal(f.store.task(f.task.id).titleGeneration, undefined);
       assert.equal(f.store.task(f.task.id).title, f.task.title);
     }
-    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'claude' }), /Connect an agent that supports read-only tasks, such as Codex\./);
+    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'claude' }), /selected commit-message agent does not support read-only tasks/);
     assert.equal(claude.calls.length, 0);
     await f.workspace.enqueue(f.task.id, 'Edit the introduction.', 'unsupported-title-helper', false);
     await tick(); await tick();
