@@ -383,5 +383,6 @@
   "{shortcut} sent": "已发送 {shortcut}",
   "Check your Typeless shortcut.": "请检查 Typeless 快捷键。",
   "Shortcut: {shortcut}": "快捷键：{shortcut}",
-  "Typeless voice notes": "Typeless 语音批注"
+  "Typeless voice notes": "Typeless 语音批注",
+  "Saved page {page}": "上次位置 · 第 {page} 页"
 }

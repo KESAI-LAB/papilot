@@ -1608,5 +1608,6 @@
   "{shortcut} sent": "{shortcut} 전송됨",
   "Check your Typeless shortcut.": "Typeless 단축키를 확인하세요.",
   "Shortcut: {shortcut}": "단축키: {shortcut}",
-  "Typeless voice notes": "Typeless 음성 메모"
+  "Typeless voice notes": "Typeless 음성 메모",
+  "Saved page {page}": "저장된 페이지 {page}"
 }

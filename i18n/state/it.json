@@ -6618,5 +6618,10 @@
     "revision": "673abc7ec84d9c32eddd1368bf2143c61e519d352faf652055ccbb41c410a8e0",
     "textHash": "5a84c26997bb981b0a50b8316af7c93352b271a97e102386d9d7f0be2a7659f7",
     "model": "codex"
+  },
+  "Saved page {page}": {
+    "revision": "e54984c9539e8f03cadbc2e4030031be3fd9fe23171426e2d0c28565d33829fa",
+    "textHash": "bde3b72e0ea927d946650ad34798d1ac76c8c9286449c587ffa91b109460da01",
+    "model": "manual"
   }
 }
