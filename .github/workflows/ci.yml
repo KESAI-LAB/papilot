@@ -120,6 +120,9 @@ jobs:
         run: node --import tsx scripts/check-review-application.mjs
         env:
           PAPILOT_BROWSER_CHANNEL: chromium
+      - name: Alternative preview compilation and cache reuse
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-note-preview-performance.mjs
       - name: Review flow
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-review-flow.mjs
@@ -135,8 +138,8 @@ jobs:
         run: node --import tsx scripts/check-note-options-flow.mjs
         env:
           PAPILOT_BROWSER_CHANNEL: chromium
-      - name: Keep screenshots of a failed check
-        if: failure()
+      - name: Keep review screenshots and timings
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: review-browser-results
