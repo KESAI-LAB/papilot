@@ -214,6 +214,8 @@ try {
       assert.equal(await staticVisitor.locator(`${selector} a[href="${universe}"]`).count(), 1, `${locale}: ${selector} links to Universe`);
     }
     assert.equal(await staticVisitor.locator('.hero-universe').isVisible(), true, `${locale}: templates remain discoverable on phones`);
+    assert.equal(await staticVisitor.locator('.hero-star').isVisible(), true, `${locale}: GitHub star CTA remains discoverable on phones`);
+    assert.equal(await staticVisitor.locator('.hero-star').getAttribute('href'), 'https://github.com/PapilotAI/papilot');
     assert.equal(await staticVisitor.locator('.topbar-universe').isVisible(), true, `${locale}: Universe stays in the phone header without JavaScript`);
   }
   // Exercise native keyboard navigation without depending on the live service.
@@ -298,7 +300,7 @@ try {
       await page.evaluate(() => document.fonts.ready);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${locale}/${width}: no sideways scroll`);
       await page.locator('#download-button').click();
-      for (const selector of ['.topbar-inner', '.topbar .brand', '.nav', '.topbar-universe', '.topbar-demo', '.hero-universe', '#download-button', '#download-list', '.agent-grid', '.agent-grid li', '.era', '.app-window']) {
+      for (const selector of ['.topbar-inner', '.topbar .brand', '.nav', '.topbar-universe', '.topbar-demo', '.topbar .github-link', '.hero-universe', '.hero-star', '#download-button', '#download-list', '.agent-grid', '.agent-grid li', '.era', '.app-window']) {
         const boxes = await page.locator(selector).evaluateAll(nodes => nodes.map(el => ({ width: el.clientWidth, scroll: el.scrollWidth, left: el.getBoundingClientRect().left, right: el.getBoundingClientRect().right })));
         for (const box of boxes) {
           assert.ok(box.scroll <= box.width + 1, `${locale}/${width}: ${selector} contents fit`);

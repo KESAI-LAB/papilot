@@ -66,9 +66,9 @@ To experience the full workflow, please download Papilot.” The download link i
 part of the sentence. “static demo” is bold; macOS, Windows and Linux download
 menus use platform icons and the app's shared action menu. Each offers the same
 installer choices and versioned URLs as the website, using `package.json` for
-the release version. The notice shares the app's typography and surface colors
+the release version, alongside a **Star on GitHub** link to the repository. The notice shares the app's typography and surface colors
 and wraps on phones. Dismissal persists locally;
-download dialogs remain available when an action needs the installed app.
+download dialogs remain available when an action needs the installed app, and offer both **Download Papilot** and **Star on GitHub**.
 
 ## Development and verification
 
