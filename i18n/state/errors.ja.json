@@ -94,6 +94,11 @@
     "textHash": "8ec8f4da5d94987513f9fe02e19b0d5a780b7d5acbb1ebc228dd35b9f3089c2b",
     "model": "gemini-4-argon-medium"
   },
+  "Antigravity did not report structured usage.": {
+    "revision": "1b39ac36d1f9046b32ff4af81d236f7b3fe73966b483e33f5437ed25e47f2278",
+    "textHash": "0f60592c4dd30fbbf80fd2f8b592707998f7d94d7a68c1c7e5453f9a46674a36",
+    "model": "codex-reviewed"
+  },
   "Antigravity stopped because an operation needed permission.": {
     "revision": "cfa075463a7025c462c90b3eb08023e1968f4f347e8760d7f725135cdd134493",
     "textHash": "064f1840bef7878fd58bcc225a3be64c6084cf165a5fd5fbb317ce095f559249",
@@ -1633,6 +1638,11 @@
     "revision": "a5f3fe3305fbcaddffa2f9c07497230467bd08200fdf4210929392eaad7330ba",
     "textHash": "d847f2ea20aaf7ac21429ce310106ccb99a9cc50af1567a375e6ef3f60d9bce2",
     "model": "gemini-4-argon-medium"
+  },
+  "Unknown agent.": {
+    "revision": "e28c7d28fe2042ccaee2ed0a9178c28ba2e04348c2f81306ec9541604de7e116",
+    "textHash": "936b55fc2ddf1865a6f8d13d060d1d94b3f5db8760dc072e65aa3a11821ef679",
+    "model": "codex-reviewed"
   },
   "Unused attachments have reached 500 MB. Remove attachments from your drafts before uploading more.": {
     "revision": "8cc7d6108ff15b580d5d8b9fa19efe87e8f3a77d41cc0994cd8f751292b4f781",

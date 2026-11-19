@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { AGENT_IDS, type AgentId, type RuntimeStatus, type Task } from '../shared.ts';
 import { AgentPicker } from './agent-picker.tsx';
 import { t } from './i18n.ts';
+import type { RefreshUsage } from './usage.tsx';
 import { requestId } from './request-id.ts';
 import { browserStorage } from './storage.ts';
 
@@ -11,12 +12,13 @@ const settingsOf = (task: Settings): Settings => ({ model: task.model, effort: t
 interface RestartSettings { id: string; agent: AgentId; model: string; effort: string; stop: boolean }
 const newId = () => crypto.randomUUID?.() || Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
 
-export function TaskModelPicker({ task, runtime, runtimes, disabled, reconnecting, onReconnect, save, onSaving, refresh, reportError, permissions, restart }: {
+export function TaskModelPicker({ task, runtime, runtimes, disabled, reconnecting, onReconnect, save, onSaving, refresh, reportError, permissions, restart, refreshUsage }: {
   task: Task; runtime?: RuntimeStatus; disabled: boolean; reconnecting: boolean; onReconnect: () => void;
   runtimes: Partial<Record<AgentId, RuntimeStatus>>;
   save: (settings: { model: string; effort: string; serviceTier?: string }) => Promise<Task>;
   onSaving: (saving: boolean) => void; refresh: () => void; reportError: (error: unknown) => void;
   permissions?: ReactNode;
+  refreshUsage?: RefreshUsage;
   restart: (settings: RestartSettings) => Promise<void>;
 }) {
   const [choice, setChoice] = useState(() => settingsOf(task));
@@ -65,7 +67,7 @@ export function TaskModelPicker({ task, runtime, runtimes, disabled, reconnectin
       finally { restartPending.current = false; setRestarting(false); onSaving(false); refresh(); }
     });
   }
-  return <><AgentPicker agents={AGENT_IDS.filter(id => id === agent || ((id !== 'collaboration' || (runtimes.collaboration?.hidden === false && task.mode !== 'review')) && runtimes[id]?.models.length))
+  return <><AgentPicker refreshUsage={refreshUsage} agents={AGENT_IDS.filter(id => id === agent || ((id !== 'collaboration' || (runtimes.collaboration?.hidden === false && task.mode !== 'review')) && runtimes[id]?.models.length))
     .map(value => ({ value, label: agentLabel(value), runtime: value === agent ? runtime : runtimes[value], allowUnknownDefault: value === agent && !choice.model, restartsTask: value !== agent }))} agent={agent}
     permissions={permissions}
     permissionMode={task.mode !== 'review' ? task.permissions || 'workspace' : undefined}

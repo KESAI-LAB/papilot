@@ -66,8 +66,9 @@ export const agentModel = (m: any): AgentModel => {
 export function accountUsage(response: any): Usage | null {
   const limits = response?.rateLimits;
   if (!limits) return null;
-  const windows = [limits.primary, limits.secondary].filter((w: any) => typeof w?.usedPercent === 'number')
-    .map((w: any) => ({ usedPercent: Math.min(100, Math.max(0, w.usedPercent)), minutes: typeof w.windowDurationMins === 'number' ? w.windowDurationMins : null, resetsAt: typeof w.resetsAt === 'number' ? w.resetsAt * 1000 : null }));
+  const windows = (Array.isArray(limits.windows) ? limits.windows : [limits.primary, limits.secondary]).filter((w: any) => typeof w?.usedPercent === 'number' && Number.isFinite(w.usedPercent))
+    .map((w: any) => ({ usedPercent: Math.min(100, Math.max(0, w.usedPercent)), minutes: typeof w.windowDurationMins === 'number' && Number.isFinite(w.windowDurationMins) && w.windowDurationMins > 0 ? w.windowDurationMins : null, resetsAt: typeof w.resetsAt === 'number' && Number.isFinite(w.resetsAt) ? w.resetsAt * 1000 : null,
+      ...(typeof w.scope === 'string' ? { scope: w.scope } : {}), ...(typeof w.label === 'string' ? { label: w.label } : {}) }));
   const balance = Number(limits.credits?.balance);
   const credits = limits.credits?.hasCredits || limits.credits?.unlimited ? { unlimited: Boolean(limits.credits.unlimited), balance: Number.isFinite(balance) ? balance : null } : null;
   if (!windows.length && !credits) return null;
@@ -356,7 +357,10 @@ export class Workspace extends EventEmitter {
           runtime.models.push({ id: defaultId, name: defaultId, isDefault: true, efforts: [], defaultEffort: null });
         }
       }
-      await this.readUsage(id);
+      // agy's standalone quota command can be slow; account/model readiness
+      // must not wait for this optional display data.
+      if (id === 'antigravity') void this.readUsage(id);
+      else await this.readUsage(id);
     } catch (e) { runtime.error = errorText(e); runtime.connected = false; }
   }
   // A Codex that lost its sign-in is still running but cannot work. Showing
@@ -951,7 +955,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     this.liveItems.set(id, item);
     this.flushTimer ??= setTimeout(() => this.flush(), 350);
   }
-  // Usage is shown on the new-task page. Agents report changes after turns;
+  // Usage is shown in both composers. Agents report changes after turns;
   // read the full snapshot again rather than merging their sparse updates.
   async readUsage(id: AgentId = 'codex') {
     try { this.runtimes[id].usage = accountUsage(await this.agents[id].request('account/rateLimits/read', { excludeResetCreditDetails: true }, 20000)); }

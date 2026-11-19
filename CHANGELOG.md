@@ -6,6 +6,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Changed
 
+- **Check Antigravity quotas from either task composer.** The agent/model menu shows the account's reported five-hour and weekly usage, reset times and model groups, with automatic and manual refresh. Missing quota data stays unavailable and quota queries do not delay conversations. ([#229](https://github.com/PapilotAI/papilot/issues/229))
 - **Star Papilot on GitHub from the website.** The homepage header's GitHub button shows the repository's star count beside the GitHub mark, a **Star on GitHub** link sits below the download button and beside the download section's links, and the online demo's notice and download dialog offer it next to **Download Papilot**. Website links now point to the PapilotAI/papilot repository instead of its former address.
 - **A clearer README.** It now opens with what Papilot does, then illustrated reasons to use it (including live Overleaf sync, reviewing from a phone and Papilot Universe templates), a download card for each system and the terminal, the agents it works with, and a diagram of a task from opening the paper to committing and syncing.
 

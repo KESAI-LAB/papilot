@@ -1,4 +1,5 @@
-import type { Usage, UsageWindow } from '../shared.ts';
+import { useEffect, useRef, useState } from 'react';
+import type { AgentId, RuntimeStatus, Usage, UsageWindow } from '../shared.ts';
 import { locale, t } from './i18n.ts';
 import { Icon } from './icons.tsx';
 
@@ -27,12 +28,14 @@ export function resetText(at: number, now = Date.now()) {
 }
 
 function Limit({ window, reached }: { window: UsageWindow; reached: boolean }) {
-  const used = Math.round(window.usedPercent), name = windowName(window.minutes);
-  const tone = reached || used >= 90 ? 'critical' : used >= 75 ? 'warning' : '';
+  const used = Math.round(window.usedPercent), name = window.label || windowName(window.minutes);
+  const exhausted = window.usedPercent >= 100;
+  const tone = (reached && !window.scope) || used >= 90 ? 'critical' : used >= 75 ? 'warning' : '';
   return <div className={'usage-limit ' + tone}>
+    {window.scope && <strong className="usage-scope">{window.scope}</strong>}
     <span className="usage-name">{name}</span>
-    <span className="usage-bar" role="meter" aria-label={t('{name} used', { name })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={used} aria-valuetext={t('{used}% used', { used })}><span style={{ width: `${used}%` }}/></span>
-    <span className="usage-value">{reached && used >= 100 ? t('Limit reached') : t('{used}% used', { used })}</span>
+    <span className="usage-bar" role="meter" aria-label={t('{name} used', { name: [window.scope, name].filter(Boolean).join(' · ') })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={used} aria-valuetext={t('{used}% used', { used })}><span style={{ width: `${used}%` }}/></span>
+    <span className="usage-value">{exhausted ? t('Limit reached') : t('{used}% used', { used })}</span>
     {window.resetsAt && <span className="usage-reset">{resetText(window.resetsAt)}</span>}
   </div>;
 }
@@ -54,7 +57,7 @@ export function UsageSummary({ usage, agent = 'Codex', expanded = false }: { usa
       {details}
     </> : <details key={agent}>
       <summary className={tone} aria-label={t('{agent} usage details', { agent })}>
-        <span className="usage-account">{agent}{usage.plan && <span className="usage-plan">{plans[usage.plan] || usage.plan}</span>}</span>
+        <span className="usage-account">{primary?.scope || agent}{usage.plan && <span className="usage-plan">{plans[usage.plan] || usage.plan}</span>}</span>
         <span className="usage-overview" title={primary ? windowName(primary.minutes) : undefined}>
           {primary && <span className="usage-bar" aria-hidden="true"><span style={{ width: `${used}%` }}/></span>}
           <span className="usage-value">{usage.reached ? t('Limit reached') : primary ? t('{used}% used', { used }) : balance}</span>
@@ -64,4 +67,35 @@ export function UsageSummary({ usage, agent = 'Codex', expanded = false }: { usa
       {details}
     </details>}
   </section>;
+}
+
+export type RefreshUsage = (agent: AgentId) => Promise<Usage | null>;
+
+// Mounted only while the model menu is open. Read on opening and every minute;
+// a failed quota check never reaches the composer's conversation error state.
+export function PickerUsage({ agent, name, runtime, refresh }: { agent: AgentId; name: string; runtime: RuntimeStatus; refresh?: RefreshUsage }) {
+  const [usage, setUsage] = useState(runtime.usage), [loading, setLoading] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const unavailable = useRef(false);
+  // An unrelated state poll can carry the last successful quota snapshot.
+  // After a failed read, keep it unavailable until a fresh read succeeds.
+  useEffect(() => { if (!unavailable.current) setUsage(runtime.usage); }, [runtime.usage]);
+  useEffect(() => {
+    if (!refresh) return;
+    let disposed = false, pending = false;
+    const read = async () => {
+      if (pending) return;
+      pending = true; setLoading(true);
+      try { const next = await refresh(agent); if (!disposed) { unavailable.current = !next; setUsage(next); } }
+      catch { if (!disposed) { unavailable.current = true; setUsage(null); } }
+      finally { pending = false; if (!disposed) setLoading(false); }
+    };
+    void read();
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') void read(); }, 60_000);
+    return () => { disposed = true; clearInterval(timer); };
+  }, [agent, refresh, revision]);
+  return <div className="picker-usage">
+    {usage ? <UsageSummary usage={usage} agent={name}/> : <p role="status">{loading ? t('Refreshing…') : t('Usage not reported')}</p>}
+    {refresh && <button type="button" className="picker-usage-refresh" aria-label={t('Refresh')} title={t('Refresh')} disabled={loading} onClick={() => setRevision(value => value + 1)}><Icon name="refresh" size={13}/></button>}
+  </div>;
 }

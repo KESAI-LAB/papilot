@@ -109,7 +109,8 @@ test('Antigravity turns run agy in accept-edits mode, stream into items, and res
     assert.deepEqual(items[1].changes, [{ path: '/work/main.tex' }]);
     assert.equal(items[2].text, 'Finished.');
     assert.match(items[3].text, /could not run RunCommand/);
-    assert.equal(seen.every(e => e.params.threadId === thread.id), true);
+    assert.equal(seen.filter(e => e.method !== 'account/rateLimits/updated').every(e => e.params.threadId === thread.id), true);
+    assert.equal(seen.filter(e => e.method === 'account/rateLimits/updated').length, 1);
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'conversations.json'), 'utf8')), { [thread.id]: 'conv-1' });
     const read = await agent.request('thread/read', { threadId: thread.id });
     assert.deepEqual(read.thread.turns, [{ id: turn.id, status: 'completed', items: [{ type: 'userMessage', clientId: 'run-1' }] }]);
