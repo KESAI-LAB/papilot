@@ -3,12 +3,12 @@
   "locales": {
     "en": {
       "category": "Engineering",
-      "title": "Why Source Diffs Fail on Papers: How Papilot Builds Typeset PDF Comparisons",
-      "lead": "Inside the Git worktree snapshots, warm incremental chapter builds, SyncTeX path rewriting, and undoable review journal behind fast PDF-level diffs.",
-      "description": "A technical deep dive into how Papilot isolates AI LaTeX edits in Git worktrees, compiles changed chapters incrementally in seconds, attributes fine-grained prose and atomic math diffs, and keeps working files untouched until Apply.",
+      "title": "How Papilot Builds a Typeset Review",
+      "lead": "One review round through the code: a worktree snapshot, warm LaTeX builds, a whole-document word alignment, SyncTeX crops and a decision journal.",
+      "description": "How Papilot turns an agent’s LaTeX edits into a typeset review: Git worktree snapshots, latexmk state reuse, \\includeonly chapter builds, MuPDF word alignment, SyncTeX crops and a SQLite decision journal.",
       "hero": "/assets/blog/review.en.png",
       "heroAlt": "Papilot product illustration showing a typeset before-and-after PDF comparison with accept, reject, comment, and LaTeX source actions.",
-      "heroCaption": "Every proposed AI edit compiles in an isolated build directory and returns as an undoable typeset comparison on the manuscript page."
+      "heroCaption": "A review round: each edit typeset before and after, with Accept, Reject and Comment."
     },
     "zh-CN": {
       "category": "工程实现",

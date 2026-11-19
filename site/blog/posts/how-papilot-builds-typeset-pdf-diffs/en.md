@@ -1,50 +1,60 @@
-Ask a coding agent to tighten a two-page proof or unify notation across a LaTeX manuscript, and its raw `git diff` will arrive in seconds. Reading that diff is where the real delay begins. A single renamed macro, a rewrapped paragraph, or an adjusted `\begin{aligned}` block turns into dozens of red and green source lines. Even if you run `latexdiff` across the whole project, fragile display environments often break, page breaks shift downstream, and there is still no clean way to accept paragraph two, reject equation four, and write only your chosen source edits back to disk.
+This post follows one review round through Papilot's code, from the agent's last file write to your decision on the page. Paths refer to the [repository](https://github.com/PapilotAI/papilot); the numbers come from [docs/performance.md](https://github.com/PapilotAI/papilot/blob/main/docs/performance.md), measured on a 240 MB thesis with XeLaTeX, BibTeX, minted and chapters split with `\include`.
 
-For [Papilot](https://github.com/PapilotAI/papilot) to make the compiled PDF the primary workspace, typeset comparisons cannot feel like a slow batch export at the end of a build. Every round of agent edits has to stay isolated from your working tree, compile in roughly the time of a single incremental `latexmk` pass, attribute highlights accurately to individual notes, and record every accept or reject decision in an undoable review journal. Here is how that pipeline works under the hood.
+## A worktree and a snapshot
 
-## Isolating Agent Turns in Git Worktrees and Fast Tree Snapshots
+Each task is a detached Git worktree created from a snapshot of the manuscript, uncommitted edits included (`engine/src/core/tasks.ts`). The agent runs with that worktree as its working directory and sandbox.
 
-Safety comes before speed. When you highlight sentences or box equations on a PDF page and send them to Codex, Claude, Cursor, or Papilot Writer, the agent never edits your manuscript's working directory directly. Instead, each task runs inside its own disposable Git worktree.
+A round starts by recording the worktree as a Git tree. Hashing a thesis on every round would be slow, so the snapshot goes through a private index file, `papilot/snapshot-index` in the worktree's Git directory (the manuscript has its own, `.git/papilot/working-index`). The index is seeded from the previous snapshot or from the repository's index, so Git rehashes only files whose size or modification time changed. Each snapshot is taken twice and compared, so a file saved halfway through cannot produce a tree that never existed on disk. On the thesis, a snapshot went from 2.1 s to 0.1 s.
 
-To compare revisions reproducibly—and ensure SyncTeX always points to the exact source version being displayed—every build runs in an immutable build directory rather than mutating the author's folder in place. Creating a fresh build snapshot on a large thesis could easily become a bottleneck if Git hashed the entire repository each time. Papilot avoids that by recording snapshots through private Git snapshot indexes (`.git/papilot/working-index` for the manuscript and `papilot/snapshot-index` in each task worktree), seeded from the previous snapshot or the repository index so Git rehashes only files whose size or modification time actually changed.
+## Building both sides
 
-![Four-stage engineering pipeline diagram: Git worktree snapshot, seeded incremental chapter builds, typeset diff attribution, and undoable review journal.](/assets/blog/review-pipeline.en.svg "Each agent turn runs in an isolated Git worktree, reuses warm LaTeX state for parallel chapter builds, attributes fine-grained prose and atomic math diffs, and records undoable decisions before touching your working tree.")
+Every build runs in its own folder, keyed by what it compiles, so SyncTeX always points at the exact source of the PDF on screen. Starting each folder empty would throw away latexmk's state, so a new folder starts from the closest previous one (`engine/src/core/build.ts`):
 
-## Making Immutable LaTeX Builds Cost Seconds, Not a Clean Rebuild
+- **Pick a base.** Of the last 16 error-free builds with the same chapters, compiler settings and compiler version, the one whose tree differs from the new one in the fewest files (`git diff-tree`), the newer on a tie.
+- **Clone, then patch.** The base's sources are cloned copy-on-write (`cp -c -R` on APFS). Files outside the new tree are removed, files with the same Git object and size are kept, and the rest stream from a single `git cat-file --batch`. LaTeX's output files are cloned with `COPYFILE_FICLONE`. Exporting the thesis takes 0.76 s; copying its LaTeX state, 0.06 s.
+- **Keep latexmk's state.** `.aux`, `.bbl`, `.fdb_latexmk`, the minted cache and the rest carry over (all but `.fls`). Paths inside them contain the folder's 32-character cache key. Every key has the same length, so the old key is replaced byte for byte, which keeps the offsets in SyncTeX data valid (`.synctex.gz` is unzipped and zipped again). latexmk then decides what to run, as it would in your folder.
 
-Running `pdflatex` or `xelatex` from scratch on a multi-chapter paper or a 300-page thesis takes multiple passes to resolve citations, cross-references, and `minted` or TikZ caches. Because Papilot isolates builds in separate directories, naive isolation would throw away all of `latexmk`'s incremental state on every turn.
+**Chapter rounds.** When the main file includes chapters with `\include` and every changed file belongs to one of them, each side is a single `\includeonly` build of the changed chapters. The other chapters' `.aux` files come from a full build of the task's base, so equation numbers, references and citations stay right. The two sides compile at the same time, with the same `SOURCE_DATE_EPOCH` (noon UTC of the round's date, with `FORCE_SOURCE_DATE=1`), so `\today` never shows up as a change. A chapter build of the thesis went from 68.7–88.5 s (3 passes, 2 BibTeX runs) to 25.8 s (1 pass).
 
-Papilot keeps isolated builds fast through four mechanisms:
+**Before the turn ends.** Each file the agent writes starts a speculative build and comparison, cancelled by its next write (`engine/src/core/publish.ts`), so the round is often rendered by the time the agent stops.
 
-1. **Cloning the closest recent build.** When preparing a new build folder, Papilot inspects recent completed builds of the same chapter set and picks the candidate whose Git tree differs in the fewest files. On macOS with APFS, `cp -c` copy-on-write clones the entire build directory in one step, then streams only the changed blobs from Git.
-2. **In-place SyncTeX and auxiliary state carryover.** `latexmk`'s `.fdb_latexmk` database, `.aux` and `.bbl` files, and `minted` caches carry over into the cloned directory. Because build folders use equal-length directory keys, Papilot rewrites paths inside kept SyncTeX data and logs in place without invalidating byte offsets—so `latexmk` usually runs just a single incremental pass, or nothing at all when inputs have not changed.
-3. **Parallel `\includeonly` chapter builds for reviews.** When an agent edits one or two chapters of a multi-file manuscript, a review round does not recompile the entire book. Both the baseline and revised versions compile only the touched chapters in parallel via `\includeonly`, seeded with `.aux` files from a full base build so cross-references, figure numbers, and citations from untouched chapters remain accurate. Both builds also pin a shared timestamp so `\today` never creates phantom diffs across midnight.
-4. **First-pass previews and automatic clean fallback.** When an edit changes pagination or citations and `latexmk` schedules additional passes, a pass hook surfaces the newly typeset pages and SyncTeX map right after pass one while reference numbers finish settling in the background. If leftover auxiliary state ever causes an error inside generated files, Papilot automatically retries once from a clean directory.
+**One machine, two TeX runs.** The manuscript preview, every task's rounds and the speculative builds share two TeX slots across all processes. When a more urgent run waits, a less urgent one is paused with `SIGSTOP` and continued later (`engine/src/core/pool.ts`).
 
-| Build and review stage | Naive clean-build pipeline | Papilot incremental review pipeline |
+**Failures.** A build whose errors point into leftover files under `build/` is retried once from a clean folder. If the revised document does not compile, the error goes back to the agent as a new turn. If the baseline does not compile, it is compiled past its errors; failing that, the round shows source changes only.
+
+![Four stages: snapshot the task in a Git worktree, build both sides from warm LaTeX state, compare the typeset documents, and record each decision in a journal.](/assets/blog/review-pipeline.en.svg "One round: snapshot, build, compare, decide.")
+
+## Finding each change on the page
+
+**Units in the source.** The diff splits prose into words (characters in CJK text). Some constructs stay single tokens: comments, inline and display math, brace groups, commands with their arguments, and environments such as `equation`, `align`, `tabular`, `verbatim`, `minted` and `tikzpicture`. Edits separated only by spaces or punctuation are joined, and each resulting edit is one decision with an exact source range. Images and other binary files are whole-file units, and hunks touching the same `.bib` entry form one unit.
+
+**Where the documents differ.** A worker process extracts the text of both PDFs with MuPDF and aligns the two documents word by word (`engine/src/render/effects.ts`): unique runs of eight words pin them together, the longest increasing chain of those anchors is kept, and the gaps between anchors are diffed. Runs of at least 20 letters and digits that moved are reported as moves. Comparing whole documents is what finds changes away from the edit: every use of a redefined macro, renumbered equations, a new bibliography entry.
+
+**Where each edit is.** SyncTeX, compiled to WebAssembly and indexed once per build, maps each edit's old lines into the old PDF and its new lines into the new one, giving page crops; crops are cut at lines both documents share. Each edit is then classified as changed text, changed layout (pixel comparison at 2×), moved, typeset identically, or unmapped. Changes of ink only (font, colour, raised or lowered text) and vector drawings are compared separately. Crops that share a printed line merge into one region, while each edit keeps its own Accept and Reject. The strips on screen are vector SVG.
+
+A whitespace-only edit that typesets identically is attached to the nearest real edit in the same paragraph, never across a blank line, `\par` or a section heading, and stays its own decision.
+
+**Changes away from the edit (optional).** With **Track indirect changes** on, differences outside every edit's crop are traced to their cause by compiling variants: first the edits with no visible effect of their own, such as a macro definition, then halves of the edit set. The union of causes is verified, up to three places are drawn under each edit, and the rest load on demand.
+
+## Decisions as a journal
+
+A decision never writes your folder directly. Each one is recorded in a SQLite journal with the expected and target bytes of every write, checked against disk and rolled back if any step fails (`engine/src/core/review.ts`):
+
+- **Accept** records the change in a private commit, `refs/papilot/<task>/accepted`.
+- **Reject** reverts the change in the worktree with a three-way merge, so passages edited since are left alone. While the agent is working, rejects wait until its turn ends.
+- **Undo** takes back the latest decision.
+- **Apply** merges the accepted changes into your working files, again three-way. **Commit** writes only the task's changes onto `HEAD` with `git commit-tree` while holding `index.lock`, after checking that the branch has not moved, and keeps anything else you had staged.
+
+If the manuscript changed in the same passages meanwhile, nothing is overwritten: the proposal is rebased onto the current manuscript and comes back as a new review in the same task.
+
+## What the isolation costs
+
+Against `latexmk` run in a copy of the same folder:
+
+| Change | `latexmk` in the folder | Papilot |
 | --- | --- | --- |
-| Workspace isolation | Mutates working folder or copies every file from scratch | Task-scoped Git worktree + private Git snapshot indexes (`working-index` / `snapshot-index`), cloned via `cp -c` on APFS |
-| Multi-chapter review compilation | Full-document multi-pass rebuild before and after | Parallel `\includeonly` builds seeded from the base build's auxiliary files, with pinned date |
-| SyncTeX & auxiliary state | Rebuilt from zero on every isolated directory | Equal-length build keys allow in-place SyncTeX path rewriting and `latexmk` state reuse |
-| Multi-pass latency on screen | Waits for every BibTeX and cross-reference pass to finish | Surfaces updated PDF pages after pass one while remaining passes settle numbers |
+| Edit a chapter | 69.2 s, 1 pass | 71.2 s, 1 pass |
+| Edit a file TeX does not read | 0.2 s, nothing to do | 1.9 s, no TeX run |
+| Open the paper | 0.2 s, nothing to do | 71.3 s, 1 pass |
 
-## Fine-Grained Prose Attribution and Atomic Math Comparisons
-
-Once the baseline and revised PDFs are compiled, rendering two full pages side by side is still not enough: an author wants to decide on each logical change where it sits on the page, without losing typographic context.
-
-Papilot separates **what can be split** from **what must stay whole**:
-
-- **Fine-grained prose offsets.** Within ordinary paragraphs, each edit maps to exact character offsets in the `.tex` source and separately attributed highlight marks on the rendered PDF. Invisible whitespace or line-wrap adjustments in the `.tex` file are grouped automatically with the nearest substantive edit in the same paragraph so authors never have to click through formatting noise.
-- **Atomic TeX constructs.** Display equations, tables, figures, and bibliography entries remain atomic units, and overlapping PDF regions merge into a single coherent comparison block with surrounding lines kept in place—preserving true line breaks, kerning, and math spacing.
-
-![Papilot interface showing a boxed equation and a highlighted sentence on the compiled PDF, each with an author note ready for the agent.](/assets/blog/notes.en.png "PDF notes link specific quotations and equation regions to source offsets so reviews can focus on one note at a time.")
-
-When you attach PDF notes to a task, Papilot can also ask the connected agent to prepare concise **per-note alternatives** alongside its main proposal in the same turn. Before the review opens, Papilot validates each alternative patch against the exact source ranges linked to that note and compiles candidate previews in isolation. Clicking a note focuses only that note's highlights on the page and lets you switch between prepared wordings—or toggle the exact `.tex` diff—from local cache, with **zero additional LLM calls** during review.
-
-## An Undoable Review Journal Before Anything Touches `main`
-
-In source-centric editors, clicking "Keep" in an AI chat panel immediately mutates your working files. In Papilot, reviewing and delivering are deliberately decoupled.
-
-Accepting a change—or accepting an alternative for a single note—writes to an undoable review journal inside the task. Rejecting a note restores its original `.tex` source ranges immediately while leaving unrelated edits and decisions intact. Only when you finish reviewing do you choose whether to **Apply** the approved changes to your working directory without committing (and, if linked, sync them in roughly a second to coauthors on Overleaf) or **Commit** only this task's accepted edits directly onto the manuscript's current branch.
-
-You can test per-note typeset comparisons, prepared task replays, and local Git staging right in your browser with the [static online demo](/demo/). The full review engine, compiler pipeline, and desktop application are open source under the MIT license—explore the code, open an issue, or [star Papilot on GitHub](https://github.com/PapilotAI/papilot).
+From an agent's edit to a ready round took 23.1–47.2 s. With the next manuscript build predicted during a 150 s review, the PDF was ready 0.8 s after the commit.

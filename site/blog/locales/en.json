@@ -111,7 +111,7 @@
     ],
     "workflowsSync": "Live Overleaf sync (~1 s) links browser & PDF",
     "pipelineTitle": "Incremental typeset review pipeline",
-    "pipelineDesc": "How Papilot isolates agent edits in a Git worktree, compiles changed chapters incrementally, attributes typeset diffs, and records undoable decisions.",
+    "pipelineDesc": "How Papilot snapshots a task in a Git worktree, builds both versions from warm LaTeX state, compares the typeset documents and records each decision.",
     "pipelineSteps": [
       [
         "Git worktree",
@@ -121,7 +121,7 @@
       [
         "Seeded build",
         "Clone & compile",
-        "Changed chapters in parallel."
+        "Warm state, both sides at once."
       ],
       [
         "Diff engine",
