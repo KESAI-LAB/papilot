@@ -1,3 +1,4 @@
+import { PaperTools } from './paper-tools.ts';
 import { isNoteGroup } from '../note-groups.ts';
 import { isCommitMessageLanguage, type CommitMessageLanguage } from '../commit.ts';
 import { noteAlternativeRange, NOTE_ALTERNATIVE_RANGES, validRoutes } from '../shared.ts';
@@ -182,6 +183,12 @@ export async function buildApp(options: AppOptions) {
   workspace.prepareReview = (task, worktree) => manuscripts.captureReview(store.project(task.projectId).path, worktree, task.id, task.document);
   workspace.sourcePages = (task, file, lines) => manuscripts.sourcePages(task.projectId, file, lines, taskDocument(task));
   workspace.paperBuild = task => manuscripts.paperBuild(task.projectId, taskDocument(task));
+  const paperTools = new PaperTools(store, manuscripts, id => workspace.annotationSending(id));
+  workspace.paperTools = async (...args) => {
+    const result = await paperTools.call(...args);
+    if (['annotation_create', 'annotation_update', 'annotation_delete', 'annotation_restore'].includes(args[1])) manuscripts.emit('change');
+    return result;
+  };
   const app = Fastify({ logger: false, bodyLimit: Number.MAX_SAFE_INTEGER });
   if (ownsOverleaf) app.addHook('onClose', async () => { await overleaf.stop(); });
   const buildSettingsChanged = (projectId: string) => changes.buildSettingsChanged(projectId);
@@ -902,7 +909,8 @@ export async function buildApp(options: AppOptions) {
     const project = store.project(request.params.id), q = request.query;
     return placeSource(manuscripts, project.id, String(q.key || ''), q.file, q.start, q.end, q.near);
   });
-  // Notes are saved for reading; only explicitly attached IDs reach an agent task.
+  // Notes are not automatically included in prompts. Explicit annotation-management
+  // requests can also use the task-scoped paper tools to access manuscript notes.
   app.post<{ Params: { id: string } }>('/api/projects/:id/annotations', project(), async request => {
     const project = store.project(request.params.id), b = request.body as any;
     if (!isRect(b.rect)) throw new Error('Select text or mark a region on the page first.');

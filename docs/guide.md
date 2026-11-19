@@ -313,17 +313,27 @@ Papilot can keep a paper folder and an Overleaf project in step while it runs, s
 
 Sessions are kept in Papilot's data folder, readable only by your user account, and are sent only to the Overleaf server they belong to.
 
+## Ask an agent to annotate
+
+In an ordinary task, ask the agent to add comments to the manuscript, for example: “Read `comments.txt`, find the relevant passages and save these comments as annotations. Preserve the feedback and leave the manuscript text unchanged.” The same tools work for feedback in the conversation or findings the agent develops itself; there is no special import format.
+
+The agent searches the current manuscript PDF and reads small ranges with real line anchors. It saves each annotation immediately in the manuscript's existing notes. You can read and edit those notes normally and later send selected notes to an editing task. An interrupted turn keeps annotations already saved; stable request IDs let the agent retry a creation without duplicating it. Updates check the note's revision so they cannot silently overwrite a concurrent change. Deleted notes can be listed and restored through the tools.
+
+The PDF must have selectable text and a current successful build. Tools use the manuscript PDF, not unaccepted changes in the task copy; a changed PDF requires fresh anchors. If the agent cannot identify a passage confidently, it should report that comment in chat rather than place it arbitrarily. Reading and search results are paginated; neither the paper's size nor the number of annotations is capped.
+
+Codex and Papilot Writer receive native tools. Other command-capable agents use the same operations through a private local JSON client, subject to their command and local-network permissions. Cursor's default network-disabled sandbox cannot use that client; its unrestricted mode can. Old Codex conversations and versions without native dynamic tools also use the client. Session access expires when the turn ends. These tools are separate from the preserved-snapshot AI review skill below.
+
 ## AI review
 
 In **Manuscript → New task**, choose the **AI review** skill from the composer’s **+** menu, or type `/ai-review`. Optionally describe a focus (for example, assumptions, argument structure, or clarity), choose Codex, Claude, or GLM, and send it like any other skill. Papilot builds and preserves a PDF from the task's own manuscript copy, so you don't need to wait for the preview to finish compiling. Papilot saves the PDF's extracted text, one line per row, in the task's copy, and the reviewer reads the parts your request covers, so a focused review of a long thesis does not have to read all of it. The reviewer's comments are anchored to the PDF's actual lines. It runs in read-only mode and cannot publish or apply manuscript edits.
 
 Open **AI suggestions** in the task's PDF toolbar to read findings beside the relevant passages. With a suggestion open and the PDF focused, **← / →** move between findings, and **Esc** or a click outside closes the card. Comments aim for one short, actionable sentence anchored to a specific sentence or equation, usually 1–3 lines; the conversation shows only a brief summary. Opening the PDF keeps the review task available.
 
-Suggestions stay in the task until you click their bookmark (**Keep on manuscript**). This copies only that annotation to the main manuscript, without changing its text; the bookmark fills after success. You can ignore a suggestion and undo that action. Copies already kept on the manuscript survive ignoring the original or deleting its review task. To request edits later, explicitly quote a kept suggestion into a normal editing task. Personal reading notes also stay private until explicitly quoted into a task; click their text to edit them directly. Notes are saved in Papilot and displayed over the PDF, not embedded in downloaded PDF files.
+Suggestions stay in the task until you click their bookmark (**Keep on manuscript**). This copies only that annotation to the main manuscript, without changing its text; the bookmark fills after success. You can ignore a suggestion and undo that action. Copies already kept on the manuscript survive ignoring the original or deleting its review task. To request edits later, explicitly quote a kept suggestion into a normal editing task. Personal reading notes are not automatically included in task prompts; agents can access them through the paper tools when you ask to inspect or manage annotations; click their text to edit them directly. Notes are saved in Papilot and displayed over the PDF, not embedded in downloaded PDF files.
 
 Follow-ups in the review conversation continue reviewing the same preserved PDF. Start a new AI review to review a newer manuscript. When keeping a suggestion after the manuscript has changed, Papilot locates its passage in the current compiled manuscript. If that location cannot be matched reliably, it reports the problem and leaves the original suggestion in the task.
 
-This version reviews selectable text, including text extracted from equations and captions; it does not inspect figure images or page appearance. A review accepts up to 180,000 extracted characters and returns at most 30 suggestions. Scanned PDFs without selectable text cannot be reviewed. An invalid model response saves no partial annotations and can be retried in the same conversation.
+This version reviews selectable text, including text extracted from equations and captions; it does not inspect figure images or page appearance. Scanned PDFs without selectable text cannot be reviewed. An invalid model response saves no partial annotations and can be retried in the same conversation.
 
 ## Task attachments
 

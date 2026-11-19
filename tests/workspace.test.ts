@@ -4046,3 +4046,28 @@ test('late collaboration helper failures after pause do not answer the stopped t
     assert.equal(f.collaboration.replies.some(reply => reply.id === 'failed-proposal'), false);
   } finally { f.close(); }
 });
+
+
+test('ordinary Codex turns receive native paper tools and a scoped compatibility client', async () => {
+  const f = fixture();
+  try {
+    f.workspace.paperTools = async (task, tool, args, current) => {
+      assert.equal(task.id, f.task.id); assert.equal(current(), true);
+      return { tool, args, saved: true };
+    };
+    f.store.updateTask(f.task.id, { threadId: null }); f.codex.ready = true;
+    await f.workspace.enqueue(f.task.id, 'Save feedback as annotations without editing.', 'annotations', false);
+    for (let i = 0; i < 100 && !f.codex.calls.some(call => call.method === 'turn/start'); i++) await new Promise(resolve => setTimeout(resolve, 2));
+    const start = f.codex.calls.find(call => call.method === 'thread/start')!.params;
+    assert.ok(start.dynamicTools.some((tool: any) => tool.name === 'annotation_create'));
+    assert.ok(start.dynamicTools.every((tool: any) => tool.type === 'function'), 'Codex requires one consistent dynamic-tool format');
+    const turn = f.codex.calls.find(call => call.method === 'turn/start')!.params;
+    const prompt = turn.input[0].text;
+    assert.match(prompt, /paper-tools.mjs/); assert.match(prompt, /without changing manuscript text|not to rewrite/);
+    assert.doesNotMatch(prompt, /Bearer/);
+    const task = f.store.task(f.task.id);
+    await (f.workspace as any).toolCall(task, { id: 100, params: { tool: 'annotation_create', arguments: { comment: 'Comment' } } }, f.codex);
+    const reply = f.codex.replies.find(item => item.id === 100)!.result as any;
+    assert.equal(reply.success, true); assert.equal(JSON.parse(reply.contentItems[0].text).saved, true);
+  } finally { f.close(); }
+});

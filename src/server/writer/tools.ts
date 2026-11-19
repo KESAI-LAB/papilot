@@ -1,3 +1,4 @@
+import { PAPER_TOOLS } from '../paper-tools.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -27,7 +28,7 @@ export interface ToolHost {
   ask(questions: Question[], signal?: AbortSignal): Promise<string[]>;
   /** Runs one of Papilot's own tools (the review engine's build and pages). */
   /** callId is the tool call's own id, so what Papilot keeps for it lands on the right chat line. */
-  papilot(tool: 'view_pdf' | 'check_build' | 'source_pages' | 'paper_build', args: Record<string, unknown>, signal?: AbortSignal, callId?: string): Promise<{ success: boolean; text: string }>;
+  papilot(tool: string, args: Record<string, unknown>, signal?: AbortSignal, callId?: string): Promise<{ success: boolean; text: string }>;
   lastBuild(): BuildNote | null;
   recordBuild(note: BuildNote): void;
   /** Chore mode: shell commands, entered with the author's approval for one chore. */
@@ -551,8 +552,17 @@ export function writerTools(host: ToolHost): ToolDefinition[] {
     },
   });
 
+  const annotations = PAPER_TOOLS.map(definition => tool({
+    name: definition.name, label: definition.name.replaceAll('_', ' '), description: definition.description, promptSnippet: definition.description,
+    parameters: Type.Unsafe<Record<string, unknown>>(definition.inputSchema),
+    async execute(args, signal, id) {
+      const result = await host.papilot(definition.name, args, signal, id);
+      if (!result.success) throw toolError(result.text);
+      return text(result.text);
+    },
+  }));
   const reading = [outline, read, searchText, search, references, list, build, view, lookup, web, ask];
-  return host.mode() === 'read-only' ? reading : [...reading, edit, write, add, move, remove, enterChore, exitChore, command];
+  return host.mode() === 'read-only' ? reading : [...reading, ...annotations, edit, write, add, move, remove, enterChore, exitChore, command];
 }
 
 /** Tools that change files, so Papilot shows them as file changes. */

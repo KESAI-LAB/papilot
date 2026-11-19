@@ -475,3 +475,12 @@ test('references, contents and macros are read from LaTeX\'s syntax, not its loo
   assert.equal(wordCount(String.raw`We train \emph{a} model~\cite{x} % not this
 on 3 birds.`), 8, 'A citation counts as one word, as it reads: [cite]');
 });
+
+
+test('Writer uses the common annotation tools without entering shell mode', async () => {
+  const received: unknown[] = [];
+  const h = host('/unused', { papilot: async (tool, args) => { received.push([tool, args]); return { success: true, text: '{"saved":true}' }; } });
+  assert.equal(await call(writerTools(h), 'annotation_create', { key: 'pdf', start: 'p1-l1', end: 'p1-l1', comment: 'Clarify.', requestId: 'one' }), '{"saved":true}');
+  assert.equal(received.length, 1); assert.equal(h.approvals.length, 0);
+  assert.equal(writerTools(host('/unused', { mode: () => 'read-only' })).some(tool => tool.name === 'annotation_create'), false);
+});
