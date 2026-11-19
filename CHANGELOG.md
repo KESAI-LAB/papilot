@@ -6,6 +6,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Added
 
+- Let ordinary agent tasks search and read small portions of the manuscript PDF and save annotations as they work. Comments can come from files or conversation; no import mode or manuscript rewrite is required. Annotations use real PDF anchors, persist across interrupted turns, and support idempotent creation and revision-checked updates, deletion and restoration.
 - Keep sent PDF notes visible on the manuscript as translucent dashed marks while their task is unfinished. Status dots distinguish running and ready tasks; click a mark to open its review. Marks disappear after completion or delivery to the manuscript.
 - Peek at internal PDF references with a 400 ms hover, Alt-click (Option-click on macOS), or keyboard focus. Equations, tables, figures and bibliography entries preview in place without changing your reading position; ordinary clicks still navigate.
 

@@ -81,7 +81,9 @@ test('draft files attach to one task, survive restart, and reach Codex as images
     await f.workspace.enqueue(f.task.id, 'Update the results.', 'files-request', false, { attachments: [image.id, data.id] });
     for (let i = 0; i < 500 && !f.agent.calls.some(call => call.method === 'turn/start'); i++) await new Promise(resolve => setTimeout(resolve, 10));
     const input = f.agent.calls.find(call => call.method === 'turn/start')?.params.input;
-    assert.equal(input[0].text, run.prompt);
+    assert.equal(input[0].text.slice(0, run.prompt.length), run.prompt);
+    assert.match(input[0].text.slice(run.prompt.length), /^\n\nYou can search\/read the current manuscript PDF/);
+    assert.match(input[0].text, /paper-tools\.mjs/);
     assert.deepEqual(input[1], { type: 'localImage', path: f.workspace.attachments.path(image) });
     assert.equal(input.length, 2);
     assert.equal(f.store.runs().length, 1, 'retry did not duplicate the message');

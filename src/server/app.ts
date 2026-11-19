@@ -1,3 +1,4 @@
+import { PaperTools } from './paper-tools.ts';
 import { isNoteGroup } from '../note-groups.ts';
 import { isCommitMessageLanguage, type CommitMessageLanguage } from '../commit.ts';
 import { noteAlternativeRange, NOTE_ALTERNATIVE_RANGES, validRoutes, taskFinished, type InFlightMark } from '../shared.ts';
@@ -38,8 +39,8 @@ import type { Updates } from './updates.ts';
 import { Diagnostics } from './diagnostics.ts';
 import { attachmentIds } from './attachments.ts';
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from '../shared.ts';
-import { PaperImports, existingTex, openFolder } from './imports.ts';
-import { checkDocument, chooseDocument, compiledBefore, repositoryFiles, rootDocument } from './repository-files.ts';
+import { PaperImports, openFolder } from './imports.ts';
+import { checkDocument, chooseDocument, noteDocumentFilter, repositoryFiles } from './repository-files.ts';
 import { PaperCreations } from './create-paper.ts';
 import { Universe } from './universe.ts';
 import { DATA, pageViewDir } from './paths.ts';
@@ -182,6 +183,12 @@ export async function buildApp(options: AppOptions) {
   workspace.prepareReview = (task, worktree) => manuscripts.captureReview(store.project(task.projectId).path, worktree, task.id, task.document);
   workspace.sourcePages = (task, file, lines) => manuscripts.sourcePages(task.projectId, file, lines, taskDocument(task));
   workspace.paperBuild = task => manuscripts.paperBuild(task.projectId, taskDocument(task));
+  const paperTools = new PaperTools(store, manuscripts, id => workspace.annotationSending(id));
+  workspace.paperTools = async (...args) => {
+    const result = await paperTools.call(...args);
+    if (['annotation_create', 'annotation_update', 'annotation_delete', 'annotation_restore'].includes(args[1])) manuscripts.emit('change');
+    return result;
+  };
   const app = Fastify({ logger: false, bodyLimit: Number.MAX_SAFE_INTEGER });
   if (ownsOverleaf) app.addHook('onClose', async () => { await overleaf.stop(); });
   const buildSettingsChanged = (projectId: string) => changes.buildSettingsChanged(projectId);
@@ -254,10 +261,8 @@ export async function buildApp(options: AppOptions) {
   // before, even while it lacks \documentclass of its own. One on a main file
   // since renamed or removed moves to the current document.
   async function paperNoteFilter(id: string, includeSent = false) {
-    const root = store.project(id).path, document = await manuscripts.document(id, root), elsewhere = new Map<string, boolean>();
-    const before = await compiledBefore(root);
-    const away = (file: string) => elsewhere.get(file) ?? elsewhere.set(file, before.has(file) ? existingTex(root, file) : rootDocument(root, file)).get(file)!;
-    return (note: Annotation) => (includeSent || !note.taskId) && !isTaskReviewNote(note) && (!note.document || note.document === document || !away(note.document));
+    const root = store.project(id).path, inDocument = await noteDocumentFilter(root, await manuscripts.document(id, root));
+    return (note: Annotation) => (includeSent || !note.taskId) && !isTaskReviewNote(note) && inDocument(note);
   }
   async function paperNotes(id: string) { return store.annotations(id).filter(await paperNoteFilter(id)); }
   async function manuscript(id: string, rebuild = false) {
@@ -916,7 +921,8 @@ export async function buildApp(options: AppOptions) {
     const project = store.project(request.params.id), q = request.query;
     return placeSource(manuscripts, project.id, String(q.key || ''), q.file, q.start, q.end, q.near);
   });
-  // Notes are saved for reading; only explicitly attached IDs reach an agent task.
+  // Notes are not automatically included in prompts. Explicit annotation-management
+  // requests can also use the task-scoped paper tools to access manuscript notes.
   app.post<{ Params: { id: string } }>('/api/projects/:id/annotations', project(), async request => {
     const project = store.project(request.params.id), b = request.body as any;
     if (!isRect(b.rect)) throw new Error('Select text or mark a region on the page first.');
