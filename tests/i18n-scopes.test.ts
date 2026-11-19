@@ -41,7 +41,8 @@ test('README regeneration writes translations under docs and leaves the root ent
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-readme-'));
   try {
     fs.copyFileSync(path.join(root, 'README.md'), path.join(directory, 'README.md'));
-    fs.cpSync(path.join(root, 'docs/assets/readme-showcase'), path.join(directory, 'docs/assets/readme-showcase'), { recursive: true });
+    // Localized images also live in the download and community asset folders.
+    fs.cpSync(path.join(root, 'docs/assets'), path.join(directory, 'docs/assets'), { recursive: true });
     renderReadme(directory, JSON.parse(fs.readFileSync(path.join(root, 'i18n/readme/zh-CN.json'), 'utf8')), 'zh-CN');
     assert.deepEqual(fs.readdirSync(directory).sort(), ['README.md', 'docs']);
     assert.equal(fs.readFileSync(path.join(directory, 'docs/readme/README.zh-CN.md'), 'utf8'), fs.readFileSync(path.join(root, 'docs/readme/README.zh-CN.md'), 'utf8'));
