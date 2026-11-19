@@ -34,7 +34,7 @@ try {
       return { src, clean: src, width: 600, height: 36, page: 1, label: '1', text: [{ text, chars: Array.from(text, (text, index) => ({ text, rect: [12 + index * 9, 8, 21 + index * 9, 28] })) }], marks: [{ unit, kind: 'added', rect: [12, 8, 220, 28] }] };
     };
     let version = 1, failPreview = false, latePreview = null, saveFails = false, pendingBuild = null;
-    let releaseBaseline, releaseAlternative;
+    let releaseBaseline, releaseAlternative, releaseLate = () => {};
     const baselineGate = new Promise(resolve => { releaseBaseline = resolve; });
     const alternativeGate = new Promise(resolve => { releaseAlternative = resolve; });
     const changed = () => { task.updatedAt++; task.review.counts.pending = Object.values(decisions).filter(state => state === 'pending').length; };
@@ -114,7 +114,7 @@ try {
       await frame().getByRole('button', { name: 'Show note 1: Improve note 1.', exact: true }).click();
       await expect.poll(() => previews.some(request => request.unit === 'a' && request.option === 'alternative' && request.background)).toBe(true);
       assert.equal(await comparison('a-current-v1').count(), 0, 'Alternatives start before the baseline response is available');
-      assert.deepEqual(await page.evaluate(() => fetch('/preview-connection-probe', { method: 'POST' }).then(response => response.json())), { ok: true }, 'A write reaches the server while optional previews are pending');
+      assert.deepEqual(await page.evaluate(() => fetch('/preview-connection-probe', { method: 'POST', signal: AbortSignal.timeout(10000) }).then(response => response.json())), { ok: true }, 'A write reaches the server while optional previews are pending');
       assert.equal(previews.filter(request => request.background).length, 1, 'Only one of six alternatives occupies a connection');
       releaseBaseline();
       await expect(comparison('a-current-v1')).toBeVisible();
@@ -179,7 +179,7 @@ try {
       assert.equal(writes.length, 0, 'switching and retrying previews never saves a choice');
 
       failPreview = false; await tab('Original a').click();
-      let releaseLate; latePreview = new Promise(resolve => { releaseLate = resolve; });
+      latePreview = new Promise(resolve => { releaseLate = resolve; });
       version++; changed(); await sync();
       await expect(comparison('a-current-v3')).toBeVisible();
       await expect.poll(() => previews.some(request => request.unit === 'a' && request.option === 'alternative' && request.version === 3)).toBe(true);
@@ -237,6 +237,6 @@ try {
       releaseBaseline(); releaseAlternative();
       await page.screenshot({ path: `test-results/note-options-flow-error-${width}.png` });
       throw error;
-    } finally { await page.close(); }
+    } finally { releaseBaseline(); releaseAlternative(); releaseLate(); await page.close(); }
   }
 } finally { await browser.close(); await server.close(); }
