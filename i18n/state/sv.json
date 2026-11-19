@@ -2410,7 +2410,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Loading…": {
-    "revision": "89bde68a3b7eb489717d118fa0c84f896b0688b4f74fd50614f1d49f75556b73",
+    "revision": "63fb42c5ac4fb98c2ff9f131c51182ac6eb6a542f8e727d5b322c8c95807dddc",
     "textHash": "082106e13d30b1a0613eea9c1aaf0fc0455e7ab0ce5ff4b98be23804c14e3601",
     "model": "gemini-4-argon-medium"
   },
@@ -3655,7 +3655,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Refresh": {
-    "revision": "92f49ed5164c615a81f13597d01aa778960eaed694bd723b19517ff794539529",
+    "revision": "30234cb08edb457e744748f72e1c57be5ee4714b4ad8c98470c62c5b8b31f809",
     "textHash": "3d4f1d8f6788e993735438e97913c07d57d7f59905c58df66117d5aea910dfbf",
     "model": "gemini-4-argon-medium"
   },
@@ -6538,5 +6538,65 @@
     "revision": "b5ce3e3ae7ec3dfcec15b715e07840b65c5491c9c46451c26eb82694e2a5068f",
     "textHash": "b1a6d9347463d21e0e4bbe6e91c7131230a07179b38f1eb4db8221c4c53d5615",
     "model": "gemini-4-argon-medium"
+  },
+  "Allow Papilot in System Settings → Privacy & Security → Accessibility, then refresh.": {
+    "revision": "a694af656c9381a0946cea26dec1fa466d5954501fd9e0aa2150434deae0fac9",
+    "textHash": "7e2c2b7b2cadb011d8ea7982758e4ca8a62c49279677392bda4eb7c318c5e82f",
+    "model": "codex"
+  },
+  "Could not send the Typeless shortcut. Focus this note and try again.": {
+    "revision": "dfb92bb86ae0a5da60fee4cd01b4fe3981ed065d48d5a46ebe728ac0d431c4bf",
+    "textHash": "3f5c6337dfe3eab9284a8c2360121349213ad2b16020f4951d18517ae246b80b",
+    "model": "codex"
+  },
+  "Install Typeless on this Mac to use voice notes.": {
+    "revision": "b6fa41e39edaf84027d07e91b8f210b0db271315656658bcaacff2147f8bbdb9",
+    "textHash": "83442baaa0c2aee2b7ee42ac132845901463b2c8a5cace78cd87e933da94ca11",
+    "model": "codex"
+  },
+  "New PDF notes send your Typeless shortcut. Use the microphone button to send it again; wait for the transcript before leaving the note.": {
+    "revision": "9b1b8a8e8c5d0b30da4e320e917885e3f17d173d42dbac1b16b0dc1caf20fff1",
+    "textHash": "25a4bd1981d694a8411e7eb78e057aabb7d8edbe60876f359d1b64c6b5978d7a",
+    "model": "codex"
+  },
+  "Open Typeless, then try again.": {
+    "revision": "28624b063eb72dc5b67f928e727a53e819e2727e51404c1a02c6c269864a3772",
+    "textHash": "89383d24ea28d8431712892d59cc2b33b5c6dbc0973ff975f75e92b202a6edc9",
+    "model": "codex"
+  },
+  "Release the modifier keys, then try again.": {
+    "revision": "13c267d01c4f42ff28e78ba8e75e98ad78ee0ce7cdbea6c1e9450767ccd97564",
+    "textHash": "b9feee34faf971eac14cc8dd175a30f2bf6d644aac8e95c354b064fc5bc5f64e",
+    "model": "codex"
+  },
+  "Send Typeless shortcut": {
+    "revision": "9a56ff45dc6ed8ae6be2ec650f32a772e2268bdefce8665a844c381675159ff0",
+    "textHash": "576290bd1267421fff673df7ecfa7507aa11f155599cf08a9151a8dd1b7210c8",
+    "model": "codex"
+  },
+  "Sent {shortcut}. Check the Typeless voice bar.": {
+    "revision": "7b4e057db186d99278e2d42c4783d797343fec28102efcb0bd175fc75363e67e",
+    "textHash": "1da982f99ed757dade95aac2c7b6fa5b91d3931fafa2ebbff066b0a1930fb2a1",
+    "model": "codex"
+  },
+  "Set a supported keyboard shortcut in Typeless, then refresh.": {
+    "revision": "77fa4032b7697d5d6ca0fe1b54916cddd5884c3cd7f4c67fc34f74cce39e713c",
+    "textHash": "3e28f4e90214228a44a885ab7af0c879cfd3e04ff5c3beb1ecf7d592cb89166a",
+    "model": "codex"
+  },
+  "Typeless shortcut: {shortcut}": {
+    "revision": "1bb26f08c6ac22ab016edc88ead921f8a677f04fb1e9387d9ddc3c3887c3c334",
+    "textHash": "60143a8da6b8f444880684fa6e897b7f74164020b22c062c2f6a70568ff85eaf",
+    "model": "codex"
+  },
+  "Voice notes with Typeless": {
+    "revision": "133b2a5a8b13607bc270ad9806e8f3f2467ed19a295a6409fc1180245b94ef6d",
+    "textHash": "fb6da3e90f3f71cb2ea436ad842228bc4363fdc0e240cde68f31c7f8fb54bc29",
+    "model": "codex"
+  },
+  "Wait for Typeless to finish before leaving this note.": {
+    "revision": "e474ce09d523ad9381b9aff42bfb5ad446c2aa60a8c45bc9e6f4cad735282166",
+    "textHash": "20d42980ced5b7db60dbf9de4566fcb383948a2b16b6dd71d3af9f6339fa8036",
+    "model": "codex"
   }
 }

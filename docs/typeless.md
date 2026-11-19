@@ -1,97 +1,107 @@
-# Typeless integration investigation
+# Voice notes with Typeless (experimental)
 
-Status: installation and shortcut detection are implemented as a read-only probe.
-Automatic dictation is **not implemented**. This does not yet resolve [#231](https://github.com/PapilotAI/papilot/issues/231).
+The macOS desktop app can read and send the dictation shortcut configured in
+Typeless. Enable **Settings → Experiments → Voice notes with Typeless** on the
+Mac displaying Papilot. It starts off and is not available in browser clients,
+on Windows, or on Linux. A remote server never sends keys on the editor's behalf.
 
-## Reproduce detection
+1. Install and open Typeless. Set its dictation shortcut in Typeless Settings.
+2. Allow Papilot under **System Settings → Privacy & Security → Accessibility**,
+   then select **Refresh** in the experiment card. Development builds may appear
+   as Electron. Typeless needs its own microphone permissions and account setup.
+3. Enable the experiment, then create a PDF note. Papilot focuses the note and
+   sends the configured shortcut once.
+4. Use the note's microphone button to send the shortcut again. Keep the note
+   open and wait for Typeless to paste the transcript. Edit or submit it normally.
 
-Run on the Mac displaying the editor, rather than on a remote Papilot server:
+The microphone button sends a shortcut; it does not submit the note. Failures
+leave existing text intact. The settings card shows the detected shortcut and
+explains missing installation, configuration, permissions, or a stopped app.
+After changing settings in Typeless, select **Refresh** to update that card.
+Every actual send also rereads the configuration.
+
+## What the experiment can and cannot confirm
+
+**“Sent” means the native keyboard events were posted.** Check Typeless's own
+voice bar or sound to tell whether it started, stopped, or is still processing.
+Papilot does not read recordings, history, or an authoritative recording state.
+If Typeless is already recording when a note opens, the shortcut can stop it.
+Stop existing dictation before opening another note.
+
+Closing a note does not send another shortcut: without knowing Typeless's state,
+that could start a new recording. There is no automatic cancellation or protection
+against a late paste after leaving the note. Stop dictation and wait for insertion
+before switching notes, tasks, applications, or closing Papilot. Typeless's
+[Dictate guide](https://www.typeless.com/help/quickstart/dictate) explains its voice
+bar and shortcut behavior.
+
+This is the shortcut-only implementation of
+[#231](https://github.com/PapilotAI/papilot/issues/231). Session ownership, automatic
+cancellation, and acknowledged start/stop are not implemented. A local native
+test on 2026-11-19 with Typeless 2.11.0 read the configured Fn binding and sent it
+twice from a disposable Electron window. CoreAudio reported the Typeless helper's
+input stream changing from inactive to active and back to inactive. This verifies
+native shortcut start/stop on that Mac; it does not verify voice transcription
+inside a PDF note or an application-level recording API. Automated tests use a
+mocked bridge and do not record audio.
+
+## Detection and native delivery
+
+The desktop main process checks `Typeless.app` in `/Applications` and
+`~/Applications`, validates its bundle identifier, and reads only dictation
+bindings from `~/Library/Application Support/Typeless/app-settings.json`.
+`featureShortcutBindings.dictationMode` takes precedence over the older
+`keyboardShortcut.pushToTalk`. Empty or malformed modern bindings never silently
+reactivate an old shortcut, and no default such as Fn is assumed.
+
+The first supported configured binding is used. Fn, left/right modifiers,
+letters, digits, function keys, and the named navigation/punctuation keys in
+`desktop/typeless-control.ts` are supported; mouse bindings and unknown tokens
+are unavailable. Compatibility is experimental because Typeless's settings file
+is not a public integration API. Detection was checked with Typeless 2.11.0.
+
+A small CoreGraphics helper sends a complete press/release sequence, including
+modifier-only Fn. The main process accepts requests only from its own app page,
+serializes delivery without queuing extra toggles, and checks the original
+textarea again after the helper starts. The helper checks the foreground process
+and held modifiers before posting. During delivery, the note stays focused and
+Papilot suppresses keyboard/menu actions so an unconsumed shortcut cannot submit
+the draft. These checks reduce focus races; they are not an atomic lock across
+applications and do not confirm that Typeless accepted the events. Other apps
+or macOS features assigned the same global shortcut can also react; resolve
+conflicting shortcuts in their settings.
+
+macOS desktop compilation requires Apple's Command Line Tools (`xcode-select
+--install`). The helper targets macOS 13 or newer, like Electron, and is shipped
+outside the ASAR archive so it can execute. It never patches or injects code into
+Typeless.
 
 ```sh
-node --import tsx scripts/inspect-typeless.ts
+node --import tsx scripts/inspect-typeless.ts  # read-only installation/config probe
 node --import tsx --test tests/typeless.test.ts
+npm run desktop:compile
+npm run build
+node scripts/check-typeless.mjs              # mocked UI; no microphone use
 ```
 
-The probe checks `Typeless.app` in `/Applications` and `~/Applications`, validates
-the `now.typeless.desktop` bundle identifier, and reads the configured dictation
-bindings from Typeless's `app-settings.json`. It reports unknown or unreadable
-configuration explicitly. It does not assume that the shortcut is Fn, use a
-translation or Ask anything shortcut, launch Typeless, send keys, or start a
-microphone. It returns no other settings and does not read recordings or history.
-Other platforms are reported as unsupported by this probe, not as evidence that
-Typeless itself is unavailable there.
+The probe deliberately reports recording as unknown. Unit tests cover configuration
+precedence, unsupported bindings, focus loss, repeated requests and helper failures.
+The built-UI test covers opt-in, focus, retained drafts, repeated clicks, delayed
+insertion, failure/recovery and keyboard actions while delivery is pending.
 
-On macOS with Typeless 2.11.0, the probe detected the application and a configured
-`Fn` dictation binding in `featureShortcutBindings.dictationMode`. This matched
-the shortcut shown in Typeless's Settings. The older `keyboardShortcut` object
-also remained in the settings file, so modern bindings must take precedence.
-An empty modern list must stay empty; malformed modern settings must not silently
-reactivate an old shortcut.
+## Local verification
 
-## What remains unverified
+The 11 targeted unit tests, built-interface Typeless test, existing note-selection
+test, type checks, application and desktop compilation, locale checks, and macOS
+desktop smoke test passed. Light/dark and narrow-layout screenshots were inspected.
+The native Fn test is separate from these deterministic tests.
 
-| Capability | Result |
-| --- | --- |
-| Identify the installed Mac application | Verified locally |
-| Read the configured dictation shortcut | Verified locally against Settings |
-| Manual Fn dictation into a disposable TextEdit document | Final insertion observed locally |
-| Start/stop dictation from Papilot | Unverified |
-| Read an authoritative recording/processing state | No external interface established |
-| Cancel only a Papilot-owned session | No external interface established |
-| Acknowledge final insertion or cancellation | No external interface established |
-| Complete the PDF annotation workflow with voice | Not verified |
-| Windows or browser integration | Not implemented or verified |
+The full root suite reported 1,307 passes and three failures in CodeBuddy cleanup,
+update-server startup, and Writer model naming. All three failures were also
+reproduced on the unchanged base with the same built review assets. The full UI
+suite stopped at a manuscript-source check; it is not reported as passing.
 
-Typeless's [Dictate guide](https://www.typeless.com/help/quickstart/dictate)
-documents starting and stopping with its shortcut and checking the Voice bar or
-interaction sound. Its [Settings guide](https://www.typeless.com/help/quickstart/settings)
-documents changing and adding shortcuts. These are user controls, not a confirmed
-application control protocol. The available documentation does not establish a
-session identifier, recording-state subscription, cancellation acknowledgement,
-or final-transcription callback for Papilot. Absence from these guides does not
-prove that no integration API exists.
-
-The probe therefore always reports `control.status: "unverified"` and
-`control.recording: "unknown"`, even when installation and shortcuts are detected.
-No experiment switch or microphone button is exposed yet.
-
-A manual native smoke test on 2026-11-19 inserted the spoken test sentence into
-a disposable TextEdit document. This establishes ordinary dictation insertion,
-not Papilot-controlled start/stop, recording-state detection, cancellation, or
-the PDF annotation workflow. The recording and processing transitions were not
-captured in that test.
-
-A second test asked the user to start recording, then attempted Escape through
-the computer-control tool. The user confirmed that recording had **not** ended
-and stopped it manually with Fn. A historical "silent audio" entry was not an
-acknowledgement of the current session's state. This test did not establish a
-working cancellation path. The tool also rejected Fn key injection, so it did
-not test whether a native macOS helper could emit a shortcut Typeless accepts.
-These are limits of this experiment, not proof that native control is impossible.
-
-## Requirements before enabling the experiment
-
-The native desktop bridge must establish reliable start, stop, state and cancel
-semantics on the editor's computer. A successful key injection alone cannot
-confirm that recording started: Typeless might already be recording, its shortcut
-may have changed, permissions may be missing, or the event may not be accepted.
-
-The annotation must retain focus through final insertion. Switching or dismissing
-it must cancel its own session and establish that no late text can reach another
-field. Stopping must never save or send the annotation. Browser clients must not
-control Typeless on the server's computer.
-
-Verify those capabilities with the real application before implementing the UI,
-then test repeated clicks, already-active dictation, final insertion, cancellation,
-focus changes, permission failures and shutdown through a mocked native bridge.
-Keep native voice results separate from deterministic tests.
-
-## Validation of the probe
-
-- Five deterministic tests pass, including malformed and empty modern settings,
-  legacy settings, bundle identity, unreadable files and unsupported platforms.
-- `npm run typecheck` and `npm run build` pass.
-- An independent review found no blocking issue in the read-only probe.
-- `npm test` was started but stopped after failures in ACP process shutdown and
-  TeX compilation/comparison tests. This is not a passing full-suite result;
-  those failures have not been reproduced on an untouched baseline.
+The `switch` and `accessibility` Modern Web Guidance guides informed the labeled
+native checkbox, keyboard-operable button, focus handling and status announcements.
+The existing checkbox/ARIA styling supports browsers without a native switch
+attribute, and the microphone button does not announce an invented recording state.

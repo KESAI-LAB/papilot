@@ -1592,5 +1592,17 @@
   "Could not read the compiler. Try again.": "컴파일러를 읽을 수 없습니다. 다시 시도해 주세요.",
   "Could not save the compiler. Try again.": "컴파일러를 저장할 수 없습니다. 다시 시도해 주세요.",
   "PhiTeX is not installed on this computer.": "이 컴퓨터에 PhiTeX가 설치되어 있지 않습니다.",
-  "PhiTeX {version} rebuilds only what each edit changes. LuaLaTeX papers keep using latexmk.": "PhiTeX {version} 버전은 편집 시 변경된 부분만 다시 빌드합니다. LuaLaTeX 논문은 계속 latexmk를 사용합니다."
+  "PhiTeX {version} rebuilds only what each edit changes. LuaLaTeX papers keep using latexmk.": "PhiTeX {version} 버전은 편집 시 변경된 부분만 다시 빌드합니다. LuaLaTeX 논문은 계속 latexmk를 사용합니다.",
+  "Allow Papilot in System Settings → Privacy & Security → Accessibility, then refresh.": "시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용에서 Papilot을 허용한 후 새로고침하세요.",
+  "Could not send the Typeless shortcut. Focus this note and try again.": "Typeless 단축키를 전송하지 못했습니다. 이 메모에 포커스를 두고 다시 시도하세요.",
+  "Install Typeless on this Mac to use voice notes.": "음성 메모를 사용하려면 이 Mac에 Typeless를 설치하세요.",
+  "New PDF notes send your Typeless shortcut. Use the microphone button to send it again; wait for the transcript before leaving the note.": "새 PDF 메모를 만들면 Typeless 단축키가 전송됩니다. 마이크 버튼을 누르면 다시 전송됩니다. 메모를 나가기 전에 받아쓰기가 끝날 때까지 기다리세요.",
+  "Open Typeless, then try again.": "Typeless를 열고 다시 시도하세요.",
+  "Release the modifier keys, then try again.": "보조 키를 놓고 다시 시도하세요.",
+  "Send Typeless shortcut": "Typeless 단축키 전송",
+  "Sent {shortcut}. Check the Typeless voice bar.": "{shortcut} 전송됨. Typeless 음성 바를 확인하세요.",
+  "Set a supported keyboard shortcut in Typeless, then refresh.": "Typeless에서 지원되는 키보드 단축키를 설정한 후 새로고침하세요.",
+  "Typeless shortcut: {shortcut}": "Typeless 단축키: {shortcut}",
+  "Voice notes with Typeless": "Typeless로 음성 메모",
+  "Wait for Typeless to finish before leaving this note.": "이 메모를 나가기 전에 Typeless가 끝날 때까지 기다리세요."
 }

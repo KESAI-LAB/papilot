@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- Add the opt-in **Voice notes with Typeless** experiment in the macOS desktop app. New PDF notes send the configured Typeless dictation shortcut; a microphone button sends it again while keeping the draft focused. The experiment reports shortcut delivery, not recording state, and requires waiting for transcription before leaving a note. See [setup and limitations](docs/typeless.md). ([#231](https://github.com/PapilotAI/papilot/issues/231))
+
 ### Changed
 
 - **Star Papilot on GitHub from the website.** The homepage header's GitHub button shows the repository's star count beside the GitHub mark, a **Star on GitHub** link sits below the download button and beside the download section's links, and the online demo's notice and download dialog offer it next to **Download Papilot**. Website links now point to the PapilotAI/papilot repository instead of its former address.

@@ -1592,5 +1592,17 @@
   "Could not read the compiler. Try again.": "コンパイラの設定を読み込めませんでした。もう一度お試しください。",
   "Could not save the compiler. Try again.": "コンパイラの設定を保存できませんでした。もう一度お試しください。",
   "PhiTeX is not installed on this computer.": "このコンピュータには PhiTeX がインストールされていません。",
-  "PhiTeX {version} rebuilds only what each edit changes. LuaLaTeX papers keep using latexmk.": "PhiTeX {version} は、各編集で変更された部分のみを再ビルドします。LuaLaTeX の論文では引き続き latexmk が使用されます。"
+  "PhiTeX {version} rebuilds only what each edit changes. LuaLaTeX papers keep using latexmk.": "PhiTeX {version} は、各編集で変更された部分のみを再ビルドします。LuaLaTeX の論文では引き続き latexmk が使用されます。",
+  "Allow Papilot in System Settings → Privacy & Security → Accessibility, then refresh.": "システム設定 → プライバシーとセキュリティ → アクセシビリティで Papilot を許可してから、更新してください。",
+  "Could not send the Typeless shortcut. Focus this note and try again.": "Typeless のショートカットを送信できませんでした。この注釈にフォーカスして、もう一度お試しください。",
+  "Install Typeless on this Mac to use voice notes.": "この Mac に Typeless をインストールすると、音声で注釈を入力できます。",
+  "New PDF notes send your Typeless shortcut. Use the microphone button to send it again; wait for the transcript before leaving the note.": "PDF に新しい注釈を作成すると Typeless のショートカットを送信します。マイクボタンで再送信できます。文字起こしが完了するまで注釈を閉じないでください。",
+  "Open Typeless, then try again.": "Typeless を開いてから、もう一度お試しください。",
+  "Release the modifier keys, then try again.": "修飾キーを離してから、もう一度お試しください。",
+  "Send Typeless shortcut": "Typeless のショートカットを送信",
+  "Sent {shortcut}. Check the Typeless voice bar.": "{shortcut} を送信しました。Typeless の音声バーを確認してください。",
+  "Set a supported keyboard shortcut in Typeless, then refresh.": "Typeless で対応するキーボードショートカットを設定してから、更新してください。",
+  "Typeless shortcut: {shortcut}": "Typeless のショートカット：{shortcut}",
+  "Voice notes with Typeless": "Typeless で音声注釈",
+  "Wait for Typeless to finish before leaving this note.": "Typeless の処理が完了するまで、この注釈を閉じないでください。"
 }

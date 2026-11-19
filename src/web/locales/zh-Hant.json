@@ -1592,5 +1592,17 @@
   "Could not read the compiler. Try again.": "無法讀取編譯器，請再試一次。",
   "Could not save the compiler. Try again.": "無法儲存編譯器，請再試一次。",
   "PhiTeX is not installed on this computer.": "此電腦未安裝 PhiTeX。",
-  "PhiTeX {version} rebuilds only what each edit changes. LuaLaTeX papers keep using latexmk.": "PhiTeX {version} 僅會重新編譯每次編輯變更的部分。LuaLaTeX 論文仍會繼續使用 latexmk。"
+  "PhiTeX {version} rebuilds only what each edit changes. LuaLaTeX papers keep using latexmk.": "PhiTeX {version} 僅會重新編譯每次編輯變更的部分。LuaLaTeX 論文仍會繼續使用 latexmk。",
+  "Allow Papilot in System Settings → Privacy & Security → Accessibility, then refresh.": "請在系統設定 → 隱私權與安全性 → 輔助使用中允許 Papilot，然後重新整理。",
+  "Could not send the Typeless shortcut. Focus this note and try again.": "無法傳送 Typeless 快速鍵。請將焦點移到此註解後重試。",
+  "Install Typeless on this Mac to use voice notes.": "在這台 Mac 上安裝 Typeless，即可使用語音註解。",
+  "New PDF notes send your Typeless shortcut. Use the microphone button to send it again; wait for the transcript before leaving the note.": "新增 PDF 註解時會傳送 Typeless 快速鍵。按下麥克風按鈕可再次傳送；請等待轉寫完成後再離開註解。",
+  "Open Typeless, then try again.": "請開啟 Typeless 後重試。",
+  "Release the modifier keys, then try again.": "請放開修飾鍵後重試。",
+  "Send Typeless shortcut": "傳送 Typeless 快速鍵",
+  "Sent {shortcut}. Check the Typeless voice bar.": "已傳送 {shortcut}。請查看 Typeless 語音列。",
+  "Set a supported keyboard shortcut in Typeless, then refresh.": "請在 Typeless 中設定支援的鍵盤快速鍵，然後重新整理。",
+  "Typeless shortcut: {shortcut}": "Typeless 快速鍵：{shortcut}",
+  "Voice notes with Typeless": "使用 Typeless 語音註解",
+  "Wait for Typeless to finish before leaving this note.": "請等待 Typeless 完成後再離開此註解。"
 }
