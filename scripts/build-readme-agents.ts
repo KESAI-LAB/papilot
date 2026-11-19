@@ -1,9 +1,10 @@
 // Regenerate with: node --import tsx scripts/build-readme-agents.ts
-// Use the Settings catalog and original brand artwork for a quiet README logo panel.
+// A quiet logo panel from the Settings catalog and original brand artwork,
+// drawn into the playground's example paper (scripts/build-playground-example.ts).
+// The README shows the homepage's agent pills instead (scripts/capture-readme-tiles.mjs).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readmeLinks } from './i18n/scopes.ts';
 import { AGENT_IDS, AGENT_NAMES } from '../src/shared.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -44,24 +45,4 @@ ${marks}
 `;
     fs.writeFileSync(path.join(output, `${compact ? 'compact' : 'desktop'}${dark ? '-dark' : ''}.svg`), svg);
   }
-}
-
-// A single panel has regular spacing. The compact version keeps names legible on phones.
-const panel = `<!-- BEGIN AGENT ICONS -->
-<p align="center">
-  <a href="docs/guide.md#agents">
-    <picture>
-      <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="docs/assets/readme-agents/compact-dark.svg">
-      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme-agents/desktop-dark.svg">
-      <source media="(max-width: 600px)" srcset="docs/assets/readme-agents/compact.svg">
-      <img src="docs/assets/readme-agents/desktop.svg" alt="${names}" width="816">
-    </picture>
-  </a>
-</p>
-<!-- END AGENT ICONS -->`;
-for (const file of ['README.md', ...fs.readdirSync(path.join(root, 'docs/readme')).map(name => `docs/readme/${name}`)]) {
-  const target = path.join(root, file);
-  const markdown = fs.readFileSync(target, 'utf8');
-  const updated = markdown.replace(/<!-- BEGIN AGENT ICONS -->[\s\S]*?<!-- END AGENT ICONS -->/, readmeLinks(panel, path.posix.dirname(file)));
-  if (updated !== markdown) fs.writeFileSync(target, updated);
 }
