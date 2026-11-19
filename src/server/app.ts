@@ -39,8 +39,8 @@ import type { Updates } from './updates.ts';
 import { Diagnostics } from './diagnostics.ts';
 import { attachmentIds } from './attachments.ts';
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from '../shared.ts';
-import { PaperImports, existingTex, openFolder } from './imports.ts';
-import { checkDocument, chooseDocument, compiledBefore, repositoryFiles, rootDocument } from './repository-files.ts';
+import { PaperImports, openFolder } from './imports.ts';
+import { checkDocument, chooseDocument, noteDocumentFilter, repositoryFiles } from './repository-files.ts';
 import { PaperCreations } from './create-paper.ts';
 import { Universe } from './universe.ts';
 import { DATA, pageViewDir } from './paths.ts';
@@ -261,10 +261,8 @@ export async function buildApp(options: AppOptions) {
   // before, even while it lacks \documentclass of its own. One on a main file
   // since renamed or removed moves to the current document.
   async function paperNoteFilter(id: string) {
-    const root = store.project(id).path, document = await manuscripts.document(id, root), elsewhere = new Map<string, boolean>();
-    const before = await compiledBefore(root);
-    const away = (file: string) => elsewhere.get(file) ?? elsewhere.set(file, before.has(file) ? existingTex(root, file) : rootDocument(root, file)).get(file)!;
-    return (note: Annotation) => !note.taskId && !isTaskReviewNote(note) && (!note.document || note.document === document || !away(note.document));
+    const root = store.project(id).path, inDocument = await noteDocumentFilter(root, await manuscripts.document(id, root));
+    return (note: Annotation) => !note.taskId && !isTaskReviewNote(note) && inDocument(note);
   }
   async function paperNotes(id: string) { return store.annotations(id).filter(await paperNoteFilter(id)); }
   async function manuscript(id: string, rebuild = false) {

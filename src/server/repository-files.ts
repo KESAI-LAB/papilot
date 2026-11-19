@@ -31,6 +31,14 @@ export async function compiledBefore(root: string) {
   try { return new Set(Object.keys(JSON.parse(fs.readFileSync(documentsFile(root), 'utf8')))); } catch { return new Set<string>(); }
 }
 
+/** Notes on a removed/renamed root follow the current document. A different
+ *  root that still exists keeps its own notes, including deleted notes. */
+export async function noteDocumentFilter(root: string, document: string | null | undefined) {
+  const before = await compiledBefore(root), elsewhere = new Map<string, boolean>();
+  const away = (file: string) => elsewhere.get(file) ?? elsewhere.set(file, before.has(file) ? existingTex(root, file) : rootDocument(root, file)).get(file)!;
+  return (note: { document?: string }) => !note.document || note.document === document || !away(note.document);
+}
+
 /** The files Git sees in the repository: tracked ones still on disk and
  *  untracked ones it does not ignore. The root documents are those that
  *  begin a document, the current one and those the paper compiled before. */

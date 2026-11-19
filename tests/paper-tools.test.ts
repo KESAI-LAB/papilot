@@ -17,10 +17,10 @@ const snapshot: ReviewSnapshot = { key: 'pdf-1', lines: [
   { id: 'p1-l2', page: 0, text: 'strong guarantee.', rect: [0.1, 0.2, 0.8, 0.3] },
   { id: 'p2-l1', page: 1, text: 'Experiments', rect: [0.1, 0.1, 0.8, 0.2] },
 ] };
-function fixture() {
+function fixture(root = '/unused') {
   const store = new Store(':memory:');
   const task: Task = { id: 'task', projectId: 'paper', name: 'p-task', title: 'Annotate', instructions: 'Add comments.', document: 'main.tex', worktree: '/unused', threadId: null, turnId: null, model: null, status: 'running', createdAt: 1, updatedAt: 1, feedbackCursor: 0, error: null, review: null };
-  store.saveProject({ id: task.projectId, name: 'Paper', path: '/unused', createdAt: 1 }); store.saveTask(task);
+  store.saveProject({ id: task.projectId, name: 'Paper', path: root, createdAt: 1 }); store.saveTask(task);
   let key = snapshot.key, document = 'main.tex', live = true, sending = false;
   const manuscripts = {
     state: async () => ({ build: { current: true, key } }), documentOf: () => document,
@@ -187,5 +187,84 @@ test('long comments cannot be read across concurrent revisions', async () => {
     assert.ok(first.next);
     await f.call('annotation_update', { id: note.id, revision: note.revision, comment: 'second '.repeat(5000) });
     await assert.rejects(f.call('annotation_read', first.next), /changed/);
+  } finally { f.store.close(); }
+});
+
+
+test('deleted notes follow renamed roots while existing other roots stay isolated', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'paper-notes-rename-'));
+  const f = fixture(root);
+  try {
+    const source = String.raw`\documentclass{article}
+\begin{document}Paper.\end{document}`;
+    fs.writeFileSync(path.join(root, 'main.tex'), source);
+    fs.writeFileSync(path.join(root, 'supplement.tex'), source);
+    const created = await f.call('annotation_create', create);
+    await f.call('annotation_delete', { id: created.id, revision: created.revision });
+    const original = f.store.annotation('paper', created.id);
+    f.store.saveAnnotation({ ...original, id: 'supplement-note', document: 'supplement.tex' });
+    fs.renameSync(path.join(root, 'main.tex'), path.join(root, 'thesis.tex'));
+    f.task.document = 'thesis.tex'; f.store.saveTask(f.task); f.document('thesis.tex');
+    const listed = await f.call('annotations_list', { includeDeleted: true });
+    assert.deepEqual(listed.annotations.map((note: any) => note.id), [created.id]);
+    const deleted = listed.annotations[0];
+    assert.equal((await f.call('annotation_read', { id: deleted.id })).comment, create.comment);
+    const restored = await f.call('annotation_restore', { id: deleted.id, revision: deleted.revision });
+    assert.equal(restored.deleted, false);
+    const updated = await f.call('annotation_update', { id: restored.id, revision: restored.revision, comment: 'Restored feedback.' });
+    await f.call('annotation_delete', { id: updated.id, revision: updated.revision });
+    const elsewhere = f.store.annotation('paper', 'supplement-note');
+    await assert.rejects(f.call('annotation_read', { id: elsewhere.id }), /another document/);
+    await assert.rejects(f.call('annotation_restore', { id: elsewhere.id, revision: annotationRevision(elsewhere) }), /not an editable/);
+    assert.ok(f.store.annotation('paper', elsewhere.id).deletedAt);
+  } finally { f.store.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('persisted sent-note ownership blocks update, delete and restore', async () => {
+  const f = fixture();
+  try {
+    const saved = await f.call('annotation_create', create);
+    const note = f.store.saveAnnotation({ ...f.store.annotation('paper', saved.id), taskId: 'editing-task' });
+    for (const tool of ['annotation_update', 'annotation_delete', 'annotation_restore']) {
+      await assert.rejects(f.call(tool, { id: note.id, revision: annotationRevision(note), ...(tool === 'annotation_update' ? { comment: 'Replacement' } : {}) }), /not an editable/);
+    }
+    assert.equal(f.store.annotation('paper', note.id).comment, create.comment);
+  } finally { f.store.close(); }
+});
+
+
+test('page-scoped continuations keep both character and line-count reads on that page', () => {
+  for (const lines of [
+    [{ ...snapshot.lines[0], text: 'x'.repeat(15000) }],
+    Array.from({ length: 90 }, (_, i) => ({ ...snapshot.lines[0], id: `p1-l${i + 1}`, text: `Line ${i}` })),
+  ]) {
+    const paper = { ...snapshot, lines: [...lines, snapshot.lines[2]] };
+    let next: { start?: string; offset?: number; page?: number } | null = { page: 1 }, text = '';
+    do {
+      const part = readPaper(paper, next.start, next.offset, next.page);
+      assert.ok(part.lines.every(line => line.page === 1));
+      text += part.lines.map(line => line.text).join(''); next = part.next;
+      if (next) assert.equal(next.page, 1);
+    } while (next);
+    assert.equal(text, lines.map(line => line.text).join(''));
+  }
+});
+
+test('annotation reads retain deletion/replacement semantics and protect changes to mark kind', async () => {
+  const f = fixture();
+  try {
+    const created = await f.call('annotation_create', create);
+    const note = f.store.saveAnnotation({ ...f.store.annotation('paper', created.id), kind: 'delete', comment: '' });
+    const list = await f.call('annotations_list', {});
+    assert.equal(list.annotations[0].kind, 'delete'); assert.equal(list.annotations[0].comment, '');
+    const replacement = await f.call('annotation_update', { id: note.id, revision: annotationRevision(note), comment: 'Replacement text.' });
+    const read = await f.call('annotation_read', { id: note.id });
+    assert.equal(read.kind, 'delete'); assert.equal(read.comment, 'Replacement text.');
+    const deletion = await f.call('annotation_update', { id: note.id, revision: replacement.revision, comment: '' });
+    assert.equal(deletion.kind, 'delete'); assert.equal(deletion.comment, '');
+    f.store.saveAnnotation({ ...f.store.annotation('paper', note.id), kind: 'point', stamp: 'Check' });
+    await assert.rejects(f.call('annotation_update', { id: note.id, revision: deletion.revision, comment: 'Different meaning.' }), /changed/);
+    const current = await f.call('annotation_read', { id: note.id });
+    assert.equal(current.kind, 'point'); assert.equal(current.stamp, 'Check');
   } finally { f.store.close(); }
 });
