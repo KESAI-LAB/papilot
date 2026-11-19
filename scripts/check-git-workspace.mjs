@@ -278,7 +278,12 @@ try {
     const menu = page.getByRole('dialog', { name: 'Agent settings', exact: true });
     await menu.getByRole('option', { name: `${model} · ${agent === 'codex' ? 'Codex' : 'Claude'}`, exact: true }).first().click();
     await menu.getByRole('slider', { name: 'Reasoning effort' }).fill(effort === 'high' ? '1' : '0');
-    if (agent === 'codex' && model === 'Model') await menu.getByRole('switch', { name: 'Fast mode' }).setChecked(fast);
+    if (agent === 'codex' && model === 'Model') {
+      const toggle = menu.getByRole('switch', { name: 'Fast mode' });
+      const box = await toggle.boundingBox();
+      assert.deepEqual([box.width, box.height], [28, 16], 'Settings must not stretch the Fast mode switch');
+      await toggle.setChecked(fast);
+    }
     await page.keyboard.press('Escape');
   };
   const closeSettings = () => page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
@@ -304,6 +309,14 @@ try {
   await expect(page.getByRole('switch', { name: 'Follow current conversation' })).toBeChecked();
   await expect(picker).toContainText('Model');
   await expect(picker).toContainText('High');
+  const field = await picker.boundingBox(), advancedSwitch = await page.getByRole('switch', { name: 'Show advanced Git features', exact: true }).boundingBox();
+  assert.ok(Math.abs(field.x + field.width - advancedSwitch.x - advancedSwitch.width) <= 1, 'The model field aligns with the other settings controls');
+  assert.equal(field.height, 28);
+  await picker.click();
+  const modelSearch = page.getByRole('dialog', { name: 'Agent settings', exact: true }).getByRole('combobox', { name: 'Search models' });
+  assert.deepEqual(await modelSearch.evaluate(element => { const style = getComputedStyle(element); return [style.marginTop, style.borderTopWidth]; }), ['0px', '0px'], 'The model search keeps its own layout inside Settings');
+  await page.screenshot({ path: 'test-results/commit-agent-menu-desktop.png', animations: 'disabled' });
+  await page.keyboard.press('Escape');
   await selectCommit(picker, 'codex', 'Other model', 'low');
   await expect(page.getByRole('switch', { name: 'Follow current conversation' })).not.toBeChecked();
   await page.screenshot({ path: 'test-results/commit-agent-settings-light.png' });
@@ -389,6 +402,9 @@ try {
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.screenshot({ path: 'test-results/commit-agent-settings-dark.png' });
   await page.setViewportSize({ width: 390, height: 844 });
+  const mobileField = await picker.boundingBox(), mobileRow = await picker.locator('xpath=ancestor::*[contains(@class,"settings-row")]').boundingBox();
+  assert.ok(Math.abs(mobileField.width - mobileRow.width) <= 1, 'The mobile model field fills its row');
+  assert.equal(mobileField.height, 36);
   await page.screenshot({ path: 'test-results/commit-agent-settings-mobile.png' });
   await selectCommit(picker, 'conversation'); await closeSettings();
   snapshot.runtimes.claude = { ...runtime }; messageError = null;
