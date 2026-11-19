@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- Choose the language of generated commit messages in **Settings → Git**, independently of the interface language. **Auto** keeps following recent commits; an explicit language applies to Git, staged commits and task commits.
+
 ### Changed
 
 - **Check Antigravity quotas from either task composer.** The agent/model menu shows the account's reported five-hour and weekly usage, reset times and model groups, with automatic and manual refresh. Missing quota data stays unavailable and quota queries do not delay conversations. ([#229](https://github.com/PapilotAI/papilot/issues/229))
