@@ -30,6 +30,11 @@ const version = name => crypto.createHash('sha256').update(fs.readFileSync(path.
 // rollback or while the next release is still being prepared.
 const release = process.env.PAPILOT_SITE_RELEASE ?? JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 if (!/^\d+\.\d+\.\d+$/.test(release)) throw new Error('PAPILOT_SITE_RELEASE must be a stable version.');
+// The deploy passes the repository's star count, as GitHub abbreviates it
+// (364, 1.2k); local builds stay offline and leave the header button without it.
+const stars = process.env.PAPILOT_SITE_STARS;
+if (stars !== undefined && !/^\d+$/.test(stars)) throw new Error('PAPILOT_SITE_STARS must be a whole number.');
+const starCount = stars === undefined ? '' : `<span class="github-count">${new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(stars)).toLowerCase()}</span>`;
 const names = JSON.parse(fs.readFileSync(path.join(root, 'i18n/languages.json'), 'utf8'));
 const locales = ['en', ...Object.keys(JSON.parse(fs.readFileSync(path.join(root, 'i18n/config.json'), 'utf8')).locales)];
 if (JSON.stringify(Object.keys(names)) !== JSON.stringify(locales)) throw new Error('Website languages must match the App configuration.');
@@ -46,6 +51,7 @@ for (const locale of locales) {
     .replaceAll('<!-- blog-navigation -->', `<a href="${blogRoute(locale)}">${blogLabels[locale]}</a>`)
     .replace('<!-- analytics -->', analytics)
     .replaceAll('{{version}}', release)
+    .replace('<!-- github-stars -->', starCount)
     .replace(/<link rel="alternate"[^>]*>/g, '')
     .replace(/<link rel="canonical"[^>]*>/, `<link rel="canonical" href="${urlFor(locale)}">\n${alternates}`)
     .replace(/<meta property="og:url"[^>]*>/, `<meta property="og:url" content="${urlFor(locale)}">\n<meta property="og:locale" content="${ogLocales[locale]}">`)

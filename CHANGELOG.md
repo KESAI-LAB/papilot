@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Changed
+
+- **Star Papilot on GitHub from the website.** The homepage header's GitHub button reads **Star on GitHub** with the repository's star count (the GitHub mark and count on phones), a **Star on GitHub** link sits below the download button and beside the download section's links, and the online demo's notice and download dialog offer it next to **Download Papilot**. Website links now point to the PapilotAI/papilot repository instead of its former address.
+
 ### Fixed
 
 - Show “Creating your paper…” in **New paper** only after **Create paper**, not while choosing a save folder. ([#224](https://github.com/PapilotAI/papilot/issues/224))

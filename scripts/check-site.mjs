@@ -216,6 +216,10 @@ try {
     assert.equal(await staticVisitor.locator('.hero-universe').isVisible(), true, `${locale}: templates remain discoverable on phones`);
     assert.equal(await staticVisitor.locator('.hero-star').isVisible(), true, `${locale}: GitHub star CTA remains discoverable on phones`);
     assert.equal(await staticVisitor.locator('.hero-star').getAttribute('href'), 'https://github.com/PapilotAI/papilot');
+    // CI builds with PAPILOT_SITE_STARS=12345; local builds have no count.
+    const stars = staticVisitor.locator('.topbar .github-link .github-count');
+    assert.equal(await stars.count(), process.env.PAPILOT_SITE_STARS ? 1 : 0, `${locale}: the header shows the star count only when the build has one`);
+    if (process.env.PAPILOT_SITE_STARS === '12345') assert.equal(await stars.innerText(), '12.3k', `${locale}: phones see the abbreviated star count`);
     assert.equal(await staticVisitor.locator('.topbar-universe').isVisible(), true, `${locale}: Universe stays in the phone header without JavaScript`);
   }
   // Exercise native keyboard navigation without depending on the live service.
