@@ -367,5 +367,8 @@
   "§{number} {title}": "§{number} {title}",
   "Experiments": "实验功能",
   "Collaboration mode": "协作模式",
-  "Enable collaboration mode": "启用协作模式"
+  "Enable collaboration mode": "启用协作模式",
+  "Commit-message agent": "提交信息智能体",
+  "Follow current conversation": "跟随当前会话",
+  "Use the last conversation in this paper, or the new-task agent if none. An explicit choice applies only to commit messages and is saved in this browser.": "使用当前论文中最近会话的智能体；没有会话时使用新任务智能体。显式选择仅用于提交信息，并保存在此浏览器中。"
 }

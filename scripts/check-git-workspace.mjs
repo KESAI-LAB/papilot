@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
-import { chromium, expect } from './playwright.mjs';
+import { selectOption } from './select.mjs';
+import { afterRender, chromium, expect } from './playwright.mjs';
 
 fs.mkdirSync('test-results', { recursive: true });
 const server = Fastify();
@@ -12,7 +13,8 @@ await server.register(staticFiles, { root: path.resolve('dist') });
 await server.listen({ host: '127.0.0.1', port: 0 });
 const origin = `http://127.0.0.1:${server.server.address().port}`;
 const browser = await chromium.launch({ channel: process.env.PAPILOT_BROWSER_CHANNEL || 'chrome', headless: true });
-const page = await browser.newPage({ locale: 'en-US', colorScheme: 'light', viewport: { width: 1440, height: 900 } });
+const context = await browser.newContext({ locale: 'en-US', colorScheme: 'light', viewport: { width: 1440, height: 900 } });
+const page = await context.newPage();
 await page.clock.install();
 await page.addInitScript(() => localStorage.setItem('papilot:advanced-git', 'on'));
 const errors = []; page.on('pageerror', error => errors.push(error.message));
@@ -21,19 +23,25 @@ page.on('requestfailed', request => {
   if (new URL(request.url()).pathname.endsWith('/git/diff')) diffFailures.push(request.failure()?.errorText);
 });
 const project = { id: 'git-paper', name: 'Example paper', path: '/tmp/git-paper', createdAt: 1 };
-const task = { id: 'git-task', projectId: project.id, title: 'Clarify the introduction', name: 'git-task', instructions: '', status: 'idle', createdAt: 1, updatedAt: 1, review: null };
+const task = { id: 'git-task', projectId: project.id, title: 'Clarify the introduction', name: 'git-task', instructions: '', agent: 'claude', status: 'idle', createdAt: 1, updatedAt: 1, review: null };
 const runtime = { connected: true, authenticated: true, models: [{ id: 'model', name: 'Model', isDefault: true, efforts: [] }] };
-const snapshot = { version: 'test', csrf: 'fixture', projects: [project], tasks: [task], requests: [], runtime, runtimes: { codex: runtime }, gitAvailable: true };
+const snapshot = { version: 'test', csrf: 'fixture', projects: [project], tasks: [task], requests: [], runtime, runtimes: { codex: runtime, claude: { ...runtime } }, gitAvailable: true };
 const initialFiles = [{ path: 'main.tex', status: 'M', staged: false, unstaged: true, lines: [2, 4] }, { path: 'references.bib', status: '?', staged: false, unstaged: true }];
 const git = { branch: 'main', remote: true, upstream: 'origin/main', ahead: 1, behind: 0, head: { hash: 'abc1234', subject: 'Clarify the introduction', date: 1 }, files: structuredClone(initialFiles) };
-const actions = [];
+const actions = [], messageRequests = [];
+let messageError = null, messageGate = null;
 const note = { id: 'note-1', projectId: project.id, key: 'fixture', page: 0, rect: [72, 72, 200, 90], rects: [[72, 72, 200, 90]], source: null, quote: 'Fixture', comment: 'Original note', createdAt: 1 };
 let failNoteSave = false, gitRequests = 0;
 let diffText = 'New', diffRequests = 0, diffGate = null, diffError = null;
 const words = JSON.parse(fs.readFileSync('tests/fixtures/outline-words.json', 'utf8'));
-await page.route('**/api/**', async route => {
+const handleApi = async route => {
   const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
   if (/\/git(?:\/|$)/.test(url.pathname)) gitRequests++;
+  if (url.pathname.endsWith('/git/message') || url.pathname.endsWith('/commit-message')) {
+    const body = route.request().postDataJSON(); messageRequests.push(body);
+    if (messageGate) await messageGate;
+    return messageError ? route.fulfill({ status: 400, json: { error: messageError } }) : json({ message: `Written by ${body.agent}`, agent: body.agent });
+  }
   if (url.pathname === '/api/indirect-changes') return json({ indirectChanges: false });
   if (url.pathname === '/api/note-alternatives') return route.fulfill({ json: { noteAlternatives: true, noteAlternativeRange: 'few' } });
   if (url.pathname === '/api/runtime/requirements') return route.fulfill({ json: readyRequirements });
@@ -43,6 +51,7 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/files')) return json({ document: null, files: [] });
   if (url.pathname.endsWith('/skills')) return json({ skills: [] });
   if (url.pathname.endsWith('/note-results')) return json({ notes: [] });
+  if (url.pathname.endsWith('/predict')) return json({});
   if (url.pathname.endsWith('/items')) return json({ items: [] });
   if (url.pathname.endsWith('/annotations/note-1')) {
     if (failNoteSave) return route.fulfill({ status: 503, json: { error: 'Could not save note.' } });
@@ -75,7 +84,8 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/manuscript.pdf')) return route.fulfill({ contentType: 'application/pdf', body: fs.readFileSync('tests/fixtures/outline.pdf') });
   if (url.pathname.endsWith('/manuscript/words')) return json(words[Number(url.searchParams.get('page'))]);
   throw new Error(`Unexpected request: ${route.request().method()} ${url.pathname}`);
-});
+};
+await page.route('**/api/**', handleApi);
 const workspace = page.getByRole('region', { name: 'Version Management', exact: true });
 const panel = workspace.locator('.git-panel');
 const details = workspace.locator('.git-details');
@@ -244,6 +254,126 @@ try {
   await page.locator('.manuscript-link').click();
   await expect(page.locator('.manuscript-side')).toBeHidden();
   await expect(page.locator('.git-workspace')).toHaveCount(0);
+  // The new-task default and current conversation deliberately disagree.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  git.files = structuredClone(initialFiles);
+  await page.evaluate(() => localStorage.setItem('papilot:agent', 'codex'));
+  await page.reload();
+  const openTask = async () => { await page.locator(`[data-task="${task.id}"] .task-link`).click(); };
+  const generate = panel.getByRole('button', { name: 'Generate commit message', exact: true });
+  const expectAgent = async agent => {
+    const before = messageRequests.length;
+    await generate.click();
+    await expect(message).toHaveValue(`Written by ${agent}`);
+    assert.equal(messageRequests.length, before + 1);
+    assert.equal(messageRequests.at(-1).agent, agent);
+  };
+  const settings = async () => {
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.locator('[data-settings-page="git"]').click();
+    return page.getByRole('combobox', { name: 'Commit-message agent', exact: true });
+  };
+  const closeSettings = () => page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await openTask(); await openGit();
+  await expect(generate).toHaveAttribute('title', /Claude/);
+  await expectAgent('claude');
+  await page.reload();
+  await expectAgent('claude');
+  const otherTask = { ...task, id: 'other-conversation', name: 'other-conversation', title: 'Another conversation', agent: 'codex' };
+  snapshot.tasks.push(otherTask);
+  const otherTab = await page.context().newPage();
+  await otherTab.route('**/api/**', handleApi);
+  await otherTab.goto(origin);
+  await otherTab.locator(`[data-task="${otherTask.id}"] .task-link`).click();
+  await expect.poll(() => otherTab.evaluate(() => sessionStorage.getItem('papilot:commit-context:git-paper:/tmp/git-paper'))).toBe(otherTask.id);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expectAgent('claude');
+  await otherTab.close();
+  await message.fill('Keep my manual message');
+  let picker = await settings();
+  await expect(picker).toContainText('Follow current conversation');
+  await selectOption(picker, 'codex');
+  await page.screenshot({ path: 'test-results/commit-agent-settings-light.png' });
+  await closeSettings();
+  await expect(message).toHaveValue('Keep my manual message');
+  await openTask(); await openGit();
+  await expect(message).toHaveValue('Keep my manual message');
+  await expect(generate).toHaveAttribute('title', /Codex/);
+  await expectAgent('codex');
+  // Settings may change while the request is in flight; its label must keep
+  // identifying the agent actually generating this message.
+  let releaseMessage;
+  messageGate = new Promise(resolve => { releaseMessage = resolve; });
+  await generate.click();
+  await expect(message).toHaveAttribute('placeholder', 'Codex is writing a commit message…');
+  picker = await settings(); await selectOption(picker, 'claude'); await closeSettings();
+  await expect(generate).toHaveAttribute('title', /Codex/);
+  await expect(message).toHaveAttribute('placeholder', 'Codex is writing a commit message…');
+  messageGate = null; releaseMessage();
+  await expect(generate).toBeEnabled();
+  await expect(message).toHaveValue('Written by codex');
+  await expect(generate).toHaveAttribute('title', /Claude/);
+  picker = await settings(); await selectOption(picker, 'codex'); await closeSettings();
+  await page.reload();
+  await expectAgent('codex');
+  // A response from an old Git panel must not overwrite a draft entered
+  // after returning from a conversation, including its persisted copy.
+  messageGate = new Promise(resolve => { releaseMessage = resolve; });
+  await generate.click();
+  await expect(message).toHaveAttribute('placeholder', 'Codex is writing a commit message…');
+  await openTask(); await openGit(); await message.fill('New manual draft');
+  const oldResponse = page.waitForResponse(response => response.url().endsWith('/git/message'));
+  messageGate = null; releaseMessage(); await (await oldResponse).finished();
+  await afterRender(page);
+  assert.equal(await page.evaluate(() => localStorage.getItem('papilot:commit:git-paper')), 'New manual draft');
+  await expect(message).toHaveValue('New manual draft');
+  await page.reload(); await expect(message).toHaveValue('New manual draft');
+  // The task's inline generation obeys the same override.
+  task.status = 'interrupted'; task.deferred = true;
+  task.review = { state: 'done', round: 0, counts: { pending: 0 }, files: ['main.tex'] };
+  await page.reload(); await openTask();
+  await page.getByRole('group', { name: 'Workspace view' }).getByRole('button', { name: 'Chat', exact: true }).click();
+  const taskGenerate = page.locator('.task-apply:visible').getByRole('button', { name: 'Generate commit message' }).first();
+  await expect(taskGenerate).toHaveAttribute('title', /Codex/);
+  await taskGenerate.click();
+  await expect(page.locator('.task-apply:visible').getByRole('textbox', { name: 'Commit message' }).first()).toHaveValue('Written by codex');
+  assert.equal(messageRequests.at(-1).agent, 'codex');
+  await openGit();
+  picker = await settings(); await selectOption(picker, 'claude'); await closeSettings();
+  // An explicit override survives a conversation using another agent.
+  task.agent = 'codex'; await page.reload(); await openTask(); await openGit();
+  await expectAgent('claude');
+  picker = await settings(); await selectOption(picker, 'conversation'); await closeSettings();
+  assert.equal(await page.evaluate(() => localStorage.getItem('papilot:commit-message-agent')), null);
+  await expectAgent('codex');
+  // Another paper with no visited conversation uses the new-task default.
+  task.agent = 'claude'; await page.reload(); await openTask(); await openGit();
+  const other = { ...project, id: 'other-paper', name: 'Other paper', path: '/tmp/other-paper' };
+  snapshot.projects.push(other);
+  await page.evaluate(id => { localStorage.setItem('papilot:project', id); localStorage.setItem('papilot:task', ''); }, other.id);
+  await page.reload(); await expectAgent('codex');
+  // Returning to this paper restores only its own conversation context.
+  await page.evaluate(id => localStorage.setItem('papilot:project', id), project.id);
+  await page.reload(); await expectAgent('claude');
+  picker = await settings(); await selectOption(picker, 'claude'); await closeSettings();
+  snapshot.runtimes.claude = { ...runtime, connected: false, authenticated: false, installed: false };
+  messageError = 'The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.';
+  await page.reload(); await message.fill('Keep this when generation fails'); await generate.click();
+  await expect(panel.getByRole('alert')).toHaveText(messageError);
+  assert.equal(messageRequests.at(-1).agent, 'claude');
+  await expect(message).toHaveValue('Keep this when generation fails');
+  picker = await settings(); await picker.click();
+  await expect(page.getByRole('option', { name: /Claude/ })).toContainText('Unavailable');
+  await page.keyboard.press('Escape');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.screenshot({ path: 'test-results/commit-agent-settings-dark.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'test-results/commit-agent-settings-mobile.png' });
+  await selectOption(picker, 'conversation'); await closeSettings();
+  snapshot.runtimes.claude = { ...runtime }; messageError = null;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.reload(); await expectAgent('claude');
   // A persisted Git page must not bypass the missing-Git gate. Background Git
   // requests also stop; installation is picked up by the normal state refresh.
   await page.setViewportSize({ width: 1440, height: 900 });

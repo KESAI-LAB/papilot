@@ -70,6 +70,7 @@ import { taskSaveStatus } from './task-save-status.ts';
 import { TaskSaved } from './task-saved.tsx';
 import { GitRepository } from './git-overview.tsx';
 import { useAdvancedGit } from './git-preferences.ts';
+import { commitConversation, rememberCommitConversation, useCommitMessageAgent } from './commit-agent-preferences.ts';
 import { GitDiffView } from './git-diff-view.tsx';
 import { VersionHistory, type HistorySelection } from './git-history.tsx';
 import type { GitHistory, GitVersionDetail } from '../shared.ts';
@@ -531,8 +532,12 @@ function DiscardDialog({ files, onCancel, onConfirm }: { files: GitFile[]; onCan
   </dialog>;
 }
 
-function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onOpenTask }: { navigation?: React.ReactNode; tasks: Task[]; onOpenTask: (id: string) => void; projectId: string; git: GitStatus | null; onStatus: (status: GitStatus) => void; writer: CommitWriter }) {
+function GitWorkspace({ projectId, navigation, git, onStatus, writer, messageAgent, tasks, onOpenTask }: { navigation?: React.ReactNode; tasks: Task[]; onOpenTask: (id: string) => void; projectId: string; git: GitStatus | null; onStatus: (status: GitStatus) => void; writer: CommitWriter; messageAgent: AgentId }) {
   const advanced = useAdvancedGit();
+  const [writingAgent, setWritingAgent] = useState<AgentId | null>(null);
+  const displayedMessageAgent = writingAgent ?? messageAgent;
+  const messageRequest = useRef(0);
+  useEffect(() => () => { messageRequest.current++; }, []);
   const loadOverview = useCallback((signal: AbortSignal) => api<GitOverview>(`/projects/${projectId}/git/overview`, undefined, signal), [projectId]);
   const loadHistory = useCallback((before: string | null, signal: AbortSignal) => api<GitHistory>(`/projects/${projectId}/git/history${before ? '?before=' + before : ''}`, undefined, signal), [projectId]);
   const loadVersion = useCallback((hash: string, signal: AbortSignal) => api<GitVersionDetail>(`/projects/${projectId}/git/history/${hash}`, undefined, signal), [projectId]);
@@ -625,10 +630,14 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
   // An empty box takes a message already written for them; a full one asks for a new one.
   async function generate() {
     if (busy || !chosen.length) return;
-    setBusy('message'); setError(''); setNotice('');
-    try { saveMessage((await api<{ message: string }>(`/projects/${projectId}/git/message`, { paths: chosen.map(file => file.path), staged: staged.length > 0, agent: writer.agent, fresh: Boolean(message.trim()) })).message); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(''); }
+    const request = ++messageRequest.current;
+    setBusy('message'); setWritingAgent(messageAgent); setError(''); setNotice('');
+    try {
+      const result = await api<{ message: string }>(`/projects/${projectId}/git/message`, { paths: chosen.map(file => file.path), staged: staged.length > 0, agent: messageAgent, fresh: Boolean(message.trim()) });
+      // Leaving and reopening Git may create a newer manual draft.
+      if (request === messageRequest.current) saveMessage(result.message);
+    } catch (e) { if (request === messageRequest.current) setError(e instanceof Error ? e.message : String(e)); }
+    finally { if (request === messageRequest.current) { setBusy(''); setWritingAgent(null); } }
   }
   const discard = (list: GitFile[]) => { setDiscarding(null); void run('discard', () => api<{ git: GitStatus }>(`/projects/${projectId}/git/discard`, { paths: list.map(file => file.path) }), () => tn(list.length, 'Discarded changes in {n} file.', 'Discarded changes in {n} files.')); };
   const reload = () => void run('reload', async () => ({ git: await api<GitStatus>(`/projects/${projectId}/git`) }), () => '');
@@ -655,7 +664,7 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
   const syncTitle = !git.remote ? t('This repository has no remote.') : !git.branch ? t('Check out a branch before syncing.') : t('Sync committed changes with the remote. Uncommitted changes are kept.');
   const primaryDisabled = syncPrimary ? Boolean(busy) || !needsSync : commitDisabled;
   const submitPrimary = () => { if (!primaryDisabled) { if (syncPrimary) syncRemote(); else commit(); } };
-  const placeholder = busy === 'message' ? t('{agent} is writing a commit message…', { agent: agentLabel(writer.agent) })
+  const placeholder = busy === 'message' ? t('{agent} is writing a commit message…', { agent: agentLabel(displayedMessageAgent) })
     : git.branch && !touch() ? t('Message ({key} to commit on “{branch}”)', { key: '↵', branch: git.branch }) : t('Commit message');
   // One row per file and list. The staged list shows the index's status.
   const row = (file: GitFile, list: 'staged' | 'changes') => {
@@ -732,7 +741,7 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, tasks, onO
         <div className="git-message-box">
           <textarea aria-label={t('Commit message')} placeholder={placeholder} rows={1} value={message} readOnly={busy === 'commit' || busy === 'message'} onChange={event => saveMessage(event.target.value)} onKeyDown={event => { if (sendsMessage(event.nativeEvent, touch())) { event.preventDefault(); commit(); } }}/>
           <div className="git-compose-bar">
-            <button type="button" className="icon-button git-generate" aria-label={t('Generate commit message')} title={t('Write a commit message for the chosen files with {agent}', { agent: agentLabel(writer.agent) })} disabled={Boolean(busy) || !chosen.length} onClick={() => void generate()}>{busy === 'message' ? <span className="spinner"/> : <Icon name="spark" size={15}/>}</button>
+            <button type="button" className="icon-button git-generate" aria-label={t('Generate commit message')} title={t('Write a commit message for the chosen files with {agent}', { agent: agentLabel(displayedMessageAgent) })} disabled={Boolean(busy) || !chosen.length} onClick={() => void generate()}>{busy === 'message' ? <span className="spinner"/> : <Icon name="spark" size={15}/>}</button>
             <div className={'git-commit-split has-menu' + (busy === 'commit' || syncing ? ' is-busy' : '')}>
               <button className="button primary git-commit-button" aria-label={primaryLabel} title={syncPrimary ? needsSync ? syncTitle : t('Up to date with the remote.') : commitTitle} disabled={primaryDisabled}>{busy === 'commit' || syncing ? <span className="spinner light"/> : <Icon name={syncPrimary && needsSync ? 'refresh' : 'check'} size={14}/>}<span>{primaryLabel}</span>{syncPrimary && needsSync && sync}</button>
               <ActionMenu label={t('More commit actions')} className="button primary git-commit-more" disabled={Boolean(busy)} actions={[
@@ -1437,6 +1446,14 @@ function App() {
   if (task && !composers.current.has(task.id)) composers.current.set(task.id, new ComposerDraft('papilot:draft:' + task.id, browserStorage, uuid));
   const fullPdfUrl = task?.status !== 'deleting' && task?.review?.round ? pdfAsset(`/api/tasks/${task.id}/pdf?round=${task.review.round}`) : '';
   const project = state?.projects.find(p => p.id === (task?.projectId || projectId)) || state?.projects[0];
+  // Keep the last visited conversation for this paper when navigation clears
+  // selected. Resolve its live agent from the snapshot, never another paper's.
+  const commitContextKey = project ? `papilot:commit-context:${project.id}:${project.path}` : '';
+  useEffect(() => {
+    if (task && task.status !== 'deleting' && commitContextKey) rememberCommitConversation(commitContextKey, task.id);
+  }, [commitContextKey, task?.id, task?.status]);
+  const commitPreference = useCommitMessageAgent();
+  const commitContext = task || state?.tasks.find(item => item.id === commitConversation(commitContextKey) && item.projectId === project?.id && item.status !== 'deleting');
   // Remember the paper even when its manuscript is open, and replace stale
   // paper IDs only after the host has returned the accessible papers.
   useEffect(() => {
@@ -1537,6 +1554,7 @@ function App() {
   const chosenModel = models.length && !models.some(m => m.id === pref.model) ? '' : pref.model;
   const modelInfo = models.find(m => m.id === chosenModel) || models.find(m => m.isDefault);
   const agent = { agent: agentChoice, model: modelInfo?.id || chosenModel, effort: taskEffort(pref.effort, modelInfo), serviceTier: agentChoice === 'codex' ? (pref.fast && modelInfo?.fastMode ? modelInfo.fastMode.serviceTier : 'default') : undefined };
+  const commitAgent = commitPreference === 'conversation' ? (commitContext ? commitContext.agent || 'codex' : agent.agent) : commitPreference;
   const remember = (change: Partial<{ model: string; effort: string; fast: boolean }>) => {
     setAgentPrefs(current => ({ ...current, [agentChoice]: { ...current[agentChoice], ...change } }));
     for (const [key, value] of Object.entries(change)) browserStorage.setItem(`papilot:${key}:${agentChoice}`, String(value));
@@ -2035,7 +2053,7 @@ function App() {
     branch={projectGit?.branch ?? null} canCommit={Boolean(task.review?.files?.length || task.delivery?.mode === 'branch' || task.delivery?.pending)} preferred={merging?.intent?.mode}
     pending={task.delivery?.pending && task.delivery.mode !== 'branch' ? task.delivery.mode : undefined}
     apply={() => saveTask('workspace')} commit={(message, confirmation) => saveTask('commit', message, confirmation)}
-    generate={() => api<{ message: string }>(`/tasks/${task.id}/commit-message`, { fresh: true }).then(result => result.message)}
+    agent={agentLabel(commitAgent)} generate={() => api<{ message: string }>(`/tasks/${task.id}/commit-message`, { agent: commitAgent, fresh: true }).then(result => result.message)}
     shown={isPlayground ? undefined : () => void api(`/tasks/${task.id}/predict`, {}).catch(() => undefined)}/>
     : merging ? <TaskConflict status={task.status} waiting={mergeWaiting} onChat={() => selectLayout('conversation')}/>
     : saved === 'committed' && task.delivery ? savedResult(t('Committed {hash} to {branch}', { hash: task.delivery.commit?.slice(0, 7) || '', branch: task.delivery.branch || '' }))
@@ -2229,8 +2247,8 @@ function App() {
           </div> : chatOnly && task.mode !== 'review' && ['failed', 'interrupted'].includes(task.status) ? <div className="task-error-actions">
             <button type="button" className="button secondary compact" disabled={taskActionBusy} aria-busy={taskActionBusy} onClick={() => void action('/tasks/' + task.id + '/publish')}><Icon name="diff" size={14}/>{task.review?.round ? t('Regenerate PDF comparison') : t('Generate PDF comparison')}</button>
           </div> : null} onTaskSaved={acceptSavedTask} reportError={reportError} pause={pause} pausing={taskActionBusy} skills={projectSkills} feedback={chatOnly ? <>{reviewFeedback(true)}{applicationStep && <div className="review-feedback card commit-card task-delivery">{applicationStep}</div>}</> : null} openReview={chatOnly ? () => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); } : undefined}/></div>
-      : manuscriptOpen && project ? <ManuscriptView notesRequest={playgroundNotes} taskCards={taskCards} key={project.id + project.path} navigationGuard={manuscriptNavigationGuard} collapsed={manuscriptCollapsed} setCollapsed={setManuscriptCollapsed} navigation={!mobile ? sidebarToggle : null} project={project} data={shownManuscript} error={manuscriptData.error} view={manuscriptView} setView={setManuscriptView} region={region} setRegion={setRegion} active={activeNote} setActive={setActiveNote} actions={noteActions} newTask={newTaskPanel} tools={!mobile ? manuscriptTools : null} share={!mobile ? manuscriptShare : null} onFixProblems={fixProblems} diagnoseBuild={isPlayground ? undefined : failureId => api<BuildRepairResult>(`/projects/${project.id}/manuscript/repair`, { failureId, agent: agent.agent, model: agent.model })} onGit={status => updateGit(project.id, status)} writer={{ agent: agent.agent, model: agent.model }} reportError={reportError} openFile={openFile} onOpened={() => setOpenFile(null)} onEditing={setEditingFile}/>
-      : gitOpen && project ? <GitWorkspace key={project.id + project.path} projectId={project.id} navigation={sidebarToggle} git={projectGit} onStatus={status => updateGit(project.id, status)} writer={{ agent: agent.agent, model: agent.model }} tasks={state?.tasks.filter(task => task.projectId === project.id) || []} onOpenTask={id => { setSelected(id); setSidebar(false); }}/>
+      : manuscriptOpen && project ? <ManuscriptView notesRequest={playgroundNotes} taskCards={taskCards} key={project.id + project.path} navigationGuard={manuscriptNavigationGuard} collapsed={manuscriptCollapsed} setCollapsed={setManuscriptCollapsed} navigation={!mobile ? sidebarToggle : null} project={project} data={shownManuscript} error={manuscriptData.error} view={manuscriptView} setView={setManuscriptView} region={region} setRegion={setRegion} active={activeNote} setActive={setActiveNote} actions={noteActions} newTask={newTaskPanel} tools={!mobile ? manuscriptTools : null} share={!mobile ? manuscriptShare : null} onFixProblems={fixProblems} diagnoseBuild={isPlayground ? undefined : failureId => api<BuildRepairResult>(`/projects/${project.id}/manuscript/repair`, { failureId, agent: agent.agent, model: agent.model })} onGit={status => updateGit(project.id, status)} writer={{ agent: commitAgent }} reportError={reportError} openFile={openFile} onOpened={() => setOpenFile(null)} onEditing={setEditingFile}/>
+      : gitOpen && project ? <GitWorkspace key={project.id + project.path} projectId={project.id} navigation={sidebarToggle} git={projectGit} onStatus={status => updateGit(project.id, status)} writer={{ agent: agent.agent, model: agent.model }} messageAgent={commitAgent} tasks={state?.tasks.filter(task => task.projectId === project.id) || []} onOpenTask={id => { setSelected(id); setSidebar(false); }}/>
       : referencesOpen && project ? <section className="references-page" aria-label={t('Reference check')}>
           <header className="references-page-head"><h2>{t('Reference check')}</h2><span>{project.name}</span></header>
           <ReferencesPanel key={project.id} place={'references:' + project.id} data={bibliography} onInvestigate={draftInvestigation}/>

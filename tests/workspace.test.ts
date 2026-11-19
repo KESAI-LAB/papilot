@@ -2101,7 +2101,7 @@ test('an agent writes a commit message from the chosen changes, in a read-only t
       });
       return { turn: { id: 'commit-turn' } };
     };
-    assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'claude' }), { message: 'Tighten the opening sentence', agent: 'codex' });
+    assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'codex' }), { message: 'Tighten the opening sentence', agent: 'codex' });
     const start = f.codex.calls.find(call => call.method === 'thread/start')!.params, turn = f.codex.calls.find(call => call.method === 'turn/start')!.params;
     assert.deepEqual([start.sandbox, start.approvalPolicy, start.ephemeral, start.model, turn.effort], ['read-only', 'never', true, 'gpt-6-luna', 'low']);
     // The helper runs in an empty folder of its own, never the manuscript, and the folder is removed.
@@ -2119,9 +2119,33 @@ test('an agent writes a commit message from the chosen changes, in a read-only t
     assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { fresh: true }), { message: 'Shorten the opening sentence', agent: 'codex' });
     assert.equal(turns(), 2);
     assert.equal((await f.workspace.commitMessage(f.task.projectId, ['main.tex'])).message, 'Shorten the opening sentence');
+    // A cached message must not bypass readiness/authentication or silently
+    // use Codex when a different agent was explicitly requested.
+    const beforeUnavailable = turns();
+    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'claude' }), /selected commit-message agent is unavailable/);
+    f.workspace.runtimes.codex.authenticated = false;
+    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'codex' }), /selected commit-message agent is unavailable/);
+    f.workspace.runtimes.codex.authenticated = true;
     f.codex.ready = false;
+    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'codex' }), /selected commit-message agent is unavailable/);
+    assert.equal(turns(), beforeUnavailable);
     await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex']), /Connect an agent that supports read-only tasks, such as Codex/);
   } finally { f.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('commit-message overrides use the requested agent and cache messages separately', async () => {
+  const claude = new FakeCodex(); claude.ready = true;
+  const f = fixture(undefined, { claude });
+  try {
+    f.codex.ready = true; f.workspace.runtimes.claude.authenticated = true;
+    const calls: string[] = [];
+    (f.workspace as any).taskCommitChanges = async () => ({ files: [{ path: 'main.tex', status: 'M' }], patch: '-Old\n+New', recent: [] });
+    (f.workspace as any).oneOff = async (agent: string) => { calls.push(agent); return `Message from ${agent}`; };
+    for (const agent of ['codex', 'claude', 'codex', 'claude'] as const) {
+      assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent, taskId: f.task.id }), { message: `Message from ${agent}`, agent });
+    }
+    assert.deepEqual(calls, ['codex', 'claude']);
+  } finally { f.close(); }
 });
 
 test('read-only helpers fall back to a capable agent while write helpers keep the selected agent', async () => {
@@ -2145,7 +2169,8 @@ test('read-only helpers fall back to a capable agent while write helpers keep th
     assert.equal(named?.titleGeneration, null);
     assert.equal(claude.calls.length, 0);
     (f.workspace as any).taskCommitChanges = async () => ({ files: [{ path: 'main.tex', status: 'M' }], patch: '-Old opening\n+Clear opening', recent: [] });
-    assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'claude', taskId: f.task.id }), { message: 'Clarify the introduction', agent: 'codex' });
+    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'claude', taskId: f.task.id }), /selected commit-message agent does not support read-only tasks/);
+    assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'codex', taskId: f.task.id }), { message: 'Clarify the introduction', agent: 'codex' });
     assert.equal(claude.calls.length, 0, 'A signed-in agent without read-only support is not selected for either helper');
     const starts = f.codex.calls.filter(call => call.method === 'thread/start');
     assert.equal(starts.length, 2);
@@ -2171,7 +2196,7 @@ test('missing read-only helpers leave titles unchanged and do not prevent editin
       assert.equal(f.store.task(f.task.id).titleGeneration, undefined);
       assert.equal(f.store.task(f.task.id).title, f.task.title);
     }
-    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'claude' }), /Connect an agent that supports read-only tasks, such as Codex\./);
+    await assert.rejects(f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'claude' }), /selected commit-message agent does not support read-only tasks/);
     assert.equal(claude.calls.length, 0);
     await f.workspace.enqueue(f.task.id, 'Edit the introduction.', 'unsupported-title-helper', false);
     await tick(); await tick();

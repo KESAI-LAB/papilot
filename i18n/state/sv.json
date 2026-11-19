@@ -5110,7 +5110,7 @@
     "model": "gemini-4-argon-medium"
   },
   "Unavailable": {
-    "revision": "1ac57bf6061070f2f089b1e439282745baf30d4532c476f78da3ad3958d68efa",
+    "revision": "bdea5c033415a618129b20d7fc8b3a728671c0c52a015dae855752996858737f",
     "textHash": "7bf1a450b3735d36b01f09f8df63c5f2e4c7d9a7e1d46e343eee66de3319a62f",
     "model": "gemini-4-argon-medium"
   },
@@ -5620,7 +5620,7 @@
     "model": "codex-reviewed"
   },
   "Write a commit message for the chosen files with {agent}": {
-    "revision": "cf7964c3a33273bab8b084e21516051e76ec68c7646ab94bc869f3750e0c9287",
+    "revision": "c194be387e92ce2b329f55554705175cdad834c5263550471e07fc618f380450",
     "textHash": "3bcccabc4079d1029aeb22656df51d8f9a43654cd95beb46802d2a52986a94ec",
     "model": "gemini-4-argon-medium"
   },
@@ -6538,5 +6538,20 @@
     "revision": "b5ce3e3ae7ec3dfcec15b715e07840b65c5491c9c46451c26eb82694e2a5068f",
     "textHash": "b1a6d9347463d21e0e4bbe6e91c7131230a07179b38f1eb4db8221c4c53d5615",
     "model": "gemini-4-argon-medium"
+  },
+  "Commit-message agent": {
+    "revision": "d2a342b1fd222195bd7d3a01cbffdfb7f140bc49468f9f457c9516247bfd3c26",
+    "textHash": "8727f811c9aa3bb8fb5c86cade5152d1d54815acf151812b65dc0ec1eea44362",
+    "model": "manual"
+  },
+  "Follow current conversation": {
+    "revision": "f0ff4a4daf4e7ff7e36b49447542cee6447b5bfa078421fcc2d87517eef9faa8",
+    "textHash": "509bf0d0ac32321cdfb10a8441b1de3bef4eddc6092899e31692b84f39b700dc",
+    "model": "manual"
+  },
+  "Use the last conversation in this paper, or the new-task agent if none. An explicit choice applies only to commit messages and is saved in this browser.": {
+    "revision": "00b6c6c72044273cebcff937280e4ab6a347ff70abff250961f589804f3b088f",
+    "textHash": "f9aa3a6f9c04618ca01b080e7d271b4db10cc93d59f6500506209e1c89f96659",
+    "model": "manual"
   }
 }

@@ -10,6 +10,8 @@ import { browserStorage } from './storage.ts';
 import { loadIndirectChanges, saveIndirectChanges, useIndirectChanges } from './effect-preferences.ts';
 import { loadNoteAlternatives } from './note-option-preferences.ts';
 import { NoteOptionSettings } from './note-option-settings.tsx';
+import { agentLabel, offeredAgents } from './agent-choice.ts';
+import { saveCommitMessageAgent, useCommitMessageAgent, type CommitMessageAgent } from './commit-agent-preferences.ts';
 import { saveAdvancedGit, useAdvancedGit } from './git-preferences.ts';
 import { saveDefaultReviewView, useDefaultReviewView } from './review-view.ts';
 import { ModeSwitch } from './mode-switch.tsx';
@@ -42,6 +44,10 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
   const { choice } = useLanguage();
   const indirectChanges = useIndirectChanges(), reviewView = useDefaultReviewView();
   const advancedGit = useAdvancedGit();
+  const commitAgent = useCommitMessageAgent();
+  const commitOptions = diagnostics ? offeredAgents(diagnostics.runtimes).map(value => ({ value, label: agentLabel(value), runtime: diagnostics.runtimes[value] })) : modelDefaults.agents;
+  const commitAgents = commitOptions.map(item => ({ value: item.value, label: item.label, detail: !item.runtime?.connected || !item.runtime.authenticated ? t('Unavailable') : undefined }));
+  if (commitAgent !== 'conversation' && !commitAgents.some(item => item.value === commitAgent)) commitAgents.push({ value: commitAgent, label: agentLabel(commitAgent), detail: t('Unavailable') });
   useEffect(loadIndirectChanges, []);
   useEffect(loadNoteAlternatives, []);
   const [page, setPage] = useState<SettingsPage>(initialPage);
@@ -88,7 +94,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
       ...(overleaf ? [{ page: 'overleaf' as const, label: 'Overleaf', icon: 'overleaf', keywords: `${t('Sync with Overleaf…')} ${t('Sign in')} ${t('Sign out')}` }] : []),
     ] },
     { label: t('Runtime'), entries: [
-      { page: 'git', label: 'Git', icon: 'git', keywords: `${t('Version history')} ${t('Show advanced Git features')}` },
+      { page: 'git', label: 'Git', icon: 'git', keywords: `${t('Version history')} ${t('Show advanced Git features')} ${t('Commit-message agent')}` },
       ...(diagnostics ? [
         { page: 'agents', label: t('Agents'), icon: 'terminal', keywords: `${t('Agent configuration')} ${t('Available models')} ${t('Usage & limits')}` },
         { page: 'latex', label: 'LaTeX', icon: 'paper', keywords: 'TeX Live MacTeX BasicTeX MiKTeX' },
@@ -172,6 +178,10 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
         {page === 'git' && <div className="settings-page">
           {requirements && <section className="settings-card settings-card-body"><ToolRequirement tool="git" {...requirements}/></section>}
           <section className="settings-card">
+            <div className="settings-row settings-choice">
+              <div className="settings-text"><span className="settings-name">{t('Commit-message agent')}</span><p>{t('Use the last conversation in this paper, or the new-task agent if none. An explicit choice applies only to commit messages and is saved in this browser.')}</p></div>
+              <ChipSelect label={t('Commit-message agent')} value={commitAgent} onChange={value => saveCommitMessageAgent(value as CommitMessageAgent)} options={[{ value: 'conversation', label: t('Follow current conversation') }, ...commitAgents]}/>
+            </div>
             <div className="settings-row settings-toggle">
               <div className="settings-text">
                 <label className="settings-name" htmlFor="settings-advanced-git">{t('Show advanced Git features')}</label>

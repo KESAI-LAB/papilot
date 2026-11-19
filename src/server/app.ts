@@ -708,8 +708,9 @@ export async function buildApp(options: AppOptions) {
     return result;
   });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/commit-message', task, request => {
-    const task = store.task(request.params.id);
-    return workspace.commitMessage(task.projectId, task.review?.files || [], { taskId: task.id, agent: task.agent, fresh: (request.body as any)?.fresh === true });
+    const task = store.task(request.params.id), b = request.body as any;
+    if (b?.agent !== undefined && !isAgentId(b.agent)) throw new Error('Invalid agent.');
+    return workspace.commitMessage(task.projectId, task.review?.files || [], { taskId: task.id, agent: b?.agent === undefined ? task.agent : agent(b.agent), fresh: b?.fresh === true });
   });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/permissions', task, request => workspace.updateTaskPermissions(request.params.id, (request.body as any)?.permissions));
   app.post<{ Params: { id: string } }>('/api/tasks/:id/model', task, request => {
@@ -787,6 +788,7 @@ export async function buildApp(options: AppOptions) {
   // instead of the message it already wrote for them; nothing is written.
   app.post<{ Params: { id: string } }>('/api/projects/:id/git/message', project(), request => {
     const b = request.body as any;
+    if (b.agent !== undefined && !isAgentId(b.agent)) throw new Error('Invalid agent.');
     return workspace.commitMessage(store.project(request.params.id).id, paths(b.paths), { agent: b.agent === undefined ? undefined : agent(b.agent), fresh: b.fresh === true, staged: b.staged === true });
   });
   // A merge in progress is resolved by an agent, committed, or abandoned.

@@ -1908,5 +1908,20 @@
     "revision": "4c74db4fdab06c49cb77e556d73fc7a6ddcdde2439bb5ca3b9da844b148e1bf1",
     "textHash": "5d243f2fca001e3115c1070135d139b4ad39fb4077b8615ee18af3fbc6dd96a8",
     "model": "gemini-4-argon-medium"
+  },
+  "The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.": {
+    "revision": "6ac45d0e55b56a6cd4c98827bea05bc67903883f17b2f8842a4439f9b9ff6ba3",
+    "textHash": "66f80b934cd25d44a9571c71efa5967e3dc491f2d2fc03702ad4fa8ed99faf6c",
+    "model": "manual"
+  },
+  "The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": {
+    "revision": "63c297635a62db26e32ee6fc00be4f66c73ea8184389a4085a6e327e0a20db83",
+    "textHash": "18e03d52d1e3c0af6ebc86eedcbed02ed4c8eb79fcbc6598a780b5d2f166e3a4",
+    "model": "manual"
+  },
+  "Invalid agent.": {
+    "revision": "4313eb88e927a48a32eb9dccd6997ff112b82074a0241ef18fdc84be1c40d1c3",
+    "textHash": "781270a6994031811aca1e24dbf068bab1a3a17942ed85a7396234ecc2ccbff6",
+    "model": "manual"
   }
 }

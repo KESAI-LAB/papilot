@@ -466,5 +466,8 @@
   "The selected agent does not support read-only AI review. Select another agent.": "Den valda agenten stöder inte AI-granskning med enbart läsåtkomst. Välj en annan agent.",
   "The selected agent does not support read-only tasks through ACP. Select another agent.": "Den valda agenten stöder inte uppgifter med enbart läsåtkomst via ACP. Välj en annan agent.",
   "Choose latexmk or PhiTeX.": "Välj latexmk eller PhiTeX.",
-  "Enable collaboration mode in Settings → Experiments first.": "Aktivera först samarbetsläget under Inställningar → Experimentella funktioner."
+  "Enable collaboration mode in Settings → Experiments first.": "Aktivera först samarbetsläget under Inställningar → Experimentella funktioner.",
+  "The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.": "Den valda agenten för commit-meddelanden stöder inte skrivskyddade uppgifter. Välj en annan under Inställningar → Git.",
+  "The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "Den valda agenten för commit-meddelanden är inte tillgänglig. Anslut den under Inställningar → Agenter eller välj en annan under Inställningar → Git.",
+  "Invalid agent.": "Ogiltig agent."
 }

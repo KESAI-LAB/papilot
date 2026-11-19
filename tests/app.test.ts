@@ -1869,3 +1869,24 @@ test('quota refresh validates the agent and CSRF and never reconnects conversati
     assert.equal(reads, 1);
   } finally { await f.close(); }
 });
+
+test('commit-message routes honor explicit agents and default task requests to the conversation', async () => {
+  const f = await fixture();
+  try {
+    f.store.updateTask('thesis-task', { agent: 'claude' });
+    const calls: unknown[] = [];
+    f.workspace.commitMessage = async (project, paths, choice) => { calls.push({ project, paths, choice }); return { message: 'Clarify the introduction', agent: choice?.agent || 'codex' }; };
+    const send = (url: string, payload: Record<string, unknown>) => f.local.inject({ method: 'POST', url, headers: f.as, payload });
+    for (const payload of [{}, { agent: 'codex', fresh: true }]) assert.equal((await send('/api/tasks/thesis-task/commit-message', payload)).statusCode, 200);
+    assert.equal((await send('/api/projects/thesis/git/message', { paths: ['main.tex'], agent: 'claude', staged: true })).statusCode, 200);
+    assert.deepEqual(calls, [
+      { project: 'thesis', paths: [], choice: { taskId: 'thesis-task', agent: 'claude', fresh: false } },
+      { project: 'thesis', paths: [], choice: { taskId: 'thesis-task', agent: 'codex', fresh: true } },
+      { project: 'thesis', paths: ['main.tex'], choice: { agent: 'claude', fresh: false, staged: true } },
+    ]);
+    for (const url of ['/api/tasks/thesis-task/commit-message', '/api/projects/thesis/git/message']) {
+      assert.equal((await send(url, { agent: 'missing', paths: ['main.tex'] })).statusCode, 400);
+    }
+    assert.equal(calls.length, 3);
+  } finally { await f.close(); }
+});

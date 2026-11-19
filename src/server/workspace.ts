@@ -1675,8 +1675,12 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   // The agent that writes a commit message or resolves a merge: the one the
   // author chose, or else the first that is signed in, with the chosen model
   // or the default one; light asks for the agent's small model when it has one.
-  private helper(choice: { agent?: AgentId; model?: string }, task: string, options: { light?: boolean; readOnly?: boolean } = {}) {
+  private helper(choice: { agent?: AgentId; model?: string }, task: string, options: { light?: boolean; readOnly?: boolean; strict?: boolean } = {}) {
     const usable = (id: AgentId) => this.agents[id].ready && this.runtimes[id].authenticated && (!options.readOnly || this.agents[id].supportsReadOnlyTasks !== false);
+    if (options.strict && choice.agent) {
+      if (!this.agents[choice.agent].ready || !this.runtimes[choice.agent].authenticated) throw new Error('The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.');
+      if (options.readOnly && this.agents[choice.agent].supportsReadOnlyTasks === false) throw new Error('The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.');
+    }
     const id = choice.agent && usable(choice.agent) ? choice.agent : AGENTS.find(usable);
     if (!id) {
       if (options.readOnly) throw new Error('Connect an agent that supports read-only tasks, such as Codex.');
@@ -1785,7 +1789,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   // lightest reasoning it offers. The same changes get the message already
   // written, or being written, for them unless the author asks for a fresh one.
   async commitMessage(projectId: string, paths: string[], choice: { agent?: AgentId; fresh?: boolean; staged?: boolean; taskId?: string } = {}) {
-    const project = this.store.project(projectId), { id, model } = this.helper(choice, 'write a commit message', { light: true, readOnly: true });
+    const project = this.store.project(projectId), { id, model } = this.helper(choice, 'write a commit message', { light: true, readOnly: true, strict: true });
     const task = choice.taskId ? this.store.task(choice.taskId) : undefined;
     if (task && task.projectId !== projectId) throw new Error('Invalid task ID.');
     const { files, patch, recent } = task ? await this.taskCommitChanges(task) : await commitChanges(project.path, paths, choice.staged);

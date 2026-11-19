@@ -1592,5 +1592,8 @@
   "Could not read the compiler. Try again.": "無法讀取編譯器，請再試一次。",
   "Could not save the compiler. Try again.": "無法儲存編譯器，請再試一次。",
   "PhiTeX is not installed on this computer.": "此電腦未安裝 PhiTeX。",
-  "PhiTeX {version} rebuilds only what each edit changes. LuaLaTeX papers keep using latexmk.": "PhiTeX {version} 僅會重新編譯每次編輯變更的部分。LuaLaTeX 論文仍會繼續使用 latexmk。"
+  "PhiTeX {version} rebuilds only what each edit changes. LuaLaTeX papers keep using latexmk.": "PhiTeX {version} 僅會重新編譯每次編輯變更的部分。LuaLaTeX 論文仍會繼續使用 latexmk。",
+  "Commit-message agent": "提交訊息代理",
+  "Follow current conversation": "跟隨目前對話",
+  "Use the last conversation in this paper, or the new-task agent if none. An explicit choice applies only to commit messages and is saved in this browser.": "使用目前論文中最近對話的代理；沒有對話時使用新任務代理。明確選擇僅用於提交訊息，並儲存在此瀏覽器中。"
 }

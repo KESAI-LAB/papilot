@@ -1592,5 +1592,8 @@
   "Could not read the compiler. Try again.": "Não foi possível ler o compilador. Tente novamente.",
   "Could not save the compiler. Try again.": "Não foi possível salvar o compilador. Tente novamente.",
   "PhiTeX is not installed on this computer.": "O PhiTeX não está instalado neste computador.",
-  "PhiTeX {version} rebuilds only what each edit changes. LuaLaTeX papers keep using latexmk.": "O PhiTeX {version} recompila apenas o que cada edição altera. Artigos em LuaLaTeX continuam usando o latexmk."
+  "PhiTeX {version} rebuilds only what each edit changes. LuaLaTeX papers keep using latexmk.": "O PhiTeX {version} recompila apenas o que cada edição altera. Artigos em LuaLaTeX continuam usando o latexmk.",
+  "Commit-message agent": "Agente das mensagens de commit",
+  "Follow current conversation": "Seguir a conversa atual",
+  "Use the last conversation in this paper, or the new-task agent if none. An explicit choice applies only to commit messages and is saved in this browser.": "Usa o agente da última conversa deste artigo ou, se não houver nenhuma, o das novas tarefas. Uma escolha explícita aplica-se apenas às mensagens de commit e é salva neste navegador."
 }
