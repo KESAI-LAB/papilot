@@ -466,5 +466,8 @@
   "The selected agent does not support read-only AI review. Select another agent.": "O agente selecionado não suporta a revisão por IA em modo somente leitura. Selecione outro agente.",
   "The selected agent does not support read-only tasks through ACP. Select another agent.": "O agente selecionado não suporta tarefas em modo somente leitura via ACP. Selecione outro agente.",
   "Choose latexmk or PhiTeX.": "Escolha latexmk ou PhiTeX.",
-  "Enable collaboration mode in Settings → Experiments first.": "Primeiro ative o modo colaborativo em Configurações → Recursos experimentais."
+  "Enable collaboration mode in Settings → Experiments first.": "Primeiro ative o modo colaborativo em Configurações → Recursos experimentais.",
+  "The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.": "O agente selecionado para mensagens de commit não oferece suporte a tarefas somente leitura. Escolha outro em Configurações → Git.",
+  "The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "O agente selecionado para mensagens de commit está indisponível. Conecte-o em Configurações → Agentes ou escolha outro em Configurações → Git.",
+  "Invalid agent.": "Agente inválido."
 }

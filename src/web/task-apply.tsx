@@ -4,15 +4,16 @@ import { t } from './i18n.ts';
 import type { TaskApplyState } from './task-apply-state.ts';
 import './task-commit.css';
 
-export function TaskApply({ draft, merging, keepCurrent, disabled, branch, canCommit, pending, preferred, apply, commit, generate, shown }: {
+export function TaskApply({ draft, merging, keepCurrent, disabled, branch, canCommit, pending, preferred, apply, commit, agent, generate, shown }: {
   draft: TaskApplyState; merging: boolean; keepCurrent?: boolean; disabled: boolean; branch: string | null;
-  canCommit: boolean; pending?: 'workspace' | 'commit'; preferred?: 'workspace' | 'commit';
+  canCommit: boolean; agent?: string; pending?: 'workspace' | 'commit'; preferred?: 'workspace' | 'commit';
   apply: () => Promise<unknown>; commit: (message: string, confirmation?: string) => Promise<unknown>; generate: () => Promise<string>;
   /** Called once when this step appears, to prepare what saving will need. */
   shown?: () => void;
 }) {
   const state = useSyncExternalStore(draft.subscribe, draft.getSnapshot), busy = disabled || state.busy;
   useEffect(() => { shown?.(); }, []);
+  const displayedAgent = state.writing ? state.writingAgent : agent;
   const applyFirst = preferred === 'workspace' || !canCommit;
   return <div className="task-commit task-apply" aria-label={t('Save accepted changes')}>
     {(state.commitReview || keepCurrent) && <p className="task-commit-hint">{state.commitReview ? t('This passage includes earlier edits that have not been committed. You can commit the reviewed result together, or apply it without committing.') : t('Keep the latest wording in overlapping passages and save the other accepted changes.')}</p>}
@@ -21,7 +22,7 @@ export function TaskApply({ draft, merging, keepCurrent, disabled, branch, canCo
       <textarea aria-label={t('Commit message')} rows={1} value={state.message} readOnly={busy} maxLength={5000} onChange={event => draft.edit(event.target.value)}/>
       <div className="task-commit-toolbar">
         <span className="task-commit-branch" title={branch ? t('Commit to {branch}', { branch }) : t('Open a branch to commit')}><Icon name="branch" size={13}/><span>{branch || t('Open a branch to commit')}</span></span>
-        <button type="button" className="task-commit-generate" aria-label={t('Generate commit message')} disabled={busy || state.writing || !canCommit} onClick={() => void draft.write(generate)}>
+        <button type="button" className="task-commit-generate" title={displayedAgent ? t('Write a commit message for the chosen files with {agent}', { agent: displayedAgent }) : undefined} aria-label={t('Generate commit message')} disabled={busy || state.writing || !canCommit} onClick={() => void draft.write(generate, agent)}>
           {state.writing ? <span className="task-commit-spinner"/> : <Icon name="spark" size={15}/>}
         </button>
         <div className="task-commit-actions">

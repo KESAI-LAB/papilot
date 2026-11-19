@@ -466,5 +466,8 @@
   "The selected agent does not support read-only AI review. Select another agent.": "선택한 에이전트는 읽기 전용 AI 검토를 지원하지 않습니다. 다른 에이전트를 선택하세요.",
   "The selected agent does not support read-only tasks through ACP. Select another agent.": "선택한 에이전트는 ACP를 통한 읽기 전용 작업을 지원하지 않습니다. 다른 에이전트를 선택하세요.",
   "Choose latexmk or PhiTeX.": "latexmk 또는 PhiTeX를 선택하세요.",
-  "Enable collaboration mode in Settings → Experiments first.": "먼저 설정 → 실험 기능에서 협업 모드를 활성화하세요."
+  "Enable collaboration mode in Settings → Experiments first.": "먼저 설정 → 실험 기능에서 협업 모드를 활성화하세요.",
+  "The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.": "선택한 커밋 메시지 에이전트는 읽기 전용 작업을 지원하지 않습니다. 설정 → Git에서 다른 에이전트를 선택하세요.",
+  "The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "선택한 커밋 메시지 에이전트를 사용할 수 없습니다. 설정 → 에이전트에서 연결하거나 설정 → Git에서 다른 에이전트를 선택하세요.",
+  "Invalid agent.": "유효하지 않은 에이전트입니다."
 }

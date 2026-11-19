@@ -1279,6 +1279,7 @@ try {
   gitState.files.push({ path: 'main.aux', status: '?', staged: false, unstaged: true }, { path: 'main.log', status: '?', staged: false, unstaged: true });
   await pdfLink.click();
   await page.getByRole('heading', { name: 'Manuscript', exact: true }).waitFor();
+  await page.locator(`.task-row[data-task="${task.id}"] .task-link`).click();
   await page.locator('.git-link').click();
   const gitPanel = page.getByRole('region', { name: 'Version Management' });
   // Advanced Git views are enabled only in the App's existing settings.
@@ -1395,7 +1396,7 @@ try {
   await changes.getByRole('button', { name: 'Generate commit message', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('[aria-label="Commit message"]')?.value === 'Tighten the introduction');
   assert.deepEqual(gitMessages.map(body => [body.paths, body.staged]), [[['main.tex'], true]]);
-  assert.ok(['codex', 'claude', 'antigravity'].includes(gitMessages[0].agent));
+  assert.equal(gitMessages[0].agent, task.agent || 'codex');
   await commitMessage.press('Enter');
   await gitPanel.getByRole('status').filter({ hasText: 'Committed def5678.' }).waitFor();
   assert.deepEqual(gitCommits, [{ message: 'Tighten the introduction', staged: true }]);
