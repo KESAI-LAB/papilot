@@ -12,93 +12,93 @@
     },
     "zh-CN": {
       "category": "工程实现",
-      "title": "为什么源码 diff 不适合审阅论文：Papilot 排版级 PDF 对比的工程实现",
-      "lead": "拆解快速版面级对比背后的 Git 工作树增量快照、热缓存并行章节编译、SyncTeX 原地路径重写与可撤销审阅日志。",
-      "description": "深入解析 Papilot 如何在独立 Git 工作树中隔离 AI 对 LaTeX 的修改，将不可变隔离构建压缩至秒级增量编译，并实现细粒度正文偏移与原子级公式对比。",
+      "title": "Papilot 如何构建排版级审阅",
+      "lead": "深入代码追踪一轮审阅：工作树快照、热缓存 LaTeX 编译、全文按词对齐、SyncTeX 裁切与审阅决定日志。",
+      "description": "Papilot 如何将智能体的 LaTeX 修改转化为排版级审阅对比：Git 工作树快照、latexmk 状态复用、\\includeonly 单章编译、MuPDF 词级对齐、SyncTeX 页面裁切与 SQLite 决定日志。",
       "hero": "/assets/blog/review.zh-CN.png",
       "heroAlt": "Papilot 产品示意图：展示论文页面原位的修改前后排版对比，以及接受、拒绝、评论与源码切换按钮。",
-      "heroCaption": "智能体的每轮修改都在隔离构建目录中完成编译，并以可撤销的排版前后对比形式呈现在手稿页面上。"
+      "heroCaption": "一轮审阅：每处修改在排版前后的对比，支持 Accept、Reject 与 Comment。"
     },
     "zh-Hant": {
       "category": "工程實作",
-      "title": "為什麼原始碼 diff 不適合審閱論文：Papilot 排版級 PDF 對比的工程實作",
-      "lead": "拆解快速版面級對比背後的 Git 工作樹增量快照、熱快取並行章節編譯、SyncTeX 原地路徑重寫與可復原審閱日誌。",
-      "description": "深入解析 Papilot 如何在獨立 Git 工作樹中隔離 AI 對 LaTeX 的修改，將不可變隔離建置壓縮至秒級增量編譯，並實現細粒度內文偏移與原子級公式對比。",
+      "title": "Papilot 如何建置排版審閱",
+      "lead": "深入程式碼剖析一輪審閱流程：工作樹快照、預熱 LaTeX 建置、全文逐詞對齊、SyncTeX 裁切與決定日誌。",
+      "description": "了解 Papilot 如何將代理程式的 LaTeX 編輯轉化為排版審閱：Git 工作樹快照、latexmk 狀態重用、\\includeonly 單章建置、MuPDF 逐詞對齊、SyncTeX 裁切與 SQLite 決定日誌。",
       "hero": "/assets/blog/review.en.png",
       "heroAlt": "Papilot 產品示意圖：展示論文頁面原位的修改前後排版對比，以及接受、拒絕、留言與原始碼切換操作。",
-      "heroCaption": "AI 代理的每輪修改都在隔離建置目錄中完成編譯，並以可復原的排版前後對比形式呈現在手稿頁面上。"
+      "heroCaption": "一輪審閱：每項編輯皆並排呈現修改前後的排版結果，並提供 Accept、Reject 與 Comment 功能。"
     },
     "ja": {
       "category": "エンジニアリング",
-      "title": "なぜ論文レビューにソース diff は向かないのか：Papilot が組版済み PDF 比較をつくる仕組み",
-      "lead": "高速な PDF レベル差分の裏側にある Git ワークツリースナップショット、ウォーム状態の章単位差分ビルド、SyncTeX パスのインプレース書き換え、取り消し可能なレビュージャーナルを解説します。",
-      "description": "Papilot が AI による LaTeX 編集を Git ワークツリーで隔離し、変更された章だけを数秒で差分コンパイルし、きめ細かな本文とアトミックな数式の差分を特定して適用まで作業ファイルを守る技術的仕組みを解説します。",
+      "title": "Papilotが組版済みレビューを構築する仕組み",
+      "lead": "ワークツリーのスナップショット、ウォームなLaTeXビルド、ドキュメント全体の単語アライメント、SyncTeXによる切り抜き、採否判断ジャーナルまで、コードで辿る1回のレビューラウンド。",
+      "description": "PapilotがエージェントのLaTeX編集を組版済みレビューに変換する仕組み。Gitワークツリーのスナップショット、latexmkの状態再利用、\\includeonlyによる章ビルド、MuPDFによる単語アライメント、SyncTeXによる切り抜き、SQLiteの採否判断ジャーナルを解説します。",
       "hero": "/assets/blog/review.en.png",
       "heroAlt": "組版された変更前後の PDF 比較表示と、承認・却下・コメント・LaTeX ソース表示の操作を備えた Papilot の製品画面イメージ。",
-      "heroCaption": "AI が提案するすべての変更は隔離されたビルドディレクトリでコンパイルされ、取り消し可能な組版比較として原稿ページ上に返されます。"
+      "heroCaption": "レビューラウンドの画面。各編集の組版前後の比較に、Accept、Reject、Commentが並びます。"
     },
     "ko": {
       "category": "엔지니어링",
-      "title": "왜 소스 diff는 논문 검토에 실패하는가: Papilot이 조판된 PDF 비교를 구현하는 방법",
-      "lead": "빠른 PDF 수준 차분 비교를 뒷받침하는 Git 워크트리 스냅샷, 웜 캐시 기반 장 단위 증분 빌드, SyncTeX 경로 제자리 재작성, 그리고 실행 취소 가능한 검토 저널의 내부 구조.",
-      "description": "Papilot이 AI의 LaTeX 수정을 Git 워크트리에 격리하고, 바뀐 장만 초 단위로 증분 컴파일하며, 세밀한 본문 오프셋과 원자적 수식 차분을 귀속해 적용 전까지 원본 파일을 안전하게 지키는 엔지니어링 원리를 살펴봅니다.",
+      "title": "Papilot이 조판된 리뷰를 빌드하는 방법",
+      "lead": "코드로 따라가는 한 번의 리뷰 라운드: 워크트리 스냅샷, 웜 LaTeX 빌드, 전체 문서 단어 정렬, SyncTeX 크롭, 그리고 결정 저널.",
+      "description": "Papilot이 에이전트의 LaTeX 편집을 조판된 리뷰로 바꾸는 방법: Git 워크트리 스냅샷, latexmk 상태 재사용, \\includeonly 장 단위 빌드, MuPDF 단어 정렬, SyncTeX 크롭, SQLite 결정 저널.",
       "hero": "/assets/blog/review.en.png",
       "heroAlt": "조판된 수정 전후 PDF 비교 화면과 수락, 거절, 코멘트, LaTeX 소스 보기 동작을 보여 주는 Papilot 제품 화면 예시.",
-      "heroCaption": "AI가 제안한 모든 수정은 격리된 빌드 디렉터리에서 컴파일되어 원고 페이지 위에 실행 취소 가능한 조판 비교 형태로 표시됩니다."
+      "heroCaption": "리뷰 라운드: 각 편집의 전후 조판 결과와 Accept, Reject, Comment."
     },
     "de": {
       "category": "Technik",
-      "title": "Warum Quellcode-Diffs bei Fachartikeln versagen: Wie Papilot gesetzte PDF-Vergleiche baut",
-      "lead": "Ein Blick hinter die Kulissen schneller PDF-Diffs: Git-Worktree-Snapshots, aufgewärmte inkrementelle Kapitel-Builds, direktes Umschreiben von SyncTeX-Pfaden und ein widerrufbares Prüfjournal.",
-      "description": "Technischer Einblick, wie Papilot KI-Änderungen an LaTeX in Git-Worktrees isoliert, geänderte Kapitel in Sekunden inkrementell kompiliert, Text- und Formel-Diffs zuordnet und Arbeitsdateien bis zum Anwenden schützt.",
+      "title": "Wie Papilot ein gesetztes Review erstellt",
+      "lead": "Eine Review-Runde durch den Code: ein Worktree-Snapshot, warme LaTeX-Builds, ein wortweiser Abgleich des gesamten Dokuments, SyncTeX-Ausschnitte und ein Entscheidungsjournal.",
+      "description": "Wie Papilot die LaTeX-Änderungen eines Agenten in ein gesetztes Review verwandelt: Snapshots in Git-Worktrees, Wiederverwendung des latexmk-Zustands, Kapitel-Builds mit \\includeonly, Wortabgleich über MuPDF, SyncTeX-Ausschnitte und ein SQLite-Entscheidungsjournal.",
       "hero": "/assets/blog/review.en.png",
       "heroAlt": "Produktansicht von Papilot mit einem gesetzten Vorher-Nachher-Vergleich im PDF samt Aktionen zum Annehmen, Ablehnen, Kommentieren und Einblenden des LaTeX-Quellcodes.",
-      "heroCaption": "Jede vorgeschlagene KI-Änderung kompiliert in einem isolierten Build-Verzeichnis und kehrt als widerrufbarer gesetzter Vergleich auf die Manuskriptseite zurück."
+      "heroCaption": "Eine Review-Runde: jede Änderung vorher und nachher gesetzt, mit Accept, Reject und Comment."
     },
     "fr": {
       "category": "Ingénierie",
-      "title": "Pourquoi les diffs de code échouent sur les articles : comment Papilot construit des comparaisons PDF composées",
-      "lead": "Dans les coulisses des diffs PDF rapides : snapshots en worktrees Git, compilations incrémentales de chapitres à chaud, réécriture sur place des chemins SyncTeX et journal de révision annulable.",
-      "description": "Plongée technique dans l'isolation des modifications LaTeX par IA en worktrees Git, la compilation incrémentale en quelques secondes, l'attribution fine texte/maths et la protection des fichiers jusqu'à Appliquer.",
+      "title": "Comment Papilot construit une révision composée",
+      "lead": "Un cycle de révision à travers le code : un instantané d'arbre de travail, des compilations LaTeX à chaud, un alignement mot à mot sur tout le document, des découpes SyncTeX et un journal de décisions.",
+      "description": "Comment Papilot transforme les modifications LaTeX d'un agent en une révision composée : instantanés d'arbres de travail Git, réutilisation de l'état de latexmk, compilations par chapitre avec \\includeonly, alignement mot à mot avec MuPDF, découpes SyncTeX et journal de décisions SQLite.",
       "hero": "/assets/blog/review.en.png",
       "heroAlt": "Aperçu produit de Papilot montrant une comparaison PDF avant/après mise en page avec les actions accepter, refuser, commenter et afficher le code source LaTeX.",
-      "heroCaption": "Chaque modification proposée par l'IA est compilée dans un répertoire de build isolé et revient sous forme de comparaison mise en page annulable sur le manuscrit."
+      "heroCaption": "Un cycle de révision : chaque modification composée avant et après, avec Accept, Reject et Comment."
     },
     "es": {
       "category": "Ingeniería",
-      "title": "Por qué los diffs de código fallan en los artículos: cómo construye Papilot comparaciones maquetadas en PDF",
-      "lead": "Por dentro de los snapshots en worktrees de Git, las compilaciones incrementales de capítulos en caliente, la reescritura de rutas de SyncTeX y el registro reversible detrás de los diffs rápidos en PDF.",
-      "description": "Análisis técnico de cómo Papilot aísla las ediciones de IA sobre LaTeX en worktrees de Git, compila capítulos en segundos, atribuye diffs finos en prosa y fórmulas atómicas, y protege tu copia local hasta pulsar Aplicar.",
+      "title": "Cómo construye Papilot una revisión compuesta en LaTeX",
+      "lead": "Una ronda de revisión a través del código: instantánea del árbol de trabajo, compilaciones de LaTeX con estado precalentado, alineación de palabras en todo el documento, recortes con SyncTeX y un diario de decisiones.",
+      "description": "Cómo convierte Papilot las ediciones de LaTeX de un agente en una revisión compuesta: instantáneas en árboles de trabajo de Git, reutilización del estado de latexmk, compilación por capítulos con \\includeonly, alineación de palabras con MuPDF, recortes de SyncTeX y un diario de decisiones en SQLite.",
       "hero": "/assets/blog/review.en.png",
       "heroAlt": "Ilustración del producto Papilot que muestra una comparación maquetada del antes y el después en PDF con acciones para aceptar, rechazar, comentar y ver el código LaTeX.",
-      "heroCaption": "Cada edición propuesta por la IA se compila en un directorio aislado y regresa a la página del manuscrito como una comparación maquetada reversible."
+      "heroCaption": "Una ronda de revisión: cada edición compuesta antes y después, con opciones para Accept, Reject y Comment."
     },
     "pt": {
       "category": "Engenharia",
-      "title": "Por que diffs de código-fonte falham em artigos: como o Papilot constrói comparações diagramadas em PDF",
-      "lead": "Por dentro dos snapshots em worktrees do Git, dos builds incrementais aquecidos por capítulo, da reescrita de caminhos do SyncTeX e do diário reversível por trás dos diffs rápidos em PDF.",
-      "description": "Um mergulho técnico em como o Papilot isola edições de LaTeX por IA em worktrees do Git, compila capítulos alterados em segundos, atribui diffs finos de prosa e fórmulas atômicas e preserva seus arquivos até Aplicar.",
+      "title": "Como o Papilot constrói uma revisão diagramada",
+      "lead": "Uma rodada de revisão pelo código: snapshot em worktree, compilações LaTeX aquecidas, alinhamento de palavras no documento inteiro, recortes via SyncTeX e um diário de decisões.",
+      "description": "Como o Papilot transforma as edições de LaTeX de um agente em uma revisão diagramada: snapshots em worktrees do Git, reaproveitamento de estado do latexmk, compilações de capítulos com \\includeonly, alinhamento de palavras com MuPDF, recortes via SyncTeX e um diário de decisões em SQLite.",
       "hero": "/assets/blog/review.en.png",
       "heroAlt": "Ilustração do produto Papilot mostrando uma comparação diagramada de antes e depois em PDF com ações para aceitar, rejeitar, comentar e ver o código-fonte LaTeX.",
-      "heroCaption": "Cada edição proposta pela IA é compilada em um diretório de build isolado e retorna à página do manuscrito como uma comparação diagramada reversível."
+      "heroCaption": "Uma rodada de revisão: cada edição diagramada antes e depois, com Accept, Reject e Comment."
     },
     "it": {
       "category": "Ingegneria",
-      "title": "Perché i diff del sorgente falliscono sugli articoli: come Papilot costruisce confronti PDF impaginati",
-      "lead": "Dentro gli snapshot su worktree Git, le compilazioni incrementali a caldo dei capitoli, la riscrittura dei percorsi SyncTeX e il registro annullabile dietro i diff rapidi a livello di PDF.",
-      "description": "Approfondimento tecnico su come Papilot isola le modifiche LaTeX dell'IA in worktree Git, compila i capitoli in pochi secondi, attribuisce diff granulari e formule atomiche e lascia intatti i file fino ad Applica.",
+      "title": "Come Papilot costruisce una revisione impaginata",
+      "lead": "Un ciclo di revisione attraverso il codice: snapshot della worktree, compilazioni LaTeX a caldo, allineamento parola per parola dell'intero documento, ritagli SyncTeX e un journal delle decisioni.",
+      "description": "Come Papilot trasforma le modifiche LaTeX di un agente in una revisione impaginata: snapshot di worktree Git, riutilizzo dello stato di latexmk, compilazioni per capitolo con \\includeonly, allineamento delle parole con MuPDF, ritagli SyncTeX e un journal delle decisioni in SQLite.",
       "hero": "/assets/blog/review.en.png",
       "heroAlt": "Illustrazione del prodotto Papilot che mostra un confronto PDF impaginato prima e dopo con azioni per accettare, rifiutare, commentare e vedere il sorgente LaTeX.",
-      "heroCaption": "Ogni modifica proposta dall'IA viene compilata in una directory di build isolata e torna sulla pagina del manoscritto come confronto tipografico annullabile."
+      "heroCaption": "Un ciclo di revisione: ogni modifica impaginata prima e dopo, con Accept, Reject e Comment."
     },
     "sv": {
       "category": "Teknik",
-      "title": "Varför källkods-diffar brister på artiklar: hur Papilot bygger typsatta PDF-jämförelser",
-      "lead": "Bakom kulisserna på snabba PDF-diffar: snapshotar i Git-worktrees, varma inkrementella kapitelbyggen, omskrivning av SyncTeX-sökvägar och en ångringsbar granskningslogg.",
-      "description": "En teknisk djupdykning i hur Papilot isolerar AI-ändringar i LaTeX i Git-worktrees, kompilerar ändrade kapitel på sekunder, kopplar prosa- och matematikdiffar samt lämnar arbetsfiler orörda fram till Verkställ.",
+      "title": "Hur Papilot bygger en typsatt granskning",
+      "lead": "En granskningsomgång genom koden: en ögonblicksbild i en worktree, varma LaTeX-byggen, ordinriktning över hela dokumentet, SyncTeX-utsnitt och en beslutsjournal.",
+      "description": "Hur Papilot omvandlar en agents LaTeX-ändringar till en typsatt granskning: ögonblicksbilder i Git-worktrees, återanvändning av latexmk-tillstånd, kapitelbyggen med \\includeonly, ordinriktning med MuPDF, SyncTeX-utsnitt och en beslutsjournal i SQLite.",
       "hero": "/assets/blog/review.en.png",
       "heroAlt": "Produktillustration av Papilot som visar en typsatt PDF-jämförelse före och efter med åtgärder för att godta, avvisa, kommentera och visa LaTeX-källkod.",
-      "heroCaption": "Varje föreslagen AI-ändring kompileras i en isolerad byggkatalog och återvänder som en ångringsbar typsatt jämförelse på manuskriptsidan."
+      "heroCaption": "En granskningsomgång: varje ändring typsatt före och efter, med Accept, Reject och Comment."
     }
   }
 }

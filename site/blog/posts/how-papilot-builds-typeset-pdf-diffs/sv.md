@@ -1,50 +1,60 @@
-Be en kodagent att strama upp ett tvåsidigt bevis eller samordna notationen genom ett helt LaTeX-manuskript, så har du dess råa `git diff` inom några sekunder. Det är när du ska läsa diffen som den verkliga tidsförlusten börjar. Ett enda omdöpt makro, ett omradbrutet stycke eller ett justerat `\begin{aligned}`-block förvandlas genast till dussintals röda och gröna källkodsrader. Även om du kör `latexdiff` över hela projektet går känsliga matematikmiljöer ofta sönder, sidbrytningar förskjuts genom resten av dokumentet, och det finns fortfarande inget rent sätt att godta stycke två, avvisa ekvation fyra och skriva tillbaka enbart de valda källkodsändringarna till disk.
+Det här inlägget följer en granskningsomgång genom Papilots kod, från agentens sista filskrivning till ditt beslut på sidan. Sökvägar hänvisar till [kodförrådet](https://github.com/PapilotAI/papilot); siffrorna kommer från [docs/performance.md](https://github.com/PapilotAI/papilot/blob/main/docs/performance.md), uppmätta på en avhandling på 240 MB med XeLaTeX, BibTeX, minted och kapitel uppdelade med `\include`.
 
-För att [Papilot](https://github.com/PapilotAI/papilot) ska kunna göra den kompilerade PDF-filen till primär arbetsyta får typsatta jämförelser inte kännas som en trög batchexport i slutet av ett bygge. Varje runda av agentändringar måste hållas isolerad från din arbetskatalog, kompilera på ungefär samma tid som ett enskilt inkrementellt `latexmk`-pass, knyta varje färgmarkering exakt till rätt kommentar och spara varje beslut att godta eller avvisa i en ångringsbar granskningslogg. Så här fungerar den pipelinen under huven.
+## En worktree och en ögonblicksbild
 
-## Att isolera agentrundor i Git-worktrees och snabba trädsnapshotar
+Varje uppgift är en fristående Git-worktree som skapas från en ögonblicksbild av manuskriptet, inklusive icke-incheckade ändringar (`engine/src/core/tasks.ts`). Agenten körs med denna worktree som arbetskatalog och sandlåda.
 
-Säkerhet går före hastighet. När du markerar meningar eller ramar in ekvationer på en PDF-sida och skickar dem till Codex, Claude, Cursor eller Papilot Writer redigerar agenten aldrig manuskriptets arbetskatalog direkt. I stället körs varje uppgift i ett eget, tillfälligt Git-worktree.
+En omgång börjar med att arbetskatalogen sparas som ett Git-träd. Att hasha en hel avhandling i varje omgång vore långsamt, så ögonblicksbilden går via en privat indexfil, `papilot/snapshot-index` i arbetskatalogens Git-katalog (manuskriptet har sin egen, `.git/papilot/working-index`). Indexet utgår från föregående ögonblicksbild eller från förrådets index, så att Git bara hashar om filer vars storlek eller ändringstid har ändrats. Varje ögonblicksbild tas två gånger och jämförs, så att en fil som sparas mitt under pågående läsning inte kan ge upphov till ett träd som aldrig funnits på disk. För avhandlingen sjönk tiden för en ögonblicksbild från 2.1 s till 0.1 s.
 
-För att kunna jämföra versioner reproducerbart – och garantera att SyncTeX alltid pekar mot exakt den källkodsversion som visas på skärmen – körs varje bygge i en oföränderlig byggkatalog i stället för att skriva över författarens mapp på plats. På en omfattande avhandling skulle det snabbt bli en flaskhals att skapa en ny byggsnapshot om Git behövde hasha om hela arkivet varje gång. Papilot undviker detta genom att spara snapshotar via privata Git-snapshotindex (`.git/papilot/working-index` för manuskriptet och `papilot/snapshot-index` i varje uppgifts worktree), initierat från föregående snapshot eller arkivets befintliga index så att Git endast hashar om filer vars storlek eller ändringstid faktiskt har ändrats.
+## Att bygga båda sidor
 
-![Fyra steg i den tekniska pipelinen: snapshot i Git-worktree, förladdade inkrementella kapitelbyggen, koppling av typsatta diffar samt en ångringsbar granskningslogg.](/assets/blog/review-pipeline.sv.svg "Varje agentrunda körs i ett isolerat Git-worktree, återanvänder varm LaTeX-status för parallella kapitelbyggen, kopplar finkorniga prosa- och atomära matematikdiffar samt sparar ångringsbara beslut innan din arbetskatalog rörs.")
+Varje bygge körs i en egen mapp, nycklad efter vad som kompileras, så att SyncTeX alltid pekar på exakt rätt källkod för den PDF som visas på skärmen. Att börja varje mapp tom skulle kasta bort latexmk:s tillstånd, så en ny mapp utgår från den närmaste föregående (`engine/src/core/build.ts`):
 
-## Oföränderliga LaTeX-byggen på sekunder i stället för full omkompilering
+- **Välj en bas.** Bland de senaste 16 felfria byggena med samma kapitel, kompilatorinställningar och kompilatorversion väljs det vars träd skiljer sig från det nya i färst filer (`git diff-tree`), och det nyare vid lika antal.
+- **Klona och patcha.** Basens källfiler klonas med copy-on-write (`cp -c -R` på APFS). Filer utanför det nya trädet tas bort, filer med samma Git-objekt och storlek behålls, och resten strömmas från ett enda `git cat-file --batch`. LaTeX utdatafiler klonas med `COPYFILE_FICLONE`. Att exportera avhandlingen tar 0.76 s; att kopiera dess LaTeX-tillstånd tar 0.06 s.
+- **Behåll latexmk:s tillstånd.** `.aux`, `.bbl`, `.fdb_latexmk`, minted-cachen och övriga filer följer med (alla utom `.fls`). Sökvägarna i dem innehåller mappens 32 tecken långa cachenyckel. Varje nyckel har samma längd, så den gamla nyckeln ersätts byte för byte, vilket gör att positionerna i SyncTeX-datan förblir giltiga (`.synctex.gz` packas upp och komprimeras igen). latexmk avgör sedan vad som behöver köras, precis som i din egen mapp.
 
-Att köra `pdflatex` eller `xelatex` helt från noll på en artikel med flera kapitel eller en avhandling på 300 sidor kräver flera pass för att lösa ut källhänvisningar, korsreferenser samt cachefiler för `minted` eller TikZ. Eftersom Papilot isolerar byggen i separata kataloger skulle en naiv isolering kasta bort all inkrementell historik i `latexmk` vid varje runda.
+**Kapitelomgångar.** När huvudfilen inkluderar kapitel med `\include` och varje ändrad fil tillhör något av dem, utgörs varje sida av ett enda `\includeonly`-bygge av de ändrade kapitlen. De övriga kapitlens `.aux`-filer hämtas från ett fullständigt bygge av uppgiftens bas, så att ekvationsnummer, hänvisningar och citeringar förblir korrekta. De två sidorna kompileras samtidigt med samma `SOURCE_DATE_EPOCH` (kl. 12.00 UTC på omgångens datum, med `FORCE_SOURCE_DATE=1`), så att `\today` aldrig dyker upp som en ändring. Ett kapitelbygge av avhandlingen gick från 68.7–88.5 s (3 körningar, 2 BibTeX-körningar) till 25.8 s (1 körning).
 
-Papilot håller isolerade byggen snabba genom fyra mekanismer:
+**Innan turen är slut.** Varje fil som agenten skriver startar ett spekulativt bygge och en jämförelse som avbryts vid nästa skrivning (`engine/src/core/publish.ts`), så att omgången ofta är färdigrenderad när agenten stannar.
 
-1. **Kloning av närmaste nyss slutförda bygge.** När en ny byggmapp förbereds granskar Papilot nyligen slutförda byggen för samma kapiteluppsättning och väljer den kandidat vars Git-träd skiljer sig i lägst antal filer. På macOS med APFS klonar `cp -c` hela byggkatalogen i ett enda steg med copy-on-write och strömmar därefter endast de ändrade filobjekten från Git.
-2. **Överföring av SyncTeX och hjälpfiler på plats.** Databasen `.fdb_latexmk` från `latexmk`, `.aux`- och `.bbl`-filer samt `minted`-cacher följer med in i den klonade katalogen. Eftersom alla byggmappar använder katalognycklar av exakt samma längd kan Papilot skriva om sökvägar inuti sparade SyncTeX-data och loggfiler direkt på plats utan att bytepositioner blir ogiltiga – så att `latexmk` normalt bara behöver köra ett enda inkrementellt pass, eller inget alls när indata inte har ändrats.
-3. **Parallella kapitelbyggen med `\includeonly` vid granskning.** När en agent ändrar ett eller två kapitel i ett manuskript uppdelat på flera filer kompilerar en granskningsrunda inte om hela boken. Både basversionen och den reviderade versionen kompilerar enbart de berörda kapitlen parallellt via `\includeonly`, förladdade med `.aux`-filer från ett fullständigt basbygge så att korsreferenser, figurnummer och citeringar från orörda kapitel förblir korrekta. Båda byggena låser dessutom samma tidsstämpel så att `\today` aldrig skapar skendiffar över midnatt.
-4. **Förhandsvisning efter första passet och automatisk ren omstart.** När en ändring flyttar sidbrytningar eller citeringar och `latexmk` schemalägger ytterligare pass lyfter en pass-hook fram de nytypsatta sidorna och SyncTeX-kartan direkt efter första passet medan referensnumren färdigställs i bakgrunden. Om kvarvarande hjälpfiler någonsin skulle orsaka ett fel i genererade filer gör Papilot automatiskt ett nytt försök i en helt ren katalog.
+**En maskin, två TeX-körningar.** Förhandsgranskningen av manuskriptet, varje uppgifts omgångar och de spekulativa byggena delar på två TeX-platser över alla processer. När en mer brådskande körning väntar pausas en mindre brådskande med `SIGSTOP` och återupptas senare (`engine/src/core/pool.ts`).
 
-| Bygg- och granskningssteg | Naiv pipeline med full omkompilering | Papilots inkrementella granskningspipeline |
+**Fel.** Ett bygge vars fel pekar på kvarlämnade filer under `build/` försöks igen en gång från en ren mapp. Om det reviderade dokumentet inte går att kompilera skickas felet tillbaka till agenten som en ny tur. Om baslinjen inte går att kompilera tvingas kompileringen förbi felen; om det misslyckas visar omgången enbart källkodsändringar.
+
+![Fyra steg: ta en ögonblicksbild av uppgiften i en Git-worktree, bygg båda sidor från ett varmt LaTeX-tillstånd, jämför de typsatta dokumenten och spara varje beslut i en journal.](/assets/blog/review-pipeline.sv.svg "En omgång: ögonblicksbild, bygge, jämförelse, beslut.")
+
+## Att hitta varje ändring på sidan
+
+**Enheter i källkoden.** Diffen delar upp löptext i ord (tecken i CJK-text). Vissa konstruktioner behålls som enskilda token: kommentarer, matematik i löptext och fristående formler, klammergrupper, kommandon med sina argument samt miljöer som `equation`, `align`, `tabular`, `verbatim`, `minted` och `tikzpicture`. Ändringar som bara skiljs åt av blanksteg eller skiljetecken slås ihop, och varje resulterande ändring blir ett beslut med ett exakt intervall i källkoden. Bilder och andra binärfiler hanteras som hela filer, och ändringsblock som rör samma `.bib`-post bildar en enhet.
+
+**Var dokumenten skiljer sig åt.** En arbetarprocess extraherar texten ur båda PDF-filerna med MuPDF och riktar in de två dokumenten ord för ord (`engine/src/render/effects.ts`): unika följder om åtta ord fäster dem i varandra, den längsta stigande kedjan av sådana ankare behålls, och luckorna mellan ankarna diffas. Följder på minst 20 bokstäver och siffror som har flyttats rapporteras som förflyttningar. Genom att jämföra hela dokument hittar man ändringar på andra ställen än där redigeringen gjordes: varje användning av ett omdefinierat makro, omnumrerade ekvationer eller en ny referens i litteraturlistan.
+
+**Var varje ändring befinner sig.** SyncTeX, kompilerat till WebAssembly och indexerat en gång per bygge, mappar varje ändrings gamla rader till den gamla PDF-filen och dess nya rader till den nya, vilket ger sidutsnitt; utsnitten beskärs vid rader som båda dokumenten delar. Varje ändring klassificeras sedan som ändrad text, ändrad layout (pixeljämförelse vid 2×), flyttad, identiskt typsatt eller omappad. Ändringar som enbart gäller trycksvärta (typsnitt, färg, höjd eller sänkt text) samt vektorgrafik jämförs separat. Utsnitt som delar en tryckt rad slås samman till ett område, medan varje ändring behåller sina egna Accept och Reject. Remsorna på skärmen är vektor-SVG.
+
+En ändring som bara rör blanksteg och som typsätts identiskt kopplas till närmaste verkliga ändring i samma stycke, aldrig över en tom rad, `\par` eller en avsnittsrubrik, och förblir ett eget beslut.
+
+**Ändringar på andra ställen än redigeringen (valfritt).** När **Track indirect changes** är aktiverat spåras skillnader utanför samtliga ändringars utsnitt till sin orsak genom att varianter kompileras: först ändringar utan egen synlig effekt, såsom en makrodefinition, och därefter halvor av ändringsmängden. Unionen av orsaker verifieras, upp till tre ställen ritas ut under varje ändring och resten laddas vid behov.
+
+## Beslut som en journal
+
+Ett beslut skriver aldrig direkt i din mapp. Varje beslut sparas i en SQLite-journal med förväntade och nya byte för varje skrivning, kontrolleras mot disk och rullas tillbaka om något steg misslyckas (`engine/src/core/review.ts`):
+
+- **Accept** sparar ändringen i en privat commit, `refs/papilot/<task>/accepted`.
+- **Reject** återställer ändringen i arbetskatalogen med en trevägssammanslagning, så att stycken som redigerats sedan dess lämnas orörda. Medan agenten arbetar väntar avvisningar tills dess tur är slut.
+- **Undo** ångrar det senaste beslutet.
+- **Apply** slår samman de accepterade ändringarna med dina arbetsfiler, även det med en trevägssammanslagning. **Commit** skriver enbart uppgiftens ändringar till `HEAD` med `git commit-tree` medan `index.lock` hålls, efter att ha kontrollerat att grenen inte har flyttats, och behåller allt annat som du hade köat i indexet.
+
+Om manuskriptet under tiden har ändrats i samma stycken skrivs ingenting över: förslaget rebaseras mot det aktuella manuskriptet och kommer tillbaka som en ny granskning i samma uppgift.
+
+## Vad isoleringen kostar
+
+Jämfört med `latexmk` kört i en kopia av samma mapp:
+
+| Ändring | `latexmk` i mappen | Papilot |
 | --- | --- | --- |
-| Isolering av arbetsyta | Ändrar arbetsmappen direkt eller kopierar varje fil från grunden | Uppgiftsbundet Git-worktree + privata snapshotindex (`working-index` / `snapshot-index`), klonade med `cp -c` på APFS |
-| Granskningsbygge för flera kapitel | Fullständig omkompilering i flera pass av hela dokumentet före och efter | Parallella `\includeonly`-byggen förladdade med basbyggets hjälpfiler och låst datum |
-| SyncTeX och hjälpstatus | Byggs upp från noll i varje isolerad katalog | Lika långa byggnycklar medger omskrivning av SyncTeX-sökvägar på plats och återanvändning av `latexmk`-status |
-| Väntetid på skärmen vid flera pass | Väntar tills alla BibTeX- och korsreferenspass är helt klara | Visar uppdaterade PDF-sidor direkt efter pass ett medan återstående pass fastställer numreringen |
+| Redigera ett kapitel | 69.2 s, 1 pass | 71.2 s, 1 pass |
+| Redigera en fil som TeX inte läser | 0.2 s, inget att göra | 1.9 s, ingen TeX-körning |
+| Öppna artikeln | 0.2 s, inget att göra | 71.3 s, 1 pass |
 
-## Finkornig prosakoppling och atomära matematikjämförelser
-
-När bas-PDF och reviderad PDF väl är kompilerade räcker det ändå inte att ställa två hela sidor bredvid varandra: en författare vill ta ställning till varje logisk ändring precis där den befinner sig på sidan, utan att förlora det typografiska sammanhanget.
-
-Papilot skiljer mellan **det som kan delas upp** och **det som måste förbli helt**:
-
-- **Finkorniga positioner i brödtext.** I vanliga textstycken kopplas varje ändring till exakta teckenpositioner i `.tex`-källkoden och separat tilldelade markeringar på den renderade PDF-sidan. Osynliga justeringar av blanksteg eller radbrytningar i `.tex`-filen grupperas automatiskt med närmaste innehållsliga ändring i samma stycke, så att författaren aldrig behöver klicka sig igenom rent formateringsbrus.
-- **Atomära TeX-konstruktioner.** Fristående ekvationer, tabeller, figurer och referensposter förblir odelbara enheter, och överlappande PDF-områden slås samman till ett enda sammanhängande jämförelseblock med omgivande rader på plats – vilket bevarar faktiska radbrytningar, kerning och matematiska avstånd.
-
-![Papilots gränssnitt med en inramad ekvation och en markerad mening på den kompilerade PDF-sidan, var och en försedd med en författarkommentar redo för agenten.](/assets/blog/notes.en.png "PDF-kommentarer länkar specifika citat och ekvationsområden till positioner i källkoden så att granskningen kan fokusera på en kommentar i taget.")
-
-När du bifogar PDF-kommentarer till en uppgift kan Papilot dessutom be den anslutna agenten att i samma runda ta fram kortfattade **alternativ per kommentar** vid sidan av huvudförslaget. Innan granskningen öppnas validerar Papilot varje alternativ patch mot de exakta källkodsintervallen för respektive kommentar och förkompilerar förhandsvisningar isolerat. Klickar du på en kommentar framhävs endast dess markeringar på sidan, och du kan växla direkt mellan förberedda formuleringar – eller visa exakt `.tex`-diff – ur den lokala cachen, med **noll extra LLM-anrop** under granskningen.
-
-## En ångringsbar granskningslogg innan någonting når `main`
-
-I källkodscentrerade redigerare skriver ett klick på "Behåll" i en AI-chattpanel omedelbart över dina arbetsfiler. I Papilot är granskning och leverans medvetet åtskilda.
-
-När du godtar en ändring – eller väljer ett alternativ för en enskild kommentar – skrivs beslutet till en ångringsbar granskningslogg inuti uppgiften. Avvisar du en kommentar återställs dess ursprungliga `.tex`-källkodsintervall omedelbart medan fristående ändringar och beslut lämnas orörda. Först när du har granskat klart väljer du om de godkända ändringarna ska skrivas till din arbetskatalog utan commit via **Verkställ** (och, om projektet är kopplat, synkroniseras på ungefär en sekund till medförfattare på Overleaf) eller checkas in direkt på manuskriptets aktuella gren med enbart uppgiftens godkända ändringar.
-
-Du kan prova typsatta jämförelser per kommentar, förberedda uppgiftsuppspelningar och lokal Git-hantering direkt i webbläsaren med vår [statiska onlinedemo](/demo/). Hela granskningsmotorn, kompilatorpipelinen och skrivbordsapplikationen är öppen källkod under MIT-licensen – utforska koden, öppna ett ärende eller [ge Papilot en stjärna på GitHub](https://github.com/PapilotAI/papilot).
+Från en agents redigering till en färdig omgång tog det 23.1–47.2 s. När nästa manuskriptbygge förutsågs under en 150 s lång granskning var PDF-filen klar 0.8 s efter commit.

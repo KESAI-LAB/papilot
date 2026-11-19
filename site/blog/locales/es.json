@@ -111,7 +111,7 @@
     ],
     "workflowsSync": "Sincronización Overleaf (~1 s) web y PDF",
     "pipelineTitle": "Pipeline incremental de revisión",
-    "pipelineDesc": "Papilot aísla cambios en un worktree Git, compila capítulos en paralelo y guarda decisiones reversibles antes de aplicar.",
+    "pipelineDesc": "Cómo toma Papilot una instantánea de una tarea en un árbol de trabajo de Git, compila ambas versiones desde un estado de LaTeX precalentado, compara los documentos compuestos y registra cada decisión.",
     "pipelineSteps": [
       [
         "Worktree Git",
@@ -121,7 +121,7 @@
       [
         "Build semilla",
         "Clonar y compilar",
-        "Capítulos en paralelo."
+        "Estado precalentado, ambos lados a la vez."
       ],
       [
         "Motor diff",

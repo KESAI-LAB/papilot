@@ -111,7 +111,7 @@
     ],
     "workflowsSync": "Live-Sync mit Overleaf (~1 s) im Team",
     "pipelineTitle": "Inkrementelle PDF-Diff-Pipeline",
-    "pipelineDesc": "Papilot isoliert KI-Edits im Git-Worktree, kompiliert geänderte Kapitel parallel und speichert widerrufbare Entscheidungen.",
+    "pipelineDesc": "Wie Papilot in einem Git-Worktree einen Snapshot einer Aufgabe erstellt, beide Versionen aus einem warmen LaTeX-Zustand kompiliert, die gesetzten Dokumente vergleicht und jede Entscheidung protokolliert.",
     "pipelineSteps": [
       [
         "Git-Worktree",
@@ -121,7 +121,7 @@
       [
         "Seed-Build",
         "Klonen & bauen",
-        "Kapitel parallel bauen."
+        "Warmer Zustand, beide Seiten zugleich."
       ],
       [
         "Diff-Engine",

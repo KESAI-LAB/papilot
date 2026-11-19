@@ -1,50 +1,60 @@
-Peça a um agente de programação para enxugar uma demonstração de duas páginas ou padronizar a notação ao longo de um manuscrito em LaTeX, e o `git diff` bruto chegará em segundos. Ler esse diff é onde começa o verdadeiro atraso. Uma única macro renomeada, um parágrafo com novas quebras de linha ou um bloco `\begin{aligned}` ajustado se transformam em dezenas de linhas de código-fonte em vermelho e verde. Mesmo que você rode `latexdiff` no projeto inteiro, ambientes matemáticos destacados mais frágeis costumam quebrar, as quebras de página se deslocam adiante e ainda não resta uma maneira limpa de aceitar o segundo parágrafo, rejeitar a quarta equação e gravar no disco apenas as edições de código-fonte que você escolheu.
+Este artigo acompanha uma rodada de revisão pelo código do Papilot, desde a última gravação de arquivo feita pelo agente até a sua decisão na página. Os caminhos referem-se ao [repositório](https://github.com/PapilotAI/papilot); os números vêm de [docs/performance.md](https://github.com/PapilotAI/papilot/blob/main/docs/performance.md), medidos em uma tese de 240 MB com XeLaTeX, BibTeX, minted e capítulos divididos com `\include`.
 
-Para que o [Papilot](https://github.com/PapilotAI/papilot) torne o PDF compilado o espaço de trabalho principal, comparações diagramadas não podem parecer uma exportação lenta em lote no fim de uma compilação. Cada rodada de edições do agente precisa permanecer isolada da sua árvore de trabalho, compilar aproximadamente no tempo de uma única passada incremental do `latexmk`, atribuir os destaques com precisão a cada nota individual e registrar cada decisão de aceitar ou rejeitar em um diário de revisão reversível. Veja a seguir como esse pipeline funciona nos bastidores.
+## Uma worktree e um snapshot
 
-## Isolando cada turno do agente em worktrees do Git e snapshots rápidos da árvore
+Cada tarefa é uma worktree destacada do Git criada a partir de um snapshot do manuscrito, incluindo edições não confirmadas (`engine/src/core/tasks.ts`). O agente executa tendo essa worktree como seu diretório de trabalho e sandbox.
 
-Segurança vem antes de velocidade. Quando você destaca frases ou contorna equações em uma página do PDF e as envia para Codex, Claude, Cursor ou Papilot Writer, o agente nunca edita diretamente o diretório de trabalho do seu manuscrito. Em vez disso, cada tarefa roda dentro do seu próprio worktree descartável do Git.
+Uma rodada começa registrando a worktree como uma árvore do Git. Calcular o hash de uma tese a cada rodada seria lento, então o snapshot passa por um arquivo de índice privado, `papilot/snapshot-index` no diretório Git da worktree (o manuscrito tem o seu próprio, `.git/papilot/working-index`). O índice é inicializado a partir do snapshot anterior ou do índice do repositório, de modo que o Git recalcula o hash apenas dos arquivos cujo tamanho ou data de modificação mudaram. Cada snapshot é tirado duas vezes e comparado, para que um arquivo salvo pela metade não possa produzir uma árvore que nunca existiu no disco. Na tese, um snapshot passou de 2.1 s para 0.1 s.
 
-Para comparar revisões de forma reprodutível — e garantir que o SyncTeX aponte sempre para a versão exata do código-fonte exibida na tela —, cada build roda em um diretório de compilação imutável em vez de alterar no próprio lugar a pasta do autor. Criar um novo snapshot de build em uma tese extensa poderia facilmente virar um gargalo se o Git calculasse o hash do repositório inteiro a cada vez. O Papilot evita isso gravando snapshots por meio de índices privados do Git (`.git/papilot/working-index` para o manuscrito e `papilot/snapshot-index` no worktree de cada tarefa), inicializado a partir do snapshot anterior ou do índice do repositório para que o Git recalcule o hash apenas dos arquivos cujo tamanho ou horário de modificação realmente mudaram.
+## Compilando os dois lados
 
-![Diagrama do pipeline de engenharia em quatro etapas: snapshot em worktree do Git, builds incrementais de capítulos com estado-semente, atribuição de diffs diagramados e diário de revisão reversível.](/assets/blog/review-pipeline.pt.svg "Cada turno do agente roda em um worktree do Git isolado, reaproveita o estado aquecido do LaTeX em builds paralelos de capítulos, atribui diffs finos de prosa e atômicos de matemática e registra decisões reversíveis antes de tocar na sua árvore de trabalho.")
+Cada compilação roda em sua própria pasta, identificada pelo que compila, para que o SyncTeX sempre aponte para o código-fonte exato do PDF na tela. Começar cada pasta vazia descartaria o estado do latexmk, então uma nova pasta começa a partir da anterior mais próxima (`engine/src/core/build.ts`):
 
-## Fazendo builds imutáveis de LaTeX custarem segundos, não uma recompilação do zero
+- **Escolher uma base.** Entre as últimas 16 compilações sem erros com os mesmos capítulos, configurações e versão do compilador, escolhe-se aquela cuja árvore difere da nova no menor número de arquivos (`git diff-tree`), ou a mais recente em caso de empate.
+- **Clonar e aplicar as alterações.** Os arquivos-fonte da base são clonados com copy-on-write (`cp -c -R` no APFS). Arquivos fora da nova árvore são removidos, arquivos com o mesmo objeto Git e tamanho são mantidos, e o restante é transmitido a partir de um único `git cat-file --batch`. Os arquivos de saída do LaTeX são clonados com `COPYFILE_FICLONE`. Exportar a tese leva 0.76 s; copiar seu estado do LaTeX, 0.06 s.
+- **Manter o estado do latexmk.** `.aux`, `.bbl`, `.fdb_latexmk`, o cache do minted e o restante são reaproveitados (todos, exceto `.fls`). Os caminhos dentro deles contêm a chave de cache de 32 caracteres da pasta. Como toda chave tem o mesmo comprimento, a chave antiga é substituída byte a byte, o que mantém válidos os deslocamentos nos dados do SyncTeX (`.synctex.gz` é descompactado e compactado novamente). O latexmk decide então o que executar, como faria na sua pasta.
 
-Rodar `pdflatex` ou `xelatex` do zero em um artigo com vários capítulos ou em uma tese de 300 páginas exige múltiplas passadas para resolver citações, referências cruzadas e caches do `minted` ou do TikZ. Como o Papilot isola os builds em diretórios separados, um isolamento ingênuo jogaria fora todo o estado incremental do `latexmk` a cada turno.
+**Rodadas por capítulo.** Quando o arquivo principal inclui capítulos com `\include` e todos os arquivos alterados pertencem a um deles, cada lado é uma única compilação `\includeonly` dos capítulos alterados. Os arquivos `.aux` dos outros capítulos vêm de uma compilação completa da base da tarefa, para que a numeração de equações, as referências e as citações permaneçam corretas. Os dois lados compilam ao mesmo tempo, com o mesmo `SOURCE_DATE_EPOCH` (meio-dia UTC da data da rodada, com `FORCE_SOURCE_DATE=1`), para que `\today` nunca apareça como uma alteração. A compilação de um capítulo da tese passou de 68.7–88.5 s (3 passagens, 2 execuções do BibTeX) para 25.8 s (1 passagem).
 
-O Papilot mantém os builds isolados rápidos por meio de quatro mecanismos:
+**Antes do turno terminar.** Cada arquivo que o agente grava inicia uma compilação e uma comparação especulativas, canceladas pela próxima gravação (`engine/src/core/publish.ts`), de modo que a rodada geralmente já está renderizada quando o agente termina.
 
-1. **Clonagem do build recente mais próximo.** Ao preparar uma nova pasta de compilação, o Papilot inspeciona os builds concluídos recentemente para o mesmo conjunto de capítulos e escolhe o candidato cuja árvore Git difere no menor número de arquivos. No macOS com APFS, o copy-on-write de `cp -c` clona todo o diretório de build em um único passo e em seguida transfere do Git apenas os blobs alterados.
-2. **Reaproveitamento de estado auxiliar e reescrita in-place do SyncTeX.** O banco `.fdb_latexmk` do `latexmk`, os arquivos `.aux` e `.bbl` e os caches do `minted` seguem junto para o diretório clonado. Como as pastas de build usam chaves de diretório de mesmo comprimento, o Papilot reescreve no próprio lugar os caminhos dentro dos logs e dados preservados do SyncTeX sem invalidar deslocamentos de bytes — de modo que o `latexmk` normalmente executa apenas uma única passada incremental, ou nada quando as entradas não mudaram.
-3. **Builds paralelos de capítulos com `\includeonly` nas revisões.** Quando um agente edita um ou dois capítulos de um manuscrito dividido em vários arquivos, uma rodada de revisão não recompila o livro inteiro. Tanto a versão de base quanto a revisada compilam em paralelo apenas os capítulos tocados via `\includeonly`, alimentados pelos arquivos `.aux` de um build base completo para que referências cruzadas, numeração de figuras e citações dos capítulos intocados permaneçam exatas. Ambos os builds também fixam um mesmo carimbo de tempo para que `\today` nunca crie diffs fantasmas na virada da meia-noite.
-4. **Prévias logo na primeira passada e fallback limpo automático.** Quando uma edição altera a paginação ou as citações e o `latexmk` agenda passadas adicionais, um hook exibe as páginas recém-diagramadas e o mapa do SyncTeX logo após a primeira passada, enquanto os números de referência terminam de estabilizar em segundo plano. Se algum estado auxiliar herdado causar erro nos arquivos gerados, o Papilot tenta novamente de forma automática uma vez a partir de um diretório limpo.
+**Uma máquina, duas execuções do TeX.** A pré-visualização do manuscrito, as rodadas de cada tarefa e as compilações especulativas compartilham duas vagas do TeX entre todos os processos. Quando uma execução mais urgente aguarda, uma menos urgente é pausada com `SIGSTOP` e retomada depois (`engine/src/core/pool.ts`).
 
-| Etapa de build e revisão | Pipeline ingênuo de build limpo | Pipeline incremental de revisão do Papilot |
+**Falhas.** Uma compilação cujos erros apontam para arquivos remanescentes sob `build/` é tentada novamente uma vez a partir de uma pasta limpa. Se o documento revisado não compilar, o erro volta para o agente como um novo turno. Se a versão de base não compilar, ela é compilada ignorando os erros; se isso falhar, a rodada mostra apenas as alterações no código-fonte.
+
+![Quatro etapas: registrar o snapshot da tarefa em uma worktree do Git, compilar os dois lados a partir de um estado aquecido do LaTeX, comparar os documentos diagramados e registrar cada decisão em um diário.](/assets/blog/review-pipeline.pt.svg "Uma rodada: snapshot, compilação, comparação, decisão.")
+
+## Encontrando cada alteração na página
+
+**Unidades no código-fonte.** O diff divide o texto em palavras (caracteres em texto CJK). Algumas construções permanecem como tokens únicos: comentários, expressões matemáticas em linha e destacadas, grupos entre chaves, comandos com seus argumentos e ambientes como `equation`, `align`, `tabular`, `verbatim`, `minted` e `tikzpicture`. Edições separadas apenas por espaços ou pontuação são unidas, e cada edição resultante é uma decisão com um intervalo exato no código-fonte. Imagens e outros arquivos binários são unidades de arquivo inteiro, e trechos alterados que tocam a mesma entrada `.bib` formam uma única unidade.
+
+**Onde os documentos diferem.** Um processo worker extrai o texto de ambos os PDFs com o MuPDF e alinha os dois documentos palavra por palavra (`engine/src/render/effects.ts`): sequências únicas de oito palavras funcionam como âncoras entre eles, a maior cadeia crescente dessas âncoras é mantida e as lacunas entre elas são comparadas. Sequências de pelo menos 20 letras e dígitos que mudaram de lugar são reportadas como trechos movidos. Comparar documentos inteiros é o que encontra alterações distantes da edição: cada uso de uma macro redefinida, equações renumeradas, uma nova entrada na bibliografia.
+
+**Onde está cada edição.** O SyncTeX, compilado para WebAssembly e indexado uma vez por compilação, mapeia as linhas antigas de cada edição no PDF antigo e as novas linhas no PDF novo, gerando recortes de página; os recortes são feitos em linhas compartilhadas pelos dois documentos. Cada edição é então classificada como texto alterado, layout alterado (comparação de pixels em 2×), movida, diagramada de forma idêntica ou não mapeada. Alterações apenas de tinta (fonte, cor, texto elevado ou rebaixado) e desenhos vetoriais são comparados separadamente. Recortes que compartilham uma linha impressa fundem-se em uma única região, enquanto cada edição mantém seus próprios botões Accept e Reject. As faixas na tela são em SVG vetorial.
+
+Uma edição apenas de espaços em branco que seja diagramada de forma idêntica é anexada à edição real mais próxima no mesmo parágrafo, nunca atravessando uma linha em branco, `\par` ou um título de seção, e continua sendo uma decisão própria.
+
+**Alterações distantes da edição (opcional).** Com **Track indirect changes** ativado, diferenças fora do recorte de todas as edições são rastreadas até a sua causa compilando variantes: primeiro as edições sem efeito visível próprio, como uma definição de macro, e depois metades do conjunto de edições. A união das causas é verificada, até três locais são exibidos sob cada edição e o restante é carregado sob demanda.
+
+## Decisões como um diário
+
+Uma decisão nunca grava diretamente na sua pasta. Cada uma é registrada em um diário SQLite com os bytes esperados e os bytes finais de cada gravação, verificados contra o disco e revertidos se qualquer etapa falhar (`engine/src/core/review.ts`):
+
+- **Accept** registra a alteração em um commit privado, `refs/papilot/<task>/accepted`.
+- **Reject** reverte a alteração na worktree com um merge de três vias, para que trechos editados desde então não sejam afetados. Enquanto o agente está trabalhando, as rejeições aguardam até o fim do turno.
+- **Undo** desfaz a decisão mais recente.
+- **Apply** mescla as alterações aceitas nos seus arquivos de trabalho, novamente em três vias. **Commit** grava apenas as alterações da tarefa em `HEAD` com `git commit-tree` enquanto mantém `index.lock`, após verificar que o branch não avançou, e preserva qualquer outra alteração que você já tivesse preparado no stage.
+
+Se o manuscrito tiver mudado nos mesmos trechos enquanto isso, nada é sobrescrito: a proposta passa por rebase sobre o manuscrito atual e retorna como uma nova revisão na mesma tarefa.
+
+## O custo do isolamento
+
+Comparado ao `latexmk` executado em uma cópia da mesma pasta:
+
+| Alteração | `latexmk` na pasta | Papilot |
 | --- | --- | --- |
-| Isolamento do espaço de trabalho | Altera a pasta de trabalho ou copia todos os arquivos do zero | Worktree do Git por tarefa + índices privados de snapshot (`working-index` / `snapshot-index`), clonados via `cp -c` no APFS |
-| Compilação de revisão em múltiplos capítulos | Recompilação completa em várias passadas antes e depois | Builds paralelos com `\includeonly` alimentados pelos arquivos auxiliares do build base, com data fixada |
-| SyncTeX e estado auxiliar | Reconstruídos do zero em cada diretório isolado | Chaves de build de igual comprimento permitem reescrever caminhos do SyncTeX in-place e reusar o estado do `latexmk` |
-| Latência de múltiplas passadas na tela | Aguarda todas as passadas do BibTeX e de referências cruzadas terminarem | Exibe as páginas atualizadas do PDF logo após a primeira passada enquanto as demais consolidam a numeração |
+| Editar um capítulo | 69.2 s, 1 passagem | 71.2 s, 1 passagem |
+| Editar um arquivo que o TeX não lê | 0.2 s, nada a fazer | 1.9 s, sem execução do TeX |
+| Abrir o artigo | 0.2 s, nada a fazer | 71.3 s, 1 passagem |
 
-## Atribuição fina na prosa e comparações atômicas em matemática
-
-Depois que o PDF de base e o revisado estão compilados, renderizar duas páginas inteiras lado a lado ainda não basta: o autor quer decidir sobre cada mudança lógica exatamente onde ela aparece na página, sem perder o contexto tipográfico.
-
-O Papilot separa **o que pode ser dividido** do **que precisa permanecer inteiro**:
-
-- **Deslocamentos finos na prosa.** Dentro de parágrafos comuns, cada edição corresponde a deslocamentos exatos de caracteres no código-fonte `.tex` e a marcações de destaque atribuídas individualmente no PDF renderizado. Ajustes invisíveis de espaços em branco ou quebras de linha no arquivo `.tex` são agrupados automaticamente com a edição substantiva mais próxima no mesmo parágrafo, para que o autor nunca precise clicar em ruído de formatação.
-- **Construções TeX atômicas.** Equações destacadas, tabelas, figuras e entradas bibliográficas permanecem como unidades atômicas, e regiões sobrepostas do PDF se fundem em um único bloco coerente de comparação que mantém as linhas vizinhas no lugar — preservando quebras de linha reais, kerning e espaçamento matemático.
-
-![Interface do Papilot mostrando uma equação contornada por um quadro e uma frase destacada no PDF compilado, cada uma com uma nota do autor pronta para o agente.](/assets/blog/notes.en.png "As notas no PDF conectam citações específicas e regiões de equações a deslocamentos no código-fonte, permitindo focar a revisão em uma nota por vez.")
-
-Quando você anexa notas no PDF a uma tarefa, o Papilot também pode pedir ao agente conectado que prepare **alternativas concisas por nota** ao lado da proposta principal no mesmo turno. Antes de abrir a revisão, o Papilot valida cada patch alternativo contra os intervalos exatos de código-fonte vinculados àquela nota e compila prévias candidatas isoladamente. Clicar em uma nota destaca na página apenas as marcações daquela nota e permite alternar entre as redações preparadas — ou exibir o diff `.tex` exato — direto do cache local, com **zero chamadas adicionais ao LLM** durante a revisão.
-
-## Um diário de revisão reversível antes que qualquer mudança toque a `main`
-
-Em editores centrados no código-fonte, clicar em "Manter" em um painel de chat da IA altera imediatamente seus arquivos de trabalho. No Papilot, revisar e entregar são deliberadamente desacoplados.
-
-Aceitar uma alteração — ou escolher uma alternativa para uma única nota — grava em um diário de revisão reversível dentro da tarefa. Rejeitar uma nota restaura na hora seus intervalos originais no código `.tex`, mantendo intactas as edições e decisões não relacionadas. Só ao concluir a revisão você escolhe se deseja **Aplicar** as alterações aprovadas ao diretório de trabalho sem criar commit (e, se estiver vinculado, sincronizá-las em cerca de um segundo com os coautores no Overleaf) ou **Confirmar** apenas as edições aceitas dessa tarefa diretamente no branch atual do manuscrito.
-
-Você pode testar comparações diagramadas por nota, replays de tarefas preparadas e o staging local no Git direto pelo navegador na [demonstração estática online](/demo/). Todo o motor de revisão, o pipeline de compilação e o aplicativo desktop têm código aberto sob licença MIT — explore o código, abra uma issue ou [dê uma estrela ao Papilot no GitHub](https://github.com/PapilotAI/papilot).
+Da edição de um agente até uma rodada pronta levaram-se 23.1–47.2 s. Com a próxima compilação do manuscrito prevista durante uma revisão de 150 s, o PDF ficou pronto 0.8 s após o commit.
