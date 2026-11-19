@@ -49,6 +49,17 @@ async function fixture(latexInstallation: AppOptions['latexInstallation'] = asyn
 
 }
 
+test('task restart forwards destination permissions and model settings', async () => {
+  const f = await fixture(), choices: any[] = [];
+  f.workspace.restartTask = async (_task, choice) => { choices.push(choice); return f.store.task('thesis-task'); };
+  try {
+    const choice = { id: 'replacement-task-id', agent: 'claude', model: 'opus', effort: 'high', permissions: 'full', stop: true };
+    const response = await f.local.inject({ method: 'POST', url: '/api/tasks/thesis-task/restart', headers: f.as, payload: choice });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.deepEqual(choices, [{ ...choice, serviceTier: undefined, draftAttachments: [] }]);
+  } finally { await f.close(); }
+});
+
 test('commit-message endpoints validate and forward the requested language', async () => {
   const f = await fixture(), choices: any[] = [];
   f.workspace.commitMessage = async (_project, _paths, choice) => { choices.push(choice); return { message: 'Clarify the introduction', agent: 'codex' }; };
@@ -360,6 +371,76 @@ test('recompilation persists confirmed note positions without losing edits, dele
     assert.ok(f.store.annotation('thesis', 'deleted').deletedAt);
     assert.equal(f.store.annotation('thesis', 'sent').key, 'old');
   } finally { await f.close(); }
+});
+
+test('manuscript keeps sent notes as read-only in-flight marks until their task finishes', async () => {
+  const f = await fixture();
+  const note: Annotation = { id: 'in-flight', taskId: 'thesis-task', projectId: 'thesis', key: 'pdf', page: 0, rect: [0.1, 0.2, 0.5, 0.3], quote: 'Marked text', comment: 'Clarify this.', source: null, createdAt: 1 };
+  f.store.saveAnnotation(note);
+  f.manuscripts.state = async () => ({ git: { branch: 'main', upstream: null, ahead: 0, behind: 0, files: [], head: null }, build: { key: 'pdf', status: 'ready', current: true } });
+  f.manuscripts.reanchor = async (_id, _root, notes) => notes;
+  const poll = async () => {
+    const response = await f.local.inject({ url: '/api/projects/thesis/manuscript', headers: LOCAL });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.deepEqual(response.json().annotations, [], 'sent notes never become selectable drafts');
+    return response.json().inFlightMarks;
+  };
+  try {
+    for (const status of ['preparing', 'queued', 'running', 'waiting_input', 'building', 'reviewing', 'interrupted', 'failed', 'uncertain'] as const) {
+      f.store.updateTask('thesis-task', { status });
+      assert.deepEqual(await poll(), [{ note, taskId: 'thesis-task', title: 'thesis-task', status }]);
+    }
+    f.store.updateTask('thesis-task', { status: 'building', review: { state: 'reviewing', round: 1, counts: { pending: 1 }, ready: 1 } });
+    assert.equal((await poll())[0].ready, true, 'a usable review stays ready while optional previews build');
+    // Archiving organizes the sidebar without cancelling unfinished work.
+    f.store.updateTask('thesis-task', { archivedAt: 1 });
+    assert.equal((await poll()).length, 1);
+    for (const mode of ['workspace', 'commit'] as const) {
+      f.store.updateTask('thesis-task', { status: 'reviewing', delivery: { mode, accepted: 'saved' }, review: { state: 'done', round: 1, counts: { pending: 0 }, files: [], comments: 0, unsent: 0 } });
+      assert.deepEqual(await poll(), [], mode);
+    }
+    f.store.updateTask('thesis-task', { status: 'running' });
+    assert.equal((await poll()).length, 1, 'a resumed task is in flight again');
+    f.store.updateTask('thesis-task', { status: 'deleting' });
+    assert.deepEqual(await poll(), []);
+    f.store.saveAnnotation({ ...note, taskId: 'missing' });
+    assert.deepEqual(await poll(), []);
+    f.store.saveAnnotation({ ...note, taskId: 'grant-task' });
+    assert.deepEqual(await poll(), [], 'never expose another project task');
+    f.store.updateTask('thesis-task', { status: 'running' });
+    f.store.saveAnnotation({ ...note, aiReview: { taskId: 'thesis-task', agent: 'codex' } });
+    assert.deepEqual(await poll(), [], 'task-only AI suggestions stay in their review');
+  } finally { await f.close(); }
+});
+
+test('in-flight placements follow the current document without changing task snapshots or reviving delivered tasks', async () => {
+  const f = await fixture(), root = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-flight-'));
+  fs.writeFileSync(path.join(root, 'main.tex'), '\\documentclass{article}\n\\begin{document}Text\\end{document}');
+  fs.writeFileSync(path.join(root, 'supplement.tex'), '\\documentclass{article}\n\\begin{document}Text\\end{document}');
+  f.store.saveProject({ ...f.store.project('thesis'), path: root });
+  f.store.updateTask('thesis-task', { status: 'running' });
+  const note: Annotation = { id: 'moving-note', taskId: 'thesis-task', projectId: 'thesis', document: 'main.tex', key: 'old', page: 0, rect: [0.1, 0.2, 0.5, 0.3], quote: 'Marked text', comment: 'Clarify this.', source: { file: 'main.tex', lines: [2, 2] }, createdAt: 1 };
+  f.store.saveAnnotation(note);
+  f.store.saveAnnotation({ ...note, id: 'other-document', document: 'supplement.tex' });
+  f.store.saveAnnotation({ ...note, id: 'unresolved', quote: '' });
+  f.manuscripts.document = async () => 'main.tex';
+  f.manuscripts.state = async () => ({ git: { branch: 'main', upstream: null, ahead: 0, behind: 0, files: [], head: null }, build: { key: 'new', document: 'main.tex', status: 'ready', current: true } });
+  let finish = false;
+  f.manuscripts.reanchor = async (_id, _root, notes) => {
+    if (finish && notes.some(note => note.taskId)) f.store.deleteTask('thesis-task');
+    return notes.map(note => note.id === 'unresolved' ? note : { ...note, key: 'new', page: 2, rect: [0.2, 0.3, 0.6, 0.4] });
+  };
+  const poll = () => f.local.inject({ url: '/api/projects/thesis/manuscript', headers: LOCAL });
+  try {
+    const response = await poll();
+    assert.equal(response.statusCode, 200, response.body);
+    assert.deepEqual(response.json().inFlightMarks.map((mark: any) => [mark.note.id, mark.note.key, mark.note.page]), [['moving-note', 'new', 2], ['unresolved', 'old', 0]]);
+    assert.deepEqual(f.store.annotation('thesis', note.id), note, 'task source snapshot and original coordinates stay immutable');
+    finish = true;
+    const deleted = await poll();
+    assert.equal(deleted.statusCode, 200, deleted.body);
+    assert.deepEqual(deleted.json().inFlightMarks, []);
+  } finally { await f.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });
 
 test('updates require a valid CSRF token and the advertised version', async () => {

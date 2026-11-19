@@ -7,6 +7,8 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 ### Added
 
 - Let ordinary agent tasks search and read small portions of the manuscript PDF and save annotations as they work. Comments can come from files or conversation; no import mode or manuscript rewrite is required. Annotations use real PDF anchors, persist across interrupted turns, and support idempotent creation and revision-checked updates, deletion and restoration.
+- Keep sent PDF notes visible on the manuscript as translucent dashed marks while their task is unfinished. Status dots distinguish running and ready tasks; click a mark to open its review. Marks disappear after completion or delivery to the manuscript.
+- Peek at internal PDF references with a 400 ms hover, Alt-click (Option-click on macOS), or keyboard focus. Equations, tables, figures and bibliography entries preview in place without changing your reading position; ordinary clicks still navigate.
 
 - Choose the language of generated commit messages in **Settings → Git**, independently of the interface language. **Auto** keeps following recent commits; an explicit language applies to Git, staged commits and task commits.
 - Add the opt-in **Typeless voice notes** experiment in the macOS desktop app. New PDF notes send the configured Typeless dictation shortcut; a microphone button sends it again while keeping the draft focused. Brief icon feedback confirms shortcut delivery; only errors add visible text. The experiment does not report recording state and requires waiting for transcription before leaving a note. See [setup and limitations](docs/typeless.md). ([#231](https://github.com/PapilotAI/papilot/issues/231))
@@ -22,6 +24,8 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 ### Fixed
 
 - Stop automatically opening inline LaTeX source-diff cards in PDF review when a change has no visible PDF difference, lacks a PDF preview, or fails to produce a comparison; show a concise status notice with explicit **Show LaTeX source** and **Retry comparison** actions instead, while preserving all pending review decisions and routing explicit desktop source inspection to the workspace editor. ([#234](https://github.com/PapilotAI/papilot/issues/234))
+- Remember reasoning effort and Fast mode per model, and editing permissions per agent, when switching models or starting another task. Choices survive reloads; switching an existing task to another agent restores that agent’s supported settings.
+
 - Keep PDF anchors usable at their saved positions while source relocation is pending or fails, with a retry for failed lookups. Avoid overlapping native and custom anchor tooltips.
 - Preserve the full five-stripe Papilot logo in the browser tab icon for the app, website and online demo.
 - Prepare annotation alternatives earlier, prioritize the option being inspected and reuse unfinished comparisons under cache pressure. Optional PDFs still do not hold up the main review, application or commit. ([#228](https://github.com/PapilotAI/papilot/issues/228))

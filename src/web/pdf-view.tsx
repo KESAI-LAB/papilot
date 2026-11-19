@@ -7,7 +7,7 @@ import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy } from 'pdf
 import { EventBus, FindState, LinkTarget, PDFFindController, PDFLinkService, PDFViewer } from 'pdfjs-dist/web/pdf_viewer.mjs';
 import viewerStyles from 'pdfjs-dist/web/pdf_viewer.css?inline';
 import worker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import type { Annotation, MarkKind, SourcePlace } from '../shared.ts';
+import type { Annotation, InFlightMark, MarkKind, SourcePlace } from '../shared.ts';
 import { loadStamps, useStamps, type Stamp } from './stamps.ts';
 import { StampWheel } from './stamp-wheel.tsx';
 import { PdfToolRail, TOOL_KEYS, type PdfTool, type PdfToolRailHandle } from './pdf-tool-rail.tsx';
@@ -26,6 +26,8 @@ import { cMapData } from '../../engine/src/web/pdf-cmaps.ts';
 import { cropDocument, cropLayerStyle, fullPageViewport, isCropped, originalPageRect, readPdfCrop, savePdfCrop, type PdfCrop } from './pdf-crop.ts';
 import { PdfCropDialog } from './pdf-crop-dialog.tsx';
 import { PdfSelectionActions } from './pdf-selection-actions.tsx';
+import { PdfPeek } from './pdf-peek.tsx';
+import { resolvePdfDestination } from './pdf-destination.ts';
 
 pdfjs.GlobalWorkerOptions.workerSrc = worker;
 const CMapData = cMapData(import.meta.glob<string>('../../node_modules/pdfjs-dist/cmaps/*.bcmap', { eager: true, import: 'default', query: '?url&no-inline' }));
@@ -192,6 +194,7 @@ export interface PdfHistoryActions {
 
 export const PdfView = forwardRef<PdfHandle, {
   readOnly?: boolean;
+  inFlightMarks?: InFlightMark[]; onOpenTask?: (id: string) => void;
   group?: NoteGroup | null; onGroupChange?: (group: NoteGroup | null) => void; markingDisabled?: boolean;
   url: string; words?: string; notes: { note: Annotation; number: number }[]; active: string; region: boolean; setRegion: (on: boolean) => void;
   /** Describes an immutable PDF URL and the compilation problems belonging to it. */
@@ -260,8 +263,26 @@ export const PdfView = forwardRef<PdfHandle, {
   const [shown, setShown] = useState<{ url: string; words?: string; key?: string; errors?: string[] }>({ url: props.url, words: props.words, key: props.pdfKey }), shownRef = useRef(shown); shownRef.current = shown;
   const heldNotes = useRef(props.notes), held = shown.url !== props.url;
   if (!held) heldNotes.current = props.notes;
-  const shownNotes = useMemo(() => props.keyedNotes ? props.notes.filter(({ note }) => note.key === (shown.key ?? '')) : null, [props.keyedNotes, props.notes, shown.key]);
+  const shownNotes = useMemo(() => props.keyedNotes ? props.notes.flatMap(entry => {
+    if (entry.note.key === (shown.key ?? '')) return [entry];
+    const previous = held ? heldNotes.current.find(old => old.note.id === entry.note.id && old.note.key === shown.key) : undefined;
+    return previous ? [{ ...entry, note: { ...entry.note, key: previous.note.key, page: previous.note.page, rect: previous.note.rect, rects: previous.note.rects } }] : [];
+  }) : null, [props.keyedNotes, props.notes, shown.key, held]);
   const notes = shownNotes ?? (held ? heldNotes.current : props.notes), notesRef = useRef(notes); notesRef.current = notes;
+  const heldInFlight = useRef<InFlightMark[]>([]);
+  // Keep positions on the PDF still on screen, but update status and remove
+  // delivered/deleted tasks even if the replacement PDF cannot be downloaded.
+  const inFlight = (props.inFlightMarks || []).flatMap(mark => {
+    const position = mark.note.key === shown.key ? mark.note : heldInFlight.current.find(old => old.note.id === mark.note.id && old.note.key === shown.key)?.note
+      ?? heldNotes.current.find(old => old.note.id === mark.note.id && old.note.key === shown.key)?.note;
+    return position ? [{ ...mark, note: position }] : [];
+  });
+  heldInFlight.current = inFlight;
+  const inFlightRef = useRef(inFlight); inFlightRef.current = inFlight;
+  const selectNote = (note: Annotation) => {
+    const mark = inFlightRef.current.find(mark => mark.note.id === note.id);
+    if (mark) latest.current.onOpenTask?.(mark.taskId); else latest.current.onSelect(note);
+  };
   const picking = useRef<ReturnType<typeof touchSelection> | null>(null);
   const [draft, updateDraft] = useState<{ page: number; rect: Rect } | null>(null), draftRef = useRef(draft);
   const setDraft = (value: typeof draft) => { draftRef.current = value; updateDraft(value); };
@@ -465,15 +486,8 @@ export const PdfView = forwardRef<PdfHandle, {
     links.goToDestination = async (dest: string | unknown[]) => {
       const document = loaded.current;
       if (!document) return;
-      const explicit = typeof dest === 'string' ? await document.getDestination(dest) : await dest;
-      if (!Array.isArray(explicit)) return;
-      const [target] = explicit;
-      let pageNumber: number | null = null;
-      if (target && typeof target === 'object') {
-        const ref = target as { num: number; gen: number };
-        pageNumber = document.cachedPageNumber(ref) ?? await document.getPageIndex(ref).then(index => index + 1, () => null);
-      } else if (Number.isInteger(target)) pageNumber = (target as number) + 1;
-      if (loaded.current === document && pageNumber && pageNumber >= 1 && pageNumber <= viewer.pagesCount) viewer.scrollPageIntoView({ pageNumber, destArray: explicit });
+      const target = await resolvePdfDestination(document, dest);
+      if (loaded.current === document && target) viewer.scrollPageIntoView({ pageNumber: target.pageNumber, destArray: target.explicit });
     };
     let location: { page: number; left: number; top: number } | undefined;
     tools.current = { bus, links, find, viewer, cropTo(next) {
@@ -612,7 +626,7 @@ export const PdfView = forwardRef<PdfHandle, {
       const tool = toolRef.current, start = down; down = null;
       const touchMagic = event.pointerType === 'touch' && tool === 'magic' && !picking.current?.active() && Boolean(start && performance.now() - start.time < 450);
       if ((tool !== 'note' && tool !== 'delete' && tool !== 'magic' && tool !== 'source') || latest.current.readOnly || (tool !== 'source' && latest.current.markingDisabled) || editingRef.current || (event.pointerType === 'touch' && !touchMagic) || event.button !== 0
-        || !box.contains(event.target as Node) || (event.target as Element).closest('button,input,textarea,select,.pdf-note-card')) return;
+        || !box.contains(event.target as Node) || (event.target as Element).closest('button,a,input,textarea,select,.pdf-note-card')) return;
       const at = { x: event.clientX, y: event.clientY }, page = (event.target as Element).closest<HTMLElement>('.page');
       const click = Boolean(start && !pressed.current.card && Math.hypot(at.x - start.x, at.y - start.y) < (event.pointerType === 'touch' ? 10 : 5)), onNote = Boolean(noteAt(event));
       setTimeout(() => {
@@ -653,7 +667,7 @@ export const PdfView = forwardRef<PdfHandle, {
       if (!page || !box.contains(page)) return;
       const frame = originalPageRect(page), x = (event.clientX - frame.left) / frame.width, y = (event.clientY - frame.top) / frame.height;
       let hit: Annotation | undefined, area = Infinity;
-      for (const { note } of notesRef.current) {
+      for (const { note } of [...inFlightRef.current, ...notesRef.current]) {
         if (note.page !== Number(page.dataset.pageNumber) - 1) continue;
         for (const [left, top, right, bottom] of note.rects?.length ? note.rects : [note.rect]) {
           // Prefer the more specific mark when text and a larger region overlap.
@@ -682,8 +696,8 @@ export const PdfView = forwardRef<PdfHandle, {
       if (note?.id !== start.id) return;
       // pdf.js can remove its blank-page hit target on mouseup, suppressing
       // click entirely. Touch taps first let touchend clear any old handles.
-      if (start.touch) setTimeout(() => { if (!disposed && !picking.current?.active()) latest.current.onSelect(note); }, 0);
-      else latest.current.onSelect(note);
+      if (start.touch) setTimeout(() => { if (!disposed && !picking.current?.active()) selectNote(note); }, 0);
+      else selectNote(note);
     };
     box.addEventListener('pointerdown', pressNote); box.addEventListener('scroll', cancelPress);
     document.addEventListener('pointermove', moveNote); document.addEventListener('pointerup', releaseNote); document.addEventListener('pointercancel', cancelPress);
@@ -950,6 +964,10 @@ export const PdfView = forwardRef<PdfHandle, {
     : note.kind === 'delete' ? note.comment ? t('Replacement {n}: {text}', { n: label, text: note.comment }) : t('Deletion {n}', { n: label })
     : t('Note {n}: {comment}', { n: label, comment: note.group ? groupName(note.group) : note.comment });
 
+  const flightStatus = (mark: InFlightMark) => mark.status === 'reviewing' || mark.ready ? t('Ready for review')
+    : mark.status === 'waiting_input' ? t('Needs your reply') : mark.status === 'interrupted' ? t('Paused')
+    : mark.status === 'failed' || mark.status === 'uncertain' ? t('Needs attention') : t('Running');
+
   const cropTool = (className: string) => <button type="button" className={className + ' pdf-crop-toggle' + (isCropped(crop) ? ' active' : '')} aria-label={t('Crop margins')} title={t('Crop margins')} aria-haspopup="dialog" disabled={loading || Boolean(error) || Boolean(editing) || noteLocked} onClick={() => { clearSelection(); setCropping(true); }}><Icon name="crop" size={16}/></button>;
   const findTool = (className: string) => <PdfFindButton className={className} open={findOpen} onClick={() => { if (findOpen) closeFind(); else setFindOpen(true); }}/>;
   const anchorTools = props.place ? <PdfAnchors key={props.place} ref={anchorControls} place={props.place} pages={pages} ready={anchorsReady && !loading && !error} title={props.outline[props.section]?.title}
@@ -1002,6 +1020,7 @@ export const PdfView = forwardRef<PdfHandle, {
       {dismissedNote && <div className="pdf-suggestion-undo" role="status">{dismissedNote.aiReview ? t('Suggestion ignored.') : t('Note deleted.')}<button type="button" disabled={noteLocked} onClick={() => void restoreNote()}>{t('Undo')}</button>{noteError && <p role="alert">{noteError}</p>}</div>}
     </div>
     </div>
+    {loaded.current && <PdfPeek container={container} document={loaded.current} disabled={Boolean(props.suspended || editing || cropping || props.region || wheel)}/>}
     {wheel && <StampWheel x={wheel.x} y={wheel.y} stamps={stamps} onPick={pickStamp} onClose={() => { setWheel(null); container.current?.focus({ preventScroll: true }); }}
       onFree={() => { const target = wheel.target; setWheel(null); openCard(target); }}/>}
     {cropping && loaded.current && <PdfCropDialog document={loaded.current} page={page} crop={crop} onApply={next => tools.current?.cropTo(next)} onClose={() => {
@@ -1013,7 +1032,8 @@ export const PdfView = forwardRef<PdfHandle, {
     {[...layers].map(([number, layer]) => createPortal(<Fragment>
       {(() => {
         const width = crop[2] - crop[0], height = crop[3] - crop[1], compact = layer.clientWidth * width <= 680;
-        const notes = notesRef.current.filter(({ note }) => note.page === number - 1 && note.rect[2] >= crop[0] && note.rect[0] <= crop[2] && note.rect[3] >= crop[1] && note.rect[1] <= crop[3]);
+        const entries: { note: Annotation; number: number; flight?: InFlightMark }[] = [...notesRef.current, ...inFlightRef.current.map(flight => ({ note: flight.note, number: 0, flight }))];
+        const notes = entries.filter(({ note }) => note.page === number - 1 && note.rect[2] >= crop[0] && note.rect[0] <= crop[2] && note.rect[3] >= crop[1] && note.rect[1] <= crop[3]);
         const spots = tagSpots(notes.map(({ note }) => {
           const rect = (note.rects?.length ? note.rects : [note.rect])[0];
           return { rect: [(rect[0] - crop[0]) / width, (rect[1] - crop[1]) / height, (rect[2] - crop[0]) / width, (rect[3] - crop[1]) / height] as Rect, name: note.stamp };
@@ -1022,7 +1042,14 @@ export const PdfView = forwardRef<PdfHandle, {
           right: spot.right === undefined ? undefined : `calc(${(1 - crop[2]) * 100}% + ${spot.right}px)`,
           top: `${crop[1] * 100 + Number.parseFloat(String(spot.top)) * height}%`,
         }));
-        return notes.map(({ note, number: label }, index) => <Fragment key={note.id}>
+        return notes.map(({ note, number: label, flight }, index) => flight ? <Fragment key={note.id}>
+          {(note.rects?.length ? note.rects : [note.rect]).map((rect, part) => <div key={part} className="in-flight-mark" data-note={note.id} style={percent(rect)}/>)}
+          <button type="button" className="in-flight-tag" data-note={note.id} data-status={flight.ready ? 'reviewing' : flight.status} data-side={spots[index].left === undefined ? 'right' : 'left'} style={spots[index]}
+            aria-label={`${t('Review')} · ${flight.title} · ${flightStatus(flight)}`} onClick={() => props.onOpenTask?.(flight.taskId)}>
+            <span className="in-flight-dot" aria-hidden="true"/>
+            <span className="in-flight-label" aria-hidden="true">{flight.title} · {flightStatus(flight)}</span>
+          </button>
+        </Fragment> : <Fragment key={note.id}>
           {note.kind === 'point' ? <div className={'note-point' + (props.active === note.id ? ' active' : '')} data-note={note.id} data-stamp={note.stamp ? true : undefined} style={{ ...center(note.rect), ...groupStyle(note.group) }}/>
             : (note.rects?.length ? note.rects : [note.rect]).map((rect, part) => <div key={part} className={(note.rects?.length ? 'note-mark' : 'note-box') + (props.active === note.id ? ' active' : '')} data-note={note.id} data-group={note.group} data-kind={note.kind} data-stamp={note.stamp ? true : undefined} data-review={note.aiReview ? true : undefined} style={{ ...percent(rect), ...groupStyle(note.group) }}/>) }
           <button type="button" className={'note-tag' + (props.active === note.id ? ' active' : '')} data-note={note.id} data-group={note.group} data-kind={note.kind} data-stamp={note.stamp ? true : undefined} data-review={note.aiReview ? true : undefined} style={{ ...spots[index], ...groupStyle(note.group) }} aria-label={tagLabel(note, label)} aria-expanded={props.noteActions ? props.active === note.id : undefined} title={note.group ? t('Annotation groups') : note.comment} onClick={() => props.onSelect(note)}>{label}{note.stamp && <span className="note-tag-stamp" hidden={compact}>{note.stamp}</span>}</button>

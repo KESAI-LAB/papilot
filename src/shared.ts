@@ -297,7 +297,9 @@ export interface NoteSection { id: string; title: string; level: number; notes: 
 // documents, and the one the paper compiles (null when none is chosen yet).
 export interface RepositoryFile { path: string; root?: true }
 export interface RepositoryFiles { document: string | null; files: RepositoryFile[] }
-export interface Manuscript { git: GitStatus; build: ManuscriptBuild; annotations: Annotation[]; noteSections?: NoteSection[]; unplacedSectionNotes?: number }
+/** A display-only position; the task's original annotation stays unchanged. */
+export interface InFlightMark { note: Annotation; taskId: string; title: string; status: TaskStatus; ready?: true }
+export interface Manuscript { git: GitStatus; build: ManuscriptBuild; annotations: Annotation[]; inFlightMarks?: InFlightMark[]; noteSections?: NoteSection[]; unplacedSectionNotes?: number }
 // A source file for manual editing, as it is on disk: `revision` names its
 // bytes, so a save refuses when the file changed meanwhile, and `base` is the
 // file at the last commit (null when it has none), to show what changed.

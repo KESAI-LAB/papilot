@@ -1,7 +1,7 @@
 import { PaperTools } from './paper-tools.ts';
 import { isNoteGroup } from '../note-groups.ts';
 import { isCommitMessageLanguage, type CommitMessageLanguage } from '../commit.ts';
-import { noteAlternativeRange, NOTE_ALTERNATIVE_RANGES, validRoutes } from '../shared.ts';
+import { noteAlternativeRange, NOTE_ALTERNATIVE_RANGES, validRoutes, taskFinished, type InFlightMark } from '../shared.ts';
 import Fastify from 'fastify';
 import compress from '@fastify/compress';
 import { registerImportUpload } from './import-upload.ts';
@@ -260,9 +260,9 @@ export async function buildApp(options: AppOptions) {
   // again, as the file menu offers it: a root document, or one compiled
   // before, even while it lacks \documentclass of its own. One on a main file
   // since renamed or removed moves to the current document.
-  async function paperNoteFilter(id: string) {
+  async function paperNoteFilter(id: string, includeSent = false) {
     const root = store.project(id).path, inDocument = await noteDocumentFilter(root, await manuscripts.document(id, root));
-    return (note: Annotation) => !note.taskId && !isTaskReviewNote(note) && inDocument(note);
+    return (note: Annotation) => (includeSent || !note.taskId) && !isTaskReviewNote(note) && inDocument(note);
   }
   async function paperNotes(id: string) { return store.annotations(id).filter(await paperNoteFilter(id)); }
   async function manuscript(id: string, rebuild = false) {
@@ -287,7 +287,21 @@ export async function buildApp(options: AppOptions) {
       manuscripts.noteSections(id, state.build.key, annotations).catch(() => null),
       new Promise<null>(resolve => setImmediate(resolve, null)),
     ]) : null;
-    return { ...state, annotations, ...(scope ? { noteSections: scope.sections, unplacedSectionNotes: scope.unplaced } : {}) };
+    const onPaper = await paperNoteFilter(id, true);
+    const inFlightTask = (note: Annotation) => {
+      const task = note.taskId ? store.findTask(note.taskId) : undefined;
+      return task?.projectId === id && task.status !== 'deleting' && !taskFinished(task) ? task : undefined;
+    };
+    const sent = store.annotations(id).filter(note => onPaper(note) && inFlightTask(note));
+    // Reuse confirmed placements, without rewriting the task's source snapshot.
+    // Recheck after the lookup: delivery or deletion may have finished meanwhile.
+    const positions = await manuscripts.reanchor(id, root, sent).catch(() => sent);
+    const inFlightMarks: InFlightMark[] = positions.flatMap(note => {
+      const current = store.annotation(id, note.id), task = inFlightTask(current);
+      return current.deletedAt === undefined && task && current.taskId === note.taskId
+        ? [{ note, taskId: task.id, title: task.title, status: task.status, ...(task.status === 'building' && task.review?.ready ? { ready: true as const } : {}) }] : [];
+    });
+    return { ...state, annotations, inFlightMarks, ...(scope ? { noteSections: scope.sections, unplacedSectionNotes: scope.unplaced } : {}) };
   }
 
   app.get('/api/health', () => ({ ok: true, name: 'Papilot', version: options.version, ...(options.desktopInstance ? { desktopInstance: options.desktopInstance } : {}), ...(options.updateInstance ? { updateInstance: options.updateInstance } : {}) }));
@@ -514,7 +528,7 @@ export async function buildApp(options: AppOptions) {
     for (const key of ['model', 'effort', 'serviceTier']) if (body[key] !== undefined && typeof body[key] !== 'string') throw new Error('Choose valid destination model settings.');
     return workspace.restartTask(request.params.id, { id: string(body.id, 'Task ID', 64), agent: body.agent,
       model: typeof body.model === 'string' ? body.model : undefined, effort: typeof body.effort === 'string' ? body.effort : undefined,
-      serviceTier: typeof body.serviceTier === 'string' ? body.serviceTier : undefined, stop: body.stop === true, draftAttachments: attachmentIds(body.draftAttachments) });
+      serviceTier: typeof body.serviceTier === 'string' ? body.serviceTier : undefined, permissions: body.permissions, stop: body.stop === true, draftAttachments: attachmentIds(body.draftAttachments) });
   });
   app.get<{ Params: { id: string }; Querystring: { since?: string } }>('/api/tasks/:id/items', task, request => { store.task(request.params.id); return store.itemsSince(request.params.id, typeof request.query.since === 'string' ? request.query.since : undefined); });
   app.get<{ Params: { id: string } }>('/api/tasks/:id/note-results', task, async request => {
