@@ -6,8 +6,8 @@ The blog uses the website's static build and Cloudflare deployment. Articles, la
 
 Create `site/blog/posts/your-article-slug/` containing:
 
-- `post.json`: publication date and localized title, description, lead and hero image metadata.
-- One Markdown file per published locale, such as `en.md`, `zh-CN.md` or `ja.md`. Start headings at `##`; the template supplies the title. An image's optional Markdown title becomes its figure caption.
+- `post.json`: publication date and localized title, description, lead, optional breadcrumb `category`, and hero image metadata (use a PNG hero so Open Graph and Twitter cards render across social platforms).
+- One Markdown file per published locale, such as `en.md`, `zh-CN.md` or `ja.md`. Start headings at `##`; the template supplies the title. An image's optional Markdown title becomes its figure caption. GitHub Flavored Markdown tables render with accessible column and row headers (`scope="col"` and `scope="row"`) inside a keyboard-focusable region, stacking into labeled cards inside narrow containers.
 
 The supported languages follow `i18n/languages.json`: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, German, French, Spanish, Portuguese, Italian and Swedish. Only include completed article translations in `post.json`; every listed locale must have its corresponding Markdown file. Interface and diagram translations live in `site/blog/locales/<locale>.json`.
 

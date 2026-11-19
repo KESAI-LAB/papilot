@@ -67,7 +67,35 @@ function responsibility(c,mobile){
  else{s+=column(30,101,c.agent,c.agentItems,322)+column(414,101,c.author,c.authorItems,316)+center(380,316,c.responsibilityFoot,17,muted);}
  return svg(w,h,c.responsibility,c.responsibilityDesc,s);
 }
-for(const [locale,c] of Object.entries(copy))for(const [name,render] of [['interaction-space',comparison],['pdf-first-workflow',flow],['author-judgment',responsibility]])for(const mobile of [false,true]){
+function workflows(c,mobile){
+ const w=mobile?400:760,h=mobile?672:416;
+ let s=center(w/2,35,c.workflowsTitle,mobile?20:24);
+ const card=(item,x,y,width,height,ours)=>rect(x,y,width,height,paper,ours?accent:line)+text(x+15,y+25,item.tag,13,muted)+text(x+15,y+53,item.name,mobile?19:18.5)+rule(x+15,y+67,width-30)+item.points.map((pt,i)=>text(x+15,y+(mobile?94+i*27:98+i*34),`· ${pt}`,mobile?14.5:13.5,i===2&&ours?accent:(i<2?ink:muted))).join('');
+ if(mobile){
+  for(let i=0;i<3;i++)s+=card(c.workflowsCards[i],24,62+i*184,352,166,i===2);
+  s+=center(200,644,c.workflowsSync,14,muted);
+ }else{
+  for(let i=0;i<3;i++)s+=card(c.workflowsCards[i],20+i*246,68,228,236,i===2);
+  s+=`<path d="M134 316v26h492v-26" fill="none" stroke="${accent}" stroke-width="1.4" stroke-dasharray="4 4" marker-start="url(#arrow)" marker-end="url(#arrow)"/>`;
+  s+=center(380,378,c.workflowsSync,15,muted);
+ }
+ return svg(w,h,c.workflowsTitle,c.workflowsDesc,s);
+}
+function pipeline(c,mobile){
+ const w=mobile?400:760,h=mobile?668:448;
+ let s=center(w/2,36,c.pipelineTitle,mobile?20:24);
+ const node=(step,x,y,width,height)=>rect(x,y,width,height,paper,step===2||step===3?accent:line)+text(x+19,y+27,`${String(step+1).padStart(2,'0')}  /  ${c.pipelineSteps[step][0]}`,13.5,muted)+text(x+19,y+58,c.pipelineSteps[step][1],mobile?19.5:20.5)+text(x+19,y+89,c.pipelineSteps[step][2],mobile?14.5:15.5,muted);
+ if(mobile){
+  for(let i=0;i<4;i++){s+=node(i,34,68+i*144,332,113);if(i<3)s+=arrow(`M200 ${193+i*144}v18`);}
+  s+=center(200,650,c.pipelineFoot,14,muted);
+ }else{
+  s+=node(0,30,73,300,124)+node(1,430,73,300,124)+node(2,30,273,300,124)+node(3,430,273,300,124);
+  s+=arrow('M344 135h72')+arrow('M580 209v26H180v24')+arrow('M344 335h72')+center(380,434,c.pipelineFoot,15.5,muted);
+ }
+ return svg(w,h,c.pipelineTitle,c.pipelineDesc,s);
+}
+const figures=[['interaction-space',comparison],['pdf-first-workflow',flow],['author-judgment',responsibility],['three-workflows',workflows],['review-pipeline',pipeline]];
+for(const [locale,c] of Object.entries(copy))for(const [name,render] of figures)for(const mobile of [false,true]){
  fs.writeFileSync(path.join(out,`${name}${mobile?'-compact':''}.${locale}.svg`),render(c,mobile));
 }
-console.log(`Wrote ${Object.keys(copy).length * 6} responsive blog figures.`);
+console.log(`Wrote ${Object.keys(copy).length * figures.length * 2} responsive blog figures.`);

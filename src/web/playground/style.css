@@ -6,8 +6,9 @@
 .demo-actions { display: flex; align-items: center; gap: 8px; }
 .demo-actions .icon-button { width: 28px; height: 28px; color: var(--text-3); }
 .demo-reset.button { gap: 6px; }
-.demo-downloads { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.demo-platform.button { padding: 0 9px; gap: 6px; }
+.demo-bar-links, .demo-downloads { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.demo-platform.button, .demo-star.button { padding: 0 9px; gap: 6px; }
+.demo-star > svg { fill: currentColor; }
 .demo-platform > svg:last-child { color: var(--text-3); }
 .demo-linux-icon { width: 15px; height: 15px; flex-shrink: 0; background: currentColor; mask: url('../brand-icons/linux.svg') center / contain no-repeat; }
 .playground-root { position: fixed; inset: auto 0 auto 0; top: var(--viewport-top, 0px); height: var(--viewport-height, 100dvh); display: flex; flex-direction: column; overflow: hidden; }
@@ -41,8 +42,8 @@
 @media (max-width: 680px) {
   .playground-notice { grid-template-columns: minmax(0, 1fr) auto; padding: 8px 10px 8px 14px; gap: 8px; }
   .demo-heading { font-size: 12px; }
-  .demo-downloads { grid-column: 1 / -1; grid-row: 2; }
+  .demo-bar-links { grid-column: 1 / -1; grid-row: 2; }
   .demo-actions { grid-column: 2; grid-row: 1; align-self: start; }
   .demo-reset.button { padding: 0 8px; font-size: 12px; }
-  .demo-platform.button { font-size: 12px; padding: 0 6px; gap: 5px; }
+  .demo-platform.button, .demo-star.button { font-size: 12px; padding: 0 6px; gap: 5px; }
 }

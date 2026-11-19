@@ -61,6 +61,7 @@ try {
   await expect(banner.locator('nav, p')).toHaveCount(0);
   await expect(banner.locator('strong')).toHaveText('static demo');
   for (const platform of ['macOS', 'Windows', 'Linux']) await expect(banner.getByRole('button', { name: `Download for ${platform}`, exact: true })).toBeVisible();
+  await expect(banner.getByRole('link', { name: 'Star on GitHub', exact: true })).toHaveAttribute('href', 'https://github.com/PapilotAI/papilot');
   const reset = banner.getByRole('button', { name: 'Reset demo', exact: true });
   await expect(reset).toBeVisible();
   await expect(reset).toHaveAttribute('title', 'Reset demo');
@@ -148,6 +149,7 @@ try {
   const download = page.getByRole('dialog', { name: 'Make it your paper with Papilot' });
   await expect(download).toBeVisible();
   await expect(download.getByRole('link', { name: 'Download Papilot' })).toHaveAttribute('href', 'https://papilot.ai/#download');
+  await expect(download.getByRole('link', { name: 'Star on GitHub' })).toHaveAttribute('href', 'https://github.com/PapilotAI/papilot');
   await download.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(input).toHaveValue('Make the design philosophy more concrete.');
   await expect(page.locator('.task-row')).toHaveCount(3);

@@ -26,6 +26,10 @@ jobs:
     name: Node ${{ matrix.node }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # The site build and its checks: deploys pass the live star count, and a
+      # five-digit one checks the widest header button.
+      PAPILOT_SITE_STARS: 12345
     strategy:
       fail-fast: false
       matrix:

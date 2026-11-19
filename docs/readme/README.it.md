@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="../assets/wordmark.svg#gh-light-mode-only" width="220" height="69" alt="Papilot"><img src="../assets/wordmark-dark.svg#gh-dark-mode-only" width="220" height="69" alt="Papilot"><br>**Editor LaTeX di nuova generazione con IA**
+<img src="../assets/wordmark.svg#gh-light-mode-only" width="220" height="69" alt="Papilot"><img src="../assets/wordmark-dark.svg#gh-dark-mode-only" width="220" height="69" alt="Papilot"><br>**Editor LaTeX con IA di nuova generazione**
 
-<h2>Non leggere né scrivere <code>.tex</code><br>Lavora direttamente sul <img src="../assets/pdf.svg" width="22" height="31" align="absmiddle" alt="PDF"></h2>
+<h3>Non&nbsp;leggere&nbsp;o&nbsp;scrivere&nbsp;<code>.tex</code>&emsp; Lavora&nbsp;direttamente&nbsp;sul&nbsp;<img src="../assets/pdf.svg" width="17" height="24" align="absmiddle" alt="PDF"></h3>
 
-Un **nuovo paradigma** per la scrittura e l'impaginazione responsabile con l'IA.
+<a href="https://papilot.ai"><b>papilot.ai</b></a>&emsp;<a href="https://papilot.ai/demo">Demo online</a>&emsp;<a href="#get-started">Per iniziare</a>&emsp;<a href="#agents">Agenti</a>&emsp;<a href="#how-it-works">Come funziona</a>
 
 <!-- BEGIN BADGES -->
 [![License: MIT](https://img.shields.io/github/license/PapilotAI/papilot?style=flat&color=22c55e)](../../LICENSE)
@@ -12,10 +12,11 @@ Un **nuovo paradigma** per la scrittura e l'impaginazione responsabile con l'IA.
 [![Release](https://img.shields.io/github/v/release/PapilotAI/papilot?style=flat&label=release&color=0969da)](https://github.com/PapilotAI/papilot/releases/latest)
 [![GitHub total downloads](https://img.shields.io/github/downloads/PapilotAI/papilot/total?style=flat&logo=github&label=downloads&color=0969da)](https://github.com/PapilotAI/papilot/releases)
 [![npm monthly downloads](https://img.shields.io/npm/dm/papilot?style=flat&logo=npm&label=downloads&color=cb3837)](https://www.npmjs.com/package/papilot)
+[![GitHub stars](https://img.shields.io/github/stars/PapilotAI/papilot?style=flat&logo=github&label=stars&color=0969da)](https://github.com/PapilotAI/papilot/stargazers)
 [![Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/WdgZDDAvwj)
 <!-- END BADGES -->
 
-<p data-language-switcher><sub><a href="../../README.md">English</a>&nbsp;· <a href="README.zh-CN.md">简体中文</a>&nbsp;· <a href="README.zh-Hant.md">繁體中文</a>&nbsp;· <a href="README.ja.md">日本語</a>&nbsp;· <a href="README.ko.md">한국어</a>&nbsp;· <a href="README.de.md">Deutsch</a>&nbsp;· <a href="README.fr.md">Français</a>&nbsp;· <a href="README.es.md">Español</a>&nbsp;· <a href="README.pt.md">Português</a>&nbsp;· <a href="README.it.md">Italiano</a>&nbsp;· <a href="README.sv.md">Svenska</a></sub></p>
+<p data-language-switcher><sub><a href="../../README.md">English</a>&emsp;<a href="README.zh-CN.md">简体中文</a>&emsp;<a href="README.zh-Hant.md">繁體中文</a>&emsp;<a href="README.ja.md">日本語</a>&emsp;<a href="README.ko.md">한국어</a>&emsp;<a href="README.de.md">Deutsch</a>&emsp;<a href="README.fr.md">Français</a>&emsp;<a href="README.es.md">Español</a>&emsp;<a href="README.pt.md">Português</a>&emsp;<a href="README.it.md">Italiano</a>&emsp;<a href="README.sv.md">Svenska</a></sub></p>
 
 </div>
 
@@ -25,121 +26,128 @@ Un **nuovo paradigma** per la scrittura e l'impaginazione responsabile con l'IA.
   <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/hero-compact-dark.png">
   <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/hero-dark.png">
   <source media="(max-width: 600px)" srcset="../assets/readme-showcase/hero-compact.png">
-  <img src="../assets/readme-showcase/hero.png" alt="Papilot mostra una modifica dell'IA come un prima e dopo impaginato sul PDF, con le azioni Accetta, Rifiuta e Commenta." width="900">
+  <img src="../assets/readme-showcase/hero.png" alt="Papilot mostra una modifica dell'IA impaginata con confronto prima e dopo direttamente sul PDF, con le opzioni Accetta, Rifiuta e Commenta." width="900">
 </picture>
 </a>
 </p>
 
-<a id="-you-care-about-the-pdfbrnot-the-tex-behind-it"></a>
-
-## 📄 Ti interessa il PDF<br>Non il `.tex` che c'è dietro
-
-Articoli, tesi, libri, diapositive: i lettori vedono solo la pagina impaginata.<br>
-**Quindi è sulla pagina che dovresti lavorare anche tu.**
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/paradigm-compact-dark.png">
-    <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/paradigm-dark.png">
-    <source media="(max-width: 600px)" srcset="../assets/readme-showcase/paradigm-compact.png">
-    <img src="../assets/readme-showcase/paradigm.png" alt="Dalla scrittura manuale in LaTeX al controllo dei diff LaTeX generati dall'IA, fino a Papilot: la revisione sul PDF." width="900">
-  </picture>
-</p>
-
-**Basta compilare i diff a mente.**<br>
-Un diff del codice sorgente ti costringe a *immaginare* il PDF. Papilot te lo *mostra*, già impaginato.
-
-<a id="-point-at-the-page-and-say-what-you-want"></a>
-
-## 👉 Indica il punto sulla pagina e chiedi ciò che vuoi
-
-Seleziona una frase, un'equazione o una figura e scrivi un'annotazione.<br>
-**Il tuo agente trova il codice sorgente. Non dovrai mai aprire un file `.tex`.**
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/notes-app-compact-dark.png">
-    <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/notes-app-dark.png">
-    <source media="(max-width: 600px)" srcset="../assets/readme-showcase/notes-app-compact.png">
-    <img src="../assets/readme-showcase/notes-app.png" alt="Papilot con un riquadro attorno a un'equazione e una frase evidenziata sul PDF, ciascuna con un'annotazione, entrambe aggiunte alla prossima attività." width="900">
-  </picture>
-</p>
-
 <a id="features"></a>
 
-<a id="-your-files-stay-yours"></a>
+<a id="why-papilot"></a>
 
-## 🔒 I tuoi file restano tuoi
+## Perché Papilot
 
-<img src="../assets/readme-icons/folder.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**File normali sul tuo computer.** Ogni modifica viene registrata nella tua cronologia Git.
+<table>
+<tr>
+<td width="50%" valign="top">
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/why-annotate-dark.png"><img src="../assets/readme-showcase/why-annotate.png" alt="Una frase e una figura riquadrate sul PDF, ciascuna con un'annotazione per l'agente." width="100%"></picture><br>
+<b>Indica direttamente sulla pagina</b><br>
+Seleziona una frase, oppure riquadra un'equazione o una figura, e scrivi cosa modificare. Il tuo agente riceve le righe sorgente esatte, in qualunque file si trovino.
+</td>
+<td width="50%" valign="top">
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/why-review-dark.png"><img src="../assets/readme-showcase/why-review.png" alt="Una modifica mostrata impaginata, prima e dopo, con le opzioni Accetta, Rifiuta e Commenta." width="100%"></picture><br>
+<b>Revisiona ogni modifica impaginata</b><br>
+Ogni modifica viene presentata sul PDF come confronto prima e dopo. Accettala, rifiutala o commentala: nulla viene applicato al tuo articolo finché non lo accetti.
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/why-overleaf-dark.png"><img src="../assets/readme-showcase/why-overleaf.png" alt="Papilot e Overleaf affiancati, sincronizzati in tempo reale in entrambe le direzioni, con i cursori dei coautori in Overleaf." width="100%"></picture><br>
+<b><picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/overleaf-dark.svg"><img src="../assets/readme-icons/overleaf.svg" width="16" height="16" align="absmiddle" alt=""></picture>&nbsp;Sincronizzazione in tempo reale con Overleaf</b><br>
+I coautori continuano a scrivere su Overleaf. Le modifiche che accetti li raggiungono in circa un secondo, mentre le loro arrivano nei tuoi file e nel PDF con i rispettivi nomi.
+</td>
+<td width="50%" valign="top">
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/why-agents-dark.png"><img src="../assets/readme-showcase/why-agents.png" alt="Il menu dei modelli sotto la chat, con modelli di Codex, Claude e GLM." width="100%"></picture><br>
+<b>Qualsiasi agente, qualsiasi modello</b><br>
+Scegli un modello di qualsiasi agente connesso sotto la chat. Passa a un altro agente e Papilot rieseguirà la tua richiesta con quello selezionato.
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/why-record-dark.png"><img src="../assets/readme-showcase/why-record.png" alt="Modifiche accettate registrate con un messaggio di commit e inviate tramite push, nella cronologia delle versioni." width="100%"></picture><br>
+<b>Ogni modifica tracciata</b><br>
+Ogni attività viene eseguita nel proprio albero di lavoro Git, separata dai tuoi file. Eseguire il commit delle modifiche accettate è un passaggio distinto e ogni modifica resta nella tua cronologia Git.
+</td>
+<td width="50%" valign="top">
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/why-phone-dark.png"><img src="../assets/readme-showcase/why-phone.png" alt="La stessa revisione su uno smartphone, davanti alla finestra desktop." width="100%"></picture><br>
+<b>Revisiona dal telefono</b><br>
+Apri Papilot sul tuo telefono o tablet tramite <a href="../guide.md#remote-access-with-tailscale">Tailscale</a>, quindi leggi il PDF, aggiungi annotazioni e accetta le modifiche anche lontano dalla scrivania.
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top">
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/why-universe-dark.png"><img src="../assets/readme-showcase/why-universe.png" alt="Papilot Universe: modelli LaTeX per tesi, riviste, conferenze, CV e poster." width="100%"></picture><br>
+<b>Inizia da un modello</b><br>
+<a href="https://papilot.ai/universe/">Papilot Universe</a> offre modelli per tesi, pacchetti per riviste e conferenze, presentazioni, poster, CV e libri, e collega oltre 400 conferenze al modello richiesto dal relativo invito a presentare articoli. Scegline uno e Papilot creerà l'articolo, pronto da compilare.
+</td>
+</tr>
+</table>
 
-<img src="../assets/readme-icons/git.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Sincronizza con i coautori tramite Git.** Esegui pull e push, e lascia che un agente risolva i conflitti.
+<a id="quick-start"></a>
+<a id="get-started"></a>
+<a id="downloads"></a>
 
-<img src="../assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Gratuito e open source.** Rilasciato con licenza MIT, per macOS, Linux e Windows.
+<a id="get-started"></a>
+
+## Per iniziare
+
+<p align="center">
+<a href="https://papilot.ai/#download"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-downloads/mac-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-downloads/mac-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-downloads/mac-compact.png"><img src="../assets/readme-downloads/mac.png" alt="Scarica per macOS: Apple silicon e Intel, DMG o ZIP." width="49%"></picture></a>
+<a href="https://papilot.ai/#download"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-downloads/windows-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-downloads/windows-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-downloads/windows-compact.png"><img src="../assets/readme-downloads/windows.png" alt="Scarica per Windows: programma di installazione x64 o applicazione portatile." width="49%"></picture></a>
+<a href="https://papilot.ai/#download"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-downloads/linux-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-downloads/linux-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-downloads/linux-compact.png"><img src="../assets/readme-downloads/linux.png" alt="Scarica per Linux: AppImage, .deb o Nix." width="49%"></picture></a>
+<a href="../guide.md#install-and-run"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-downloads/terminal-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-downloads/terminal-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-downloads/terminal-compact.png"><img src="../assets/readme-downloads/terminal.png" alt="Installa da terminale: npm install -g papilot, poi papilot demo. Richiede Node.js 22.22+." width="49%"></picture></a>
+</p>
+
+<p align="center"><sub>Gratuito e open source. Richiede Git, una distribuzione TeX e un <a href="#agents">agente</a> con accesso effettuato.</sub></p>
 
 <a id="agents"></a>
 
-<a id="-bring-the-ai-agent-you-already-use"></a>
+<a id="works-with-your-agent"></a>
 
-## 🤖 Usa l'agente IA che già conosci
+## Funziona con il tuo agente
 
-<!-- BEGIN AGENT ICONS -->
 <p align="center">
   <a href="../guide.md#agents">
     <picture>
-      <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-agents/compact-dark.svg">
-      <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-agents/desktop-dark.svg">
-      <source media="(max-width: 600px)" srcset="../assets/readme-agents/compact.svg">
-      <img src="../assets/readme-agents/desktop.svg" alt="Papilot Writer, Pi, Codex, Claude, Cursor, Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, Qoder, CodeBuddy, WorkBuddy" width="816">
+      <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-agents/grid-compact-dark.png">
+      <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-agents/grid-dark.png">
+      <source media="(max-width: 600px)" srcset="../assets/readme-agents/grid-compact.png">
+      <img src="../assets/readme-agents/grid.png" alt="Papilot Writer, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, Qoder, CodeBuddy, WorkBuddy e Pi" width="848">
     </picture>
   </a>
 </p>
-<!-- END AGENT ICONS -->
 
-<a id="downloads"></a>
+<p align="center"><sub>Usa l'account o la chiave API che hai già, oppure usa Papilot Writer integrato. <a href="../guide.md#agents">Configurazione</a></sub></p>
 
-<a id="-downloads"></a>
+<a id="how-it-works"></a>
 
-## 📥 Download
+<a id="how-it-works"></a>
 
-<!-- BEGIN DOWNLOADS -->
-| Sistema / distribuzione | Download / pacchetto | Installare / avviare |
-| --- | --- | --- |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture> **macOS** | [Apple Silicon](https://github.com/PapilotAI/papilot/releases/latest) · [Intel](https://github.com/PapilotAI/papilot/releases/latest)<br>DMG / ZIP | Apri il DMG e trascina Papilot in Applicazioni. |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/windows-dark.svg"><img src="../assets/readme-icons/windows.svg" width="18" height="18" align="absmiddle" alt=""></picture> **Windows** | [Programma di installazione](https://github.com/PapilotAI/papilot/releases/latest) · [Versione portatile](https://github.com/PapilotAI/papilot/releases/latest)<br>x64 | Esegui il programma di installazione o apri direttamente la versione portatile. |
-| <img src="../assets/readme-icons/ubuntu.svg" width="18" height="18" align="absmiddle" alt=""> <img src="../assets/readme-icons/debian.svg" width="18" height="18" align="absmiddle" alt=""> **Ubuntu / Debian / Linux Mint** | [.deb](https://github.com/PapilotAI/papilot/releases/latest) | `sudo apt install ./Papilot-*.deb` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture> **Fedora / Arch / openSUSE** | [AppImage](https://github.com/PapilotAI/papilot/releases/latest) | `chmod +x Papilot-*.AppImage`<br>`./Papilot-*.AppImage` |
-| <img src="../assets/readme-icons/nixos.svg" width="18" height="18" align="absmiddle" alt=""> **NixOS** | [Nix flake](../nix.md#nixos-flake) | [Aggiungi al tuo `flake.nix`](../nix.md#nixos-flake) |
-| **macOS / Linux / Windows (CLI)** | [npm](https://www.npmjs.com/package/papilot) | `npm install -g papilot` |
+## Come funziona
 
-I pacchetti Linux sono per x86_64 e sono stati testati su Ubuntu 22.04. Consulta la [guida desktop](../../desktop/README.md#build-and-run) per le dipendenze e le istruzioni su AppImage/FUSE.
-
-Il pacchetto npm apre l’interfaccia nel browser e richiede Node.js 22.22+. Nix richiede i flakes attivi; consulta la [guida Nix](../nix.md#nixos-flake).
-<!-- END DOWNLOADS -->
-
-<a id="quick-start"></a>
-
-<a id="-get-started"></a>
-
-## 🚀 Per iniziare
-
-1. **Installa.** [Scarica l'applicazione](#downloads) per macOS, Linux o Windows, oppure esegui `npm install -g papilot` (Node.js 22.22+). Sono necessari anche Git e TeX Live o MacTeX.
-2. **Apri il tuo progetto.** Scegli la cartella con i tuoi file `.tex`. Papilot compila il PDF.
-3. **Scegli un agente.** Usa l'accesso CLI o la chiave API che già possiedi, poi annota la pagina.
-
-Vuoi prima provare un esempio? Esegui `papilot demo`. I dettagli sono nella [guida](../guide.md#install-and-run).
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/flow-compact-dark.png">
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/flow-dark.png">
+    <source media="(max-width: 600px)" srcset="../assets/readme-showcase/flow-compact.png">
+    <img src="../assets/readme-showcase/flow.png" alt="1. Apri il tuo articolo: una cartella, un progetto Overleaf o un modello. 2. Annota il PDF. 3. L'agente modifica una copia nel proprio albero di lavoro Git. 4. Visualizza il risultato impaginato: la frase diventa la regola di inferenza T-Abs, tracciata sulla pagina. 5. Decidi tu: accetta, rifiuta o commenta per un'ulteriore revisione. 6. Esegui il commit e sincronizza: le modifiche vengono applicate ai tuoi file e alla cronologia Git, e sincronizzate con Overleaf se collegato." width="1000">
+  </picture>
+</p>
 
 <a id="documentation-and-community"></a>
 
-<a id="-community"></a>
+<a id="community"></a>
 
-## 🤝 Community
+## Comunità
 
-<img src="../assets/readme-icons/issue.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Hai trovato un bug o manca una funzionalità?** [Apri una segnalazione](https://github.com/PapilotAI/papilot/issues/new/choose), anche abbozzata.
+<p align="center">
+<a href="https://github.com/PapilotAI/papilot/issues/new/choose"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-community/issue-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-community/issue-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-community/issue-compact.png"><img src="../assets/readme-community/issue.png" alt="Segnala un bug: apri una segnalazione, anche sintetica." width="49%"></picture></a>
+<a href="https://github.com/PapilotAI/papilot/discussions"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-community/discussion-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-community/discussion-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-community/discussion-compact.png"><img src="../assets/readme-community/discussion.png" alt="Fai una domanda o condividi un'idea in Discussions." width="49%"></picture></a>
+<a href="https://discord.gg/WdgZDDAvwj"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-community/discord-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-community/discord-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-community/discord-compact.png"><img src="../assets/readme-community/discord.png" alt="Chatta su Discord con chi sviluppa e utilizza Papilot." width="49%"></picture></a>
+<a href="../../.github/CONTRIBUTING.md"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-community/contribute-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-community/contribute-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-community/contribute-compact.png"><img src="../assets/readme-community/contribute.png" alt="Contribuisci: le pull request sono benvenute, comprese quelle realizzate con agenti IA." width="49%"></picture></a>
+</p>
 
-<img src="../assets/readme-icons/discussion.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Hai una domanda o un'idea?** [Avvia una discussione](https://github.com/PapilotAI/papilot/discussions).
-
-<img src="../assets/readme-icons/pull-request.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Diventa un collaboratore.** Le pull request sono benvenute, incluse quelle scritte con agenti IA. Inizia dalla [guida per contribuire](../../.github/CONTRIBUTING.md).
+Papilot rilascia aggiornamenti frequenti: consulta il [changelog](../../CHANGELOG.md).
 
 <a id="contributors"></a>
 
@@ -149,7 +157,7 @@ Vuoi prima provare un esempio? Esegui `papilot demo`. I dettagli sono nella [gui
   <a href="https://github.com/PapilotAI/papilot/graphs/contributors">
     <picture>
       <source media="(max-width: 600px)" srcset="https://papilot.ai/readme-contributors/compact.svg">
-      <img src="https://papilot.ai/readme-contributors/desktop.svg" alt="Collaboratori di Papilot">
+      <img src="https://papilot.ai/readme-contributors/desktop.svg" alt="I collaboratori di Papilot">
     </picture>
   </a>
 </p>
@@ -157,6 +165,8 @@ Vuoi prima provare un esempio? Esegui `papilot demo`. I dettagli sono nella [gui
 <a id="star-history"></a>
 
 ## Cronologia delle stelle
+
+Se Papilot ti fa risparmiare tempo, una stella aiuta altri ricercatori a scoprirlo.
 
 <a href="https://www.star-history.com/?repos=papilotai%2Fpapilot&type=date&legend=bottom-right">
  <picture>

@@ -77,6 +77,63 @@
         "Godta, avvisa eller kommentera."
       ]
     ],
-    "under": "AI redigerar lokal LaTeX i bakgrunden"
+    "under": "AI redigerar lokal LaTeX i bakgrunden",
+    "workflowsTitle": "Tre LaTeX-arbetsflöden sida vid sida",
+    "workflowsDesc": "Jämförelse mellan Overleaf i webbläsaren, en lokal kod-IDE med AI-agent och Papilot på PDF-sidan med Overleaf-synk.",
+    "workflowsCards": [
+      {
+        "tag": "01 / Webbläsare",
+        "name": "Overleaf",
+        "points": [
+          "Delad .tex- och PDF-vy",
+          "Samarbete utan setup",
+          "Manuell kodgranskning"
+        ]
+      },
+      {
+        "tag": "02 / Kod-IDE",
+        "name": "IDE + Agent",
+        "points": [
+          "Lokal Git och CLI",
+          "Promptar i .tex-koden",
+          "Råa git diff-patchar"
+        ]
+      },
+      {
+        "tag": "03 / PDF först",
+        "name": "Papilot",
+        "points": [
+          "Kommentera i PDF:en",
+          "Typsatta PDF-diffar",
+          "Livesynk med Overleaf"
+        ]
+      }
+    ],
+    "workflowsSync": "Livesynk med Overleaf (~1 s) mellan vyerna",
+    "pipelineTitle": "Inkrementell granskningspipeline",
+    "pipelineDesc": "Hur Papilot tar en ögonblicksbild av en uppgift i en Git-worktree, bygger båda versionerna från ett varmt LaTeX-tillstånd, jämför de typsatta dokumenten och sparar varje beslut.",
+    "pipelineSteps": [
+      [
+        "Git-worktree",
+        "Isolera uppgiften",
+        "Privat inkrementellt Git-index."
+      ],
+      [
+        "Basbygge",
+        "Klona & kompilera",
+        "Varmt tillstånd, båda sidor samtidigt."
+      ],
+      [
+        "Diffmotor",
+        "Typsatt jämförelse",
+        "Fin prosa & hela formler."
+      ],
+      [
+        "Granskningslogg",
+        "Beslut per not",
+        "Ångringsbart före Verkställ."
+      ]
+    ],
+    "pipelineFoot": "Arbetskatalogen är orörd före Verkställ."
   }
 }

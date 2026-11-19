@@ -34,7 +34,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci --ignore-scripts
-      - name: Use the latest published release for downloads
+      - name: Use the latest published release for downloads and the star count
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -44,6 +44,8 @@ jobs:
             echo "::error::The latest published release does not have a stable version tag."; exit 1
           fi
           echo "PAPILOT_SITE_RELEASE=${tag#v}" >> "$GITHUB_ENV"
+          # The header's GitHub button shows the star count as of this deploy.
+          echo "PAPILOT_SITE_STARS=$(gh api repos/PapilotAI/papilot --jq .stargazers_count)" >> "$GITHUB_ENV"
       # Render the native UI examples and translated markup at build time.
       - run: node scripts/build-site.mjs
         env:

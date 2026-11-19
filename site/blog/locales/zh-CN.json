@@ -77,6 +77,63 @@
       "记号是否保持一致？",
       "论断经得起推敲吗？"
     ],
-    "responsibilityFoot": "排版的清晰，不等于论证的正确。"
+    "responsibilityFoot": "排版的清晰，不等于论证的正确。",
+    "workflowsTitle": "三种 LaTeX 写作工作流对比",
+    "workflowsDesc": "并排对比 Overleaf 网页端、接入智能体的本地源码 IDE，以及支持与 Overleaf 实时同步的 Papilot 成稿工作区。",
+    "workflowsCards": [
+      {
+        "tag": "01 / 网页分屏",
+        "name": "Overleaf",
+        "points": [
+          "左源码、右预览",
+          "零配置多人在线协作",
+          "需人工比对源码改动"
+        ]
+      },
+      {
+        "tag": "02 / 源码 IDE",
+        "name": "IDE + 智能体",
+        "points": [
+          "本地 Git 与命令行",
+          "在 .tex 代码里提问",
+          "审阅红绿源码 diff"
+        ]
+      },
+      {
+        "tag": "03 / 成稿优先",
+        "name": "Papilot",
+        "points": [
+          "直接在 PDF 上批注",
+          "原位审阅排版级对比",
+          "约 1 秒同步 Overleaf"
+        ]
+      }
+    ],
+    "workflowsSync": "Overleaf 实时同步（约 1 秒）连接网页与本地手稿",
+    "pipelineTitle": "增量编译与排版审阅流水线",
+    "pipelineDesc": "Papilot 如何在 Git 工作树中为任务创建快照、基于热缓存 LaTeX 状态编译两个版本、比对排版后的文档并记录每项决定。",
+    "pipelineSteps": [
+      [
+        "Git 工作树",
+        "隔离任务修改",
+        "私有 Git 增量快照索引。"
+      ],
+      [
+        "种子增量构建",
+        "克隆并编译",
+        "热缓存状态，双侧同时编译。"
+      ],
+      [
+        "差异归属引擎",
+        "生成版面对比",
+        "正文偏移与原子公式保护。"
+      ],
+      [
+        "可撤销日志",
+        "逐条拍板决定",
+        "点击应用前绝不改动原稿。"
+      ]
+    ],
+    "pipelineFoot": "点击应用或提交前，主工作目录保持原样。"
   }
 }

@@ -77,6 +77,63 @@
         "Accepter, refuser ou commenter."
       ]
     ],
-    "under": "L'IA modifie le LaTeX local en coulisse"
+    "under": "L'IA modifie le LaTeX local en coulisse",
+    "workflowsTitle": "Trois flux LaTeX côte à côte",
+    "workflowsDesc": "Comparaison entre Overleaf au navigateur, un IDE local avec agent IA et Papilot centré sur le PDF avec synchro Overleaf.",
+    "workflowsCards": [
+      {
+        "tag": "01 / Navigateur",
+        "name": "Overleaf",
+        "points": [
+          "Vue scindée .tex et PDF",
+          "Coédition sans réglage",
+          "Relecture du code brut"
+        ]
+      },
+      {
+        "tag": "02 / IDE code",
+        "name": "IDE + Agent",
+        "points": [
+          "Git local et outils CLI",
+          "Prompts dans le .tex",
+          "Patchs git diff bruts"
+        ]
+      },
+      {
+        "tag": "03 / PDF d’abord",
+        "name": "Papilot",
+        "points": [
+          "Annoter sur le PDF",
+          "Diffs PDF composés",
+          "Synchro Overleaf vive"
+        ]
+      }
+    ],
+    "workflowsSync": "Synchro Overleaf (~1 s) entre web et PDF",
+    "pipelineTitle": "Pipeline incrémental de révision",
+    "pipelineDesc": "Comment Papilot prend un instantané d'une tâche dans un arbre de travail Git, compile les deux versions à partir d'un état LaTeX préchauffé, compare les documents composés et enregistre chaque décision.",
+    "pipelineSteps": [
+      [
+        "Worktree Git",
+        "Isoler la tâche",
+        "Index Git privé incrémental."
+      ],
+      [
+        "Build amorcé",
+        "Cloner & compiler",
+        "État préchauffé, deux versions en parallèle."
+      ],
+      [
+        "Moteur diff",
+        "Comparaison PDF",
+        "Prose fine & maths entières."
+      ],
+      [
+        "Journal",
+        "Juger par note",
+        "Annulable avant Appliquer."
+      ]
+    ],
+    "pipelineFoot": "Dossier intact jusqu’à l’action Appliquer."
   }
 }

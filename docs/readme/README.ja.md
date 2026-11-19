@@ -2,9 +2,9 @@
 
 <img src="../assets/wordmark.svg#gh-light-mode-only" width="220" height="69" alt="Papilot"><img src="../assets/wordmark-dark.svg#gh-dark-mode-only" width="220" height="69" alt="Papilot"><br>**次世代 AI LaTeX エディタ**
 
-<h2><code>.tex</code> の読み書きは不要<br><img src="../assets/pdf.svg" width="22" height="31" align="absmiddle" alt="PDF"> 上で直接作業</h2>
+<h3><code>.tex</code>&nbsp;は読み書きせず&emsp;<img src="../assets/pdf.svg" width="17" height="24" align="absmiddle" alt="PDF">&nbsp;の上でそのまま作業</h3>
 
-AI を用いた責任ある執筆と組版のための**新しいパラダイム**。
+<a href="https://papilot.ai"><b>papilot.ai</b></a>&emsp;<a href="https://papilot.ai/demo">オンラインデモ</a>&emsp;<a href="#get-started">はじめる</a>&emsp;<a href="#agents">エージェント</a>&emsp;<a href="#how-it-works">仕組み</a>
 
 <!-- BEGIN BADGES -->
 [![License: MIT](https://img.shields.io/github/license/PapilotAI/papilot?style=flat&color=22c55e)](../../LICENSE)
@@ -12,10 +12,11 @@ AI を用いた責任ある執筆と組版のための**新しいパラダイム
 [![Release](https://img.shields.io/github/v/release/PapilotAI/papilot?style=flat&label=release&color=0969da)](https://github.com/PapilotAI/papilot/releases/latest)
 [![GitHub total downloads](https://img.shields.io/github/downloads/PapilotAI/papilot/total?style=flat&logo=github&label=downloads&color=0969da)](https://github.com/PapilotAI/papilot/releases)
 [![npm monthly downloads](https://img.shields.io/npm/dm/papilot?style=flat&logo=npm&label=downloads&color=cb3837)](https://www.npmjs.com/package/papilot)
+[![GitHub stars](https://img.shields.io/github/stars/PapilotAI/papilot?style=flat&logo=github&label=stars&color=0969da)](https://github.com/PapilotAI/papilot/stargazers)
 [![Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/WdgZDDAvwj)
 <!-- END BADGES -->
 
-<p data-language-switcher><sub><a href="../../README.md">English</a>&nbsp;· <a href="README.zh-CN.md">简体中文</a>&nbsp;· <a href="README.zh-Hant.md">繁體中文</a>&nbsp;· <a href="README.ja.md">日本語</a>&nbsp;· <a href="README.ko.md">한국어</a>&nbsp;· <a href="README.de.md">Deutsch</a>&nbsp;· <a href="README.fr.md">Français</a>&nbsp;· <a href="README.es.md">Español</a>&nbsp;· <a href="README.pt.md">Português</a>&nbsp;· <a href="README.it.md">Italiano</a>&nbsp;· <a href="README.sv.md">Svenska</a></sub></p>
+<p data-language-switcher><sub><a href="../../README.md">English</a>&emsp;<a href="README.zh-CN.md">简体中文</a>&emsp;<a href="README.zh-Hant.md">繁體中文</a>&emsp;<a href="README.ja.md">日本語</a>&emsp;<a href="README.ko.md">한국어</a>&emsp;<a href="README.de.md">Deutsch</a>&emsp;<a href="README.fr.md">Français</a>&emsp;<a href="README.es.md">Español</a>&emsp;<a href="README.pt.md">Português</a>&emsp;<a href="README.it.md">Italiano</a>&emsp;<a href="README.sv.md">Svenska</a></sub></p>
 
 </div>
 
@@ -25,144 +26,153 @@ AI を用いた責任ある執筆と組版のための**新しいパラダイム
   <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/hero-compact-dark.png">
   <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/hero-dark.png">
   <source media="(max-width: 600px)" srcset="../assets/readme-showcase/hero-compact.png">
-  <img src="../assets/readme-showcase/hero.png" alt="Papilot は AI による編集を組版済みの変更前後として PDF 上に表示し、承認・却下・コメントを行えます。" width="900">
+  <img src="../assets/readme-showcase/hero.png" alt="Papilot は AI による編集を、承認・却下・コメント付きの組版済み前後比較として PDF 上に表示します。" width="900">
 </picture>
 </a>
 </p>
 
-<a id="-you-care-about-the-pdfbrnot-the-tex-behind-it"></a>
-
-## 📄 重要なのは PDF であり<br>裏側の `.tex` ではありません
-
-論文、学位論文、書籍、スライド——読者が目にするのは組版されたページだけです。<br>
-**だからこそ、作業もそのページ上で行うべきです。**
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/paradigm-compact-dark.png">
-    <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/paradigm-dark.png">
-    <source media="(max-width: 600px)" srcset="../assets/readme-showcase/paradigm-compact.png">
-    <img src="../assets/readme-showcase/paradigm.png" alt="手書きの LaTeX、AI による LaTeX 差分の確認、そして Papilot による PDF のレビューへ。" width="900">
-  </picture>
-</p>
-
-**頭の中で差分をコンパイルする必要はもうありません。**<br>
-ソースの差分では PDF を*想像*するしかありませんが、Papilot は組版された状態でそれを*表示*します。
-
-<a id="-point-at-the-page-and-say-what-you-want"></a>
-
-## 👉 ページを指して指示するだけ
-
-文、数式、または図を選択して、注釈を書き込むだけ。<br>
-**エージェントが該当するソースを見つけます。`.tex` ファイルを開く必要は一切ありません。**
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/notes-app-compact-dark.png">
-    <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/notes-app-dark.png">
-    <source media="(max-width: 600px)" srcset="../assets/readme-showcase/notes-app-compact.png">
-    <img src="../assets/readme-showcase/notes-app.png" alt="PDF 上の数式を囲む枠とハイライトされた文にそれぞれ注釈が付けられ、次のタスクに追加されている Papilot の画面。" width="900">
-  </picture>
-</p>
-
 <a id="features"></a>
 
-<a id="-your-files-stay-yours"></a>
+<a id="why-papilot"></a>
 
-## 🔒 ファイルは常にあなたの手元に
+## Papilot が選ばれる理由
 
-<img src="../assets/readme-icons/folder.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**ローカルマシン上のプレーンファイル。** すべての変更は Git の履歴に記録されます。
+<table>
+<tr>
+<td width="50%" valign="top">
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/why-annotate-dark.png"><img src="../assets/readme-showcase/why-annotate.png" alt="PDF 上で枠囲みされた文と図。それぞれにエージェントへの注釈が付いています。" width="100%"></picture><br>
+<b>ページ上を直接指定</b><br>
+文を選択するか、数式や図を枠で囲んで、変更したい内容を記入します。どのファイルにあっても、エージェントには対応する正確なソース行が渡されます。
+</td>
+<td width="50%" valign="top">
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/why-review-dark.png"><img src="../assets/readme-showcase/why-review.png" alt="承認・却下・コメント付きで組版表示された変更前後の比較。" width="100%"></picture><br>
+<b>すべての変更を組版結果でレビュー</b><br>
+各編集は PDF 上の前後比較として返ってきます。承認・却下・コメントが可能で、承認するまで論文には一切反映されません。
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/why-overleaf-dark.png"><img src="../assets/readme-showcase/why-overleaf.png" alt="左右に並んだ Papilot と Overleaf。双方向でリアルタイム同期され、Overleaf には共著者のカーソルが表示されています。" width="100%"></picture><br>
+<b><picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/overleaf-dark.svg"><img src="../assets/readme-icons/overleaf.svg" width="16" height="16" align="absmiddle" alt=""></picture>&nbsp;Overleaf とのリアルタイム同期</b><br>
+共著者はそのまま Overleaf で執筆を続けられます。承認した変更は約 1 秒で共著者に届き、共著者の変更も名前付きであなたのファイルと PDF に反映されます。
+</td>
+<td width="50%" valign="top">
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/why-agents-dark.png"><img src="../assets/readme-showcase/why-agents.png" alt="チャット下部のモデルメニュー。Codex、Claude、GLM のモデルが表示されています。" width="100%"></picture><br>
+<b>あらゆるエージェント、あらゆるモデル</b><br>
+チャットの下から接続済みの任意のエージェントのモデルを選択できます。別のエージェントに切り替えれば、Papilot がそのエージェントでリクエストを再実行します。
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/why-record-dark.png"><img src="../assets/readme-showcase/why-record.png" alt="バージョン履歴内でメッセージ付きでコミット・プッシュされた承認済みの変更。" width="100%"></picture><br>
+<b>すべての変更を履歴に記録</b><br>
+各タスクは元のファイルから隔離された専用の Git 作業ツリーで実行されます。承認した変更のコミットは別ステップになっており、すべての変更が Git 履歴に残ります。
+</td>
+<td width="50%" valign="top">
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/why-phone-dark.png"><img src="../assets/readme-showcase/why-phone.png" alt="デスクトップウィンドウの手前にあるスマートフォン上の同じレビュー画面。" width="100%"></picture><br>
+<b>スマートフォンからレビュー</b><br>
+<a href="../guide.md#remote-access-with-tailscale">Tailscale</a> 経由でスマートフォンやタブレットから Papilot を開き、外出先でも PDF の閲覧、注釈の追加、変更の承認が行えます。
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top">
+<picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/why-universe-dark.png"><img src="../assets/readme-showcase/why-universe.png" alt="Papilot Universe: 学位論文、ジャーナル、国際会議、履歴書（CV）、ポスター用の LaTeX テンプレート。" width="100%"></picture><br>
+<b>テンプレートから開始</b><br>
+<a href="https://papilot.ai/universe/">Papilot Universe</a> には学位論文、ジャーナル・会議キット、スライド、ポスター、履歴書（CV）、書籍のテンプレートが揃っており、400 以上の会議について論文募集（CFP）で指定されたテンプレートに対応しています。テンプレートを選ぶだけで、すぐにコンパイル可能な論文を Papilot が作成します。
+</td>
+</tr>
+</table>
 
-<img src="../assets/readme-icons/git.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Git を介して共著者と同期。** プルやプッシュを行い、コンフリクトの解決はエージェントに任せられます。
+<a id="quick-start"></a>
+<a id="get-started"></a>
+<a id="downloads"></a>
 
-<img src="../assets/readme-icons/code.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**無料かつオープンソース。** MIT ライセンスで提供され、macOS、Linux、Windows に対応しています。
+<a id="get-started"></a>
+
+## はじめる
+
+<p align="center">
+<a href="https://papilot.ai/#download"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-downloads/mac-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-downloads/mac-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-downloads/mac-compact.png"><img src="../assets/readme-downloads/mac.png" alt="macOS 版をダウンロード: Apple シリコンおよび Intel、DMG または ZIP。" width="49%"></picture></a>
+<a href="https://papilot.ai/#download"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-downloads/windows-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-downloads/windows-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-downloads/windows-compact.png"><img src="../assets/readme-downloads/windows.png" alt="Windows 版をダウンロード: x64 インストーラーまたはポータブルアプリ。" width="49%"></picture></a>
+<a href="https://papilot.ai/#download"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-downloads/linux-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-downloads/linux-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-downloads/linux-compact.png"><img src="../assets/readme-downloads/linux.png" alt="Linux 版をダウンロード: AppImage、.deb、または Nix。" width="49%"></picture></a>
+<a href="../guide.md#install-and-run"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-downloads/terminal-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-downloads/terminal-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-downloads/terminal-compact.png"><img src="../assets/readme-downloads/terminal.png" alt="ターミナルでインストール: npm install -g papilot を実行後、papilot demo を実行。Node.js 22.22+ が必要です。" width="49%"></picture></a>
+</p>
+
+<p align="center"><sub>無料・オープンソース。Git、TeX ディストリビューション、およびサインイン済みの<a href="#agents">エージェント</a>が必要です。</sub></p>
 
 <a id="agents"></a>
 
-<a id="-bring-the-ai-agent-you-already-use"></a>
+<a id="works-with-your-agent"></a>
 
-## 🤖 普段使っている AI エージェントをそのまま利用
+## お使いのエージェントと連携
 
-<!-- BEGIN AGENT ICONS -->
 <p align="center">
   <a href="../guide.md#agents">
     <picture>
-      <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-agents/compact-dark.svg">
-      <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-agents/desktop-dark.svg">
-      <source media="(max-width: 600px)" srcset="../assets/readme-agents/compact.svg">
-      <img src="../assets/readme-agents/desktop.svg" alt="Papilot Writer, Pi, Codex, Claude, Cursor, Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, Qoder, CodeBuddy, WorkBuddy" width="816">
+      <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-agents/grid-compact-dark.png">
+      <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-agents/grid-dark.png">
+      <source media="(max-width: 600px)" srcset="../assets/readme-agents/grid-compact.png">
+      <img src="../assets/readme-agents/grid.png" alt="Papilot Writer, Codex, Claude, Cursor, GitHub Copilot, Grok, Antigravity, Kimi, GLM, DeepSeek, Qwen, OpenCode, Qoder, CodeBuddy, WorkBuddy, Pi" width="848">
     </picture>
   </a>
 </p>
-<!-- END AGENT ICONS -->
 
-<a id="downloads"></a>
+<p align="center"><sub>既存のログイン情報や API キーをそのまま利用するか、内蔵の Papilot Writer を使用できます。<a href="../guide.md#agents">セットアップ</a></sub></p>
 
-<a id="-downloads"></a>
+<a id="how-it-works"></a>
 
-## 📥 ダウンロード
+<a id="how-it-works"></a>
 
-<!-- BEGIN DOWNLOADS -->
-| OS / ディストリビューション | ダウンロード / パッケージ | インストール / 起動 |
-| --- | --- | --- |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/apple-dark.svg"><img src="../assets/readme-icons/apple.svg" width="18" height="18" align="absmiddle" alt=""></picture> **macOS** | [Apple Silicon](https://github.com/PapilotAI/papilot/releases/latest) · [Intel](https://github.com/PapilotAI/papilot/releases/latest)<br>DMG / ZIP | DMG を開き、Papilot を「アプリケーション」にドラッグします。 |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/windows-dark.svg"><img src="../assets/readme-icons/windows.svg" width="18" height="18" align="absmiddle" alt=""></picture> **Windows** | [インストーラー](https://github.com/PapilotAI/papilot/releases/latest) · [ポータブル版](https://github.com/PapilotAI/papilot/releases/latest)<br>x64 | インストーラーを実行するか、ポータブル版を直接起動します。 |
-| <img src="../assets/readme-icons/ubuntu.svg" width="18" height="18" align="absmiddle" alt=""> <img src="../assets/readme-icons/debian.svg" width="18" height="18" align="absmiddle" alt=""> **Ubuntu / Debian / Linux Mint** | [.deb](https://github.com/PapilotAI/papilot/releases/latest) | `sudo apt install ./Papilot-*.deb` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-icons/linux-dark.svg"><img src="../assets/readme-icons/linux.svg" width="18" height="18" align="absmiddle" alt=""></picture> **Fedora / Arch / openSUSE** | [AppImage](https://github.com/PapilotAI/papilot/releases/latest) | `chmod +x Papilot-*.AppImage`<br>`./Papilot-*.AppImage` |
-| <img src="../assets/readme-icons/nixos.svg" width="18" height="18" align="absmiddle" alt=""> **NixOS** | [Nix flake](../nix.md#nixos-flake) | [`flake.nix` に追加](../nix.md#nixos-flake) |
-| **macOS / Linux / Windows (CLI)** | [npm](https://www.npmjs.com/package/papilot) | `npm install -g papilot` |
+## 仕組み
 
-Linux パッケージは x86_64 向けで、Ubuntu 22.04 でテスト済みです。依存関係と AppImage/FUSE の説明は[デスクトップ版のセットアップ](../../desktop/README.md#build-and-run)をご覧ください。
-
-npm 版はブラウザーで動作し、Node.js 22.22+ が必要です。Nix では flakes を有効にしてください。詳しくは [Nix のセットアップ](../nix.md#nixos-flake)をご覧ください。
-<!-- END DOWNLOADS -->
-
-<a id="quick-start"></a>
-
-<a id="-get-started"></a>
-
-## 🚀 はじめに
-
-1. **インストール。** macOS、Linux、Windows 向けの[アプリをダウンロード](#downloads)するか、`npm install -g papilot`（Node.js 22.22 以降）を実行します。また、Git と TeX Live または MacTeX が必要です。
-2. **プロジェクトを開く。** `.tex` ファイルが含まれるフォルダを選択すると、Papilot が PDF をビルドします。
-3. **エージェントを選択。** 既存の CLI ログインまたは API キーを使用し、ページに注釈を付けます。
-
-まずはサンプルを試したいですか？ `papilot demo` を実行してください。詳細は[ガイド](../guide.md#install-and-run)を参照してください。
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-showcase/flow-compact-dark.png">
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/readme-showcase/flow-dark.png">
+    <source media="(max-width: 600px)" srcset="../assets/readme-showcase/flow-compact.png">
+    <img src="../assets/readme-showcase/flow.png" alt="1. 論文を開く: フォルダ、Overleaf プロジェクト、またはテンプレートから開きます。 2. PDF に注釈を付ける。 3. エージェントが専用の Git 作業ツリー内のコピーを編集します。 4. 組版結果を確認: 文がページ上に描画された T-Abs 推論規則に変わります。 5. 判断する: 承認、却下、またはコメントして再調整を依頼します。 6. コミットと同期: 変更がファイルと Git 履歴に反映され、リンクされていれば Overleaf にも同期されます。" width="1000">
+  </picture>
+</p>
 
 <a id="documentation-and-community"></a>
 
-<a id="-community"></a>
+<a id="community"></a>
 
-## 🤝 コミュニティ
+## コミュニティ
 
-<img src="../assets/readme-icons/issue.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**バグの発見や機能の要望がありますか？** 簡単な内容でも構いませんので、[Issue を作成](https://github.com/PapilotAI/papilot/issues/new/choose)してください。
+<p align="center">
+<a href="https://github.com/PapilotAI/papilot/issues/new/choose"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-community/issue-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-community/issue-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-community/issue-compact.png"><img src="../assets/readme-community/issue.png" alt="バグを報告: 簡単な内容でも構いませんので Issue を作成してください。" width="49%"></picture></a>
+<a href="https://github.com/PapilotAI/papilot/discussions"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-community/discussion-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-community/discussion-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-community/discussion-compact.png"><img src="../assets/readme-community/discussion.png" alt="Discussions で質問したりアイデアを共有したりできます。" width="49%"></picture></a>
+<a href="https://discord.gg/WdgZDDAvwj"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-community/discord-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-community/discord-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-community/discord-compact.png"><img src="../assets/readme-community/discord.png" alt="Discord で Papilot の開発者やユーザーとチャットできます。" width="49%"></picture></a>
+<a href="../../.github/CONTRIBUTING.md"><picture><source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="../assets/readme-community/contribute-compact-dark.png"><source media="(prefers-color-scheme: dark)" srcset="../assets/readme-community/contribute-dark.png"><source media="(max-width: 600px)" srcset="../assets/readme-community/contribute-compact.png"><img src="../assets/readme-community/contribute.png" alt="コントリビュート: AI エージェントと作成したものをはじめ、プルリクエストを歓迎します。" width="49%"></picture></a>
+</p>
 
-<img src="../assets/readme-icons/discussion.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**質問やアイデアがありますか？** [Discussion を開始](https://github.com/PapilotAI/papilot/discussions)してください。
-
-<img src="../assets/readme-icons/pull-request.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**コントリビューターになる。** AI エージェントを用いて作成されたものを含め、プルリクエストを歓迎します。まずは[コントリビューションガイド](../../.github/CONTRIBUTING.md)をご覧ください。
+Papilot は頻繁にアップデートされています。[変更履歴](../../CHANGELOG.md)をご覧ください。
 
 <a id="contributors"></a>
 
-## 貢献者
+## コントリビューター
 
 <p>
   <a href="https://github.com/PapilotAI/papilot/graphs/contributors">
     <picture>
       <source media="(max-width: 600px)" srcset="https://papilot.ai/readme-contributors/compact.svg">
-      <img src="https://papilot.ai/readme-contributors/desktop.svg" alt="Papilot の貢献者">
+      <img src="https://papilot.ai/readme-contributors/desktop.svg" alt="Papilot のコントリビューター">
     </picture>
   </a>
 </p>
 
 <a id="star-history"></a>
 
-## スター数の推移
+## スター履歴
+
+Papilot で時間を節約できたら、他の研究者も見つけやすくなるようスターをお願いします。
 
 <a href="https://www.star-history.com/?repos=papilotai%2Fpapilot&type=date&legend=bottom-right">
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=papilotai/papilot&type=date&theme=dark&legend=bottom-right" />
    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=papilotai/papilot&type=date&legend=bottom-right" />
-   <img alt="スター数の推移グラフ" src="https://api.star-history.com/chart?repos=papilotai/papilot&type=date&legend=bottom-right" />
+   <img alt="スター履歴チャート" src="https://api.star-history.com/chart?repos=papilotai/papilot&type=date&legend=bottom-right" />
  </picture>
 </a>
 
