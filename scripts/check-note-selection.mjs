@@ -24,7 +24,7 @@ function note(id, index, group) {
 }
 let notes = [note('n1', 1), note('n2', 2, 'yellow'), note('n3', 3, 'yellow'), note('n4', 4, 'purple'), note('n5', 5)];
 const otherNote = { ...note('other-note', 6), projectId: 'other' };
-const original = structuredClone(notes), sent = [], attempts = [], items = new Map();
+const original = structuredClone(notes), sent = [], attempts = [], items = new Map(), inFlightMarks = [];
 let failDelete = false, holdDelete = false, releaseDelete, deletedFixture, restores = 0;
 let fail = false, hold = false, release, failEdit = false, holdEdit = false, failHeldEdit = false, releaseEdit;
 await page.route('**/api/**', async route => {
@@ -40,7 +40,7 @@ await page.route('**/api/**', async route => {
   if (url.pathname.endsWith('/skills')) return json({ skills: [{ id: 'review', name: 'Review', description: 'Review the paper', hint: '', source: 'builtin', output: 'annotations' }] });
   if (url.pathname.endsWith('/git')) return json({ branch: 'main', files: [] });
   if (url.pathname.endsWith('/git/overview')) return json({ worktrees: [], commits: [], truncated: false });
-  if (url.pathname.endsWith('/manuscript')) return json({ git: { branch: 'main', files: [] }, build: { status: 'ready', key: 'pdf', pages: [[612, 792], [612, 792]] }, annotations: url.pathname.includes('/other/') ? [otherNote] : notes });
+  if (url.pathname.endsWith('/manuscript')) return json({ git: { branch: 'main', files: [] }, build: { status: 'ready', key: 'pdf', pages: [[612, 792], [612, 792]] }, annotations: url.pathname.includes('/other/') ? [otherNote] : notes, inFlightMarks: url.pathname.includes('/other/') ? [] : inFlightMarks });
   if (url.pathname.endsWith('/manuscript.pdf')) return route.fulfill({ contentType: 'application/pdf', body: fs.readFileSync('tests/fixtures/outline.pdf') });
   if (url.pathname.endsWith('/manuscript/words')) return json(words[Number(url.searchParams.get('page'))]);
   if (url.pathname.endsWith('/items')) return json({ items: items.get(url.pathname.split('/')[3]) || [] });
@@ -74,7 +74,9 @@ await page.route('**/api/**', async route => {
     sent.push(body);
     items.set(body.id, [{ id: `message-${body.id}`, taskId: body.id, type: 'user', text: body.instructions, createdAt: Date.now(), meta: { groupInstructions: body.groupInstructions, notes: notes.filter(note => body.annotations?.includes(note.id)).map(note => ({ id: note.id, group: note.group, where: 'Page 1', quote: note.quote, comment: note.comment })) } }]);
     const task = { ...body, name: body.id, title: body.title, status: 'queued', createdAt: Date.now(), updatedAt: Date.now(), review: null };
-    snapshot.tasks.push(task); notes = notes.filter(note => !(body.annotations || []).includes(note.id));
+    snapshot.tasks.push(task);
+    inFlightMarks.push(...notes.filter(note => body.annotations?.includes(note.id)).map(note => ({ note: { ...note, taskId: task.id }, taskId: task.id, title: task.title, status: task.status })));
+    notes = notes.filter(note => !(body.annotations || []).includes(note.id));
     return json(task);
   }
   throw Error(`Unexpected request ${url.pathname}`);
@@ -680,6 +682,10 @@ try {
   await expect(page.getByRole('region', { name: 'Notes in this task', exact: true })).toHaveCount(0);
   assert.deepEqual(notes, [original[1], original[3], original[4], concurrent]);
   assert.equal(sent[0].agent, 'codex');
+  for (const id of sent[0].annotations) {
+    await expect(page.locator(`.in-flight-tag[data-note="${id}"]`)).toHaveCount(1);
+    await expect(page.locator(`.note-tag[data-note="${id}"]`)).toHaveCount(0);
+  }
   await page.locator(`.task-row[data-task="${sent[0].id}"] .task-link`).click();
   await expect(page.locator('.thread .group-instruction-sent')).toHaveText('Explain the reasoning step by step.');
   await page.locator('.manuscript-link').click();

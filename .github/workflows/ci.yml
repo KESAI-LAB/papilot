@@ -229,6 +229,9 @@ jobs:
       - name: note-selection
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-note-selection.mjs
+      - name: in-flight-marks
+        if: ${{ !cancelled() }}
+        run: node scripts/check-in-flight-marks.mjs
       - name: section-comments
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-section-comments.mjs
@@ -356,6 +359,7 @@ jobs:
             test-results/anchors-*.png
             test-results/bulk-tasks-*.png
             test-results/typeless-*.png
+            test-results/in-flight-marks/*.png
           if-no-files-found: ignore
           retention-days: 7
       - name: Keep screenshots of a failed check

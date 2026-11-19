@@ -1,6 +1,6 @@
 import { isNoteGroup } from '../note-groups.ts';
 import { isCommitMessageLanguage, type CommitMessageLanguage } from '../commit.ts';
-import { noteAlternativeRange, NOTE_ALTERNATIVE_RANGES, validRoutes } from '../shared.ts';
+import { noteAlternativeRange, NOTE_ALTERNATIVE_RANGES, validRoutes, taskFinished, type InFlightMark } from '../shared.ts';
 import Fastify from 'fastify';
 import compress from '@fastify/compress';
 import { registerImportUpload } from './import-upload.ts';
@@ -253,11 +253,11 @@ export async function buildApp(options: AppOptions) {
   // again, as the file menu offers it: a root document, or one compiled
   // before, even while it lacks \documentclass of its own. One on a main file
   // since renamed or removed moves to the current document.
-  async function paperNoteFilter(id: string) {
+  async function paperNoteFilter(id: string, includeSent = false) {
     const root = store.project(id).path, document = await manuscripts.document(id, root), elsewhere = new Map<string, boolean>();
     const before = await compiledBefore(root);
     const away = (file: string) => elsewhere.get(file) ?? elsewhere.set(file, before.has(file) ? existingTex(root, file) : rootDocument(root, file)).get(file)!;
-    return (note: Annotation) => !note.taskId && !isTaskReviewNote(note) && (!note.document || note.document === document || !away(note.document));
+    return (note: Annotation) => (includeSent || !note.taskId) && !isTaskReviewNote(note) && (!note.document || note.document === document || !away(note.document));
   }
   async function paperNotes(id: string) { return store.annotations(id).filter(await paperNoteFilter(id)); }
   async function manuscript(id: string, rebuild = false) {
@@ -282,7 +282,21 @@ export async function buildApp(options: AppOptions) {
       manuscripts.noteSections(id, state.build.key, annotations).catch(() => null),
       new Promise<null>(resolve => setImmediate(resolve, null)),
     ]) : null;
-    return { ...state, annotations, ...(scope ? { noteSections: scope.sections, unplacedSectionNotes: scope.unplaced } : {}) };
+    const onPaper = await paperNoteFilter(id, true);
+    const inFlightTask = (note: Annotation) => {
+      const task = note.taskId ? store.findTask(note.taskId) : undefined;
+      return task?.projectId === id && task.status !== 'deleting' && !taskFinished(task) ? task : undefined;
+    };
+    const sent = store.annotations(id).filter(note => onPaper(note) && inFlightTask(note));
+    // Reuse confirmed placements, without rewriting the task's source snapshot.
+    // Recheck after the lookup: delivery or deletion may have finished meanwhile.
+    const positions = await manuscripts.reanchor(id, root, sent).catch(() => sent);
+    const inFlightMarks: InFlightMark[] = positions.flatMap(note => {
+      const current = store.annotation(id, note.id), task = inFlightTask(current);
+      return current.deletedAt === undefined && task && current.taskId === note.taskId
+        ? [{ note, taskId: task.id, title: task.title, status: task.status, ...(task.status === 'building' && task.review?.ready ? { ready: true as const } : {}) }] : [];
+    });
+    return { ...state, annotations, inFlightMarks, ...(scope ? { noteSections: scope.sections, unplacedSectionNotes: scope.unplaced } : {}) };
   }
 
   app.get('/api/health', () => ({ ok: true, name: 'Papilot', version: options.version, ...(options.desktopInstance ? { desktopInstance: options.desktopInstance } : {}), ...(options.updateInstance ? { updateInstance: options.updateInstance } : {}) }));
