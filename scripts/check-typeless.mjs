@@ -68,7 +68,7 @@ await page.addInitScript(() => {
   };
 });
 const card = page.getByRole('dialog', { name: /^PDF note/ }), input = card.getByRole('textbox');
-const microphone = card.getByRole('button', { name: 'Send Typeless shortcut' });
+const microphone = card.getByRole('button', { name: 'Toggle dictation' });
 const calls = () => page.evaluate(() => window.typelessFixture.calls);
 const openSettings = async () => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -85,7 +85,7 @@ try {
   assert.equal((await calls()).length, 0, 'Off by default');
   await input.press('Escape');
   await openSettings();
-  const toggle = page.getByRole('switch', { name: 'Voice notes with Typeless' });
+  const toggle = page.getByRole('switch', { name: 'Typeless voice notes' });
   await expect(toggle).not.toBeChecked();
   await toggle.check();
   await page.screenshot({ path: 'test-results/typeless-settings-light.png', animations: 'disabled' });
@@ -101,14 +101,26 @@ try {
   await page.evaluate(() => { window.typelessFixture.shortcut = 'LeftCtrl+F8'; window.typelessFixture.delayed = true; });
   await microphone.dblclick();
   await expect.poll(async () => (await calls()).length).toBe(2);
+  await expect(microphone).toHaveAttribute('aria-busy', 'true');
+  await expect(microphone.locator('.spinner')).toBeVisible();
+  await expect(card.locator('.typeless-note-status:not(.sr-only)')).toHaveCount(0);
   await input.press('Enter');
   await input.press('Escape');
   await page.locator('.settings-link').dispatchEvent('click');
   await expect(card).toBeVisible();
   await expect(page.locator('.settings-dialog')).toHaveCount(0);
   assert.equal(created.length, 0, 'Sending a shortcut never submits the draft');
+  // Freeze the brief feedback while capturing it, even on a busy test host.
+  await page.clock.install({ time: new Date('2026-11-19T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-11-19T01:00:00Z'));
+  await card.screenshot({ path: 'test-results/typeless-note-sending.png', animations: 'disabled' });
   await page.evaluate(() => { window.typelessFixture.release(); window.typelessFixture.delayed = false; });
   await expect(microphone).toBeEnabled();
+  await expect(microphone).toHaveAttribute('data-state', 'sent');
+  await expect(microphone).not.toHaveAttribute('aria-pressed');
+  await expect(card.getByRole('status')).toHaveClass(/sr-only/);
+  await card.screenshot({ path: 'test-results/typeless-note-success.png', animations: 'disabled' });
+  await page.clock.resume();
   await expect(input).toBeFocused();
   await input.press('End');
   await page.keyboard.insertText('Dictated text.');
@@ -116,6 +128,8 @@ try {
   assert.equal(created.length, 0, 'A delayed transcript does not submit');
   assert.ok((await calls()).every(call => call.focused));
   assert.equal((await calls())[1].shortcut, 'LeftCtrl+F8');
+  await expect(microphone).toHaveAttribute('data-state', 'idle');
+  await expect(card.getByRole('status')).toBeEmpty();
   await page.screenshot({ path: 'test-results/typeless-note-light.png', animations: 'disabled' });
 
   await page.evaluate(() => { window.typelessFixture.status = 'permission'; });
@@ -127,7 +141,11 @@ try {
   await page.screenshot({ path: 'test-results/typeless-note-error-dark.png', animations: 'disabled' });
   await page.evaluate(() => { window.typelessFixture.status = 'ready'; });
   await microphone.click();
-  await expect(card.getByRole('status')).toContainText('Sent LeftCtrl+F8');
+  await expect(card.getByRole('status')).toContainText('LeftCtrl+F8 sent');
+  await expect(card.getByRole('status')).toHaveClass(/sr-only/);
+  await expect(card.locator('.typeless-note-status:not(.sr-only)')).toHaveCount(0);
+  await expect(microphone).toHaveAttribute('data-state', 'idle');
+  await page.screenshot({ path: 'test-results/typeless-note-recovered-dark.png', animations: 'disabled' });
   const beforeClose = (await calls()).length;
   await input.press('Escape');
   await expect(card).toHaveCount(0);

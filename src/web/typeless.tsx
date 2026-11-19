@@ -14,14 +14,14 @@ function useEnabled() { return useSyncExternalStore(subscribe, read); }
 
 function description(info: TypelessStatus): string {
   switch (info.status) {
-    case 'ready': return t('Typeless shortcut: {shortcut}', { shortcut: info.shortcut! });
-    case 'sent': return t('Sent {shortcut}. Check the Typeless voice bar.', { shortcut: info.shortcut! });
-    case 'not-detected': return t('Install Typeless on this Mac to use voice notes.');
-    case 'shortcut-unavailable': return t('Set a supported keyboard shortcut in Typeless, then refresh.');
-    case 'permission': return t('Allow Papilot in System Settings → Privacy & Security → Accessibility, then refresh.');
-    case 'not-running': return t('Open Typeless, then try again.');
-    case 'keys-held': return t('Release the modifier keys, then try again.');
-    default: return t('Could not send the Typeless shortcut. Focus this note and try again.');
+    case 'ready': return t('Shortcut: {shortcut}', { shortcut: info.shortcut! });
+    case 'sent': return t('{shortcut} sent', { shortcut: info.shortcut! });
+    case 'not-detected': return t('Install Typeless first.');
+    case 'shortcut-unavailable': return t('Check your Typeless shortcut.');
+    case 'permission': return t('Allow Papilot in macOS Accessibility settings.');
+    case 'not-running': return t('Open Typeless first.');
+    case 'keys-held': return t('Release modifier keys and retry.');
+    default: return t('Shortcut failed. Try again.');
   }
 }
 
@@ -39,8 +39,8 @@ export function TypelessExperiment() {
   return <div className="settings-card typeless-experiment">
     <div className="settings-row settings-toggle">
       <div className="settings-text">
-        <label className="settings-name" htmlFor={id}>{t('Voice notes with Typeless')}</label>
-        <p id={id + '-detail'}>{t('New PDF notes send your Typeless shortcut. Use the microphone button to send it again; wait for the transcript before leaving the note.')}</p>
+        <label className="settings-name" htmlFor={id}>{t('Typeless voice notes')}</label>
+        <p id={id + '-detail'}>{t('Dictate PDF notes with Typeless.')}</p>
         <p role="status">{info ? description(info) : t('Loading…')}</p>
         <button type="button" className="button secondary compact" onClick={() => void refresh()} disabled={loading}>{t('Refresh')}</button>
       </div>
@@ -57,6 +57,11 @@ export function useTypelessNote(input: RefObject<HTMLTextAreaElement | null>, el
   const [sending, setSending] = useState(false), [info, setInfo] = useState<TypelessStatus | null>(null);
   const available = enabled && eligible;
   useEffect(() => {
+    if (info?.status !== 'sent') return;
+    const timer = setTimeout(() => setInfo(null), 1600);
+    return () => clearTimeout(timer);
+  }, [info]);
+  useEffect(() => {
     // Keep the target stable for the short native delivery handshake. This
     // also stops an unconsumed shortcut reaching the note's Enter/Escape paths.
     const hold = (event: Event) => { if (pending.current) { event.preventDefault(); event.stopImmediatePropagation(); } };
@@ -69,7 +74,7 @@ export function useTypelessNote(input: RefObject<HTMLTextAreaElement | null>, el
     const element = input.current;
     if (!available || pending.current || !element?.isConnected) return;
     element.focus({ preventScroll: true });
-    pending.current = true; setSending(true);
+    pending.current = true; setSending(true); setInfo(null);
     try { setInfo(await window.papilotDesktop!.typelessShortcut!(inputId)); }
     catch { setInfo({ status: 'unavailable' }); }
     finally { pending.current = false; setSending(false); }
@@ -84,11 +89,12 @@ export function useTypelessNote(input: RefObject<HTMLTextAreaElement | null>, el
   }, [available, eligible]);
   // No recording state is inferred from key delivery. In particular, closing
   // the card must never send a speculative toggle that could start recording.
-  const label = t('Send Typeless shortcut');
+  const label = t('Toggle dictation');
+  const sent = info?.status === 'sent';
   return {
     inputId,
     pending,
-    button: available && <button type="button" className="icon-button" aria-label={label} title={label} disabled={sending} onPointerDown={event => event.preventDefault()} onClick={event => { if (event.detail < 2) void send(); }}><Icon name="microphone" size={16}/></button>,
-    hint: available && <p className="typeless-note-status" role="status">{info ? description(info) : t('Wait for Typeless to finish before leaving this note.')}</p>,
+    button: available && <button type="button" className="icon-button typeless-note-button" data-state={sending ? 'sending' : sent ? 'sent' : 'idle'} aria-label={label} aria-busy={sending} aria-describedby={info ? inputId + '-status' : undefined} title={label} disabled={sending} onPointerDown={event => event.preventDefault()} onClick={event => { if (event.detail < 2) void send(); }}>{sending ? <span className="spinner" aria-hidden="true"/> : <Icon name={sent ? 'check' : 'microphone'} size={16}/>}</button>,
+    hint: available && <p id={inputId + '-status'} className={'typeless-note-status' + (!info || sent ? ' sr-only' : '')} role="status">{info ? description(info) : ''}</p>,
   };
 }

@@ -1,7 +1,7 @@
-# Voice notes with Typeless (experimental)
+# Typeless voice notes (experimental)
 
 The macOS desktop app can read and send the dictation shortcut configured in
-Typeless. Enable **Settings → Experiments → Voice notes with Typeless** on the
+Typeless. Enable **Settings → Experiments → Typeless voice notes** on the
 Mac displaying Papilot. It starts off and is not available in browser clients,
 on Windows, or on Linux. A remote server never sends keys on the editor's behalf.
 
@@ -14,15 +14,18 @@ on Windows, or on Linux. A remote server never sends keys on the editor's behalf
 4. Use the note's microphone button to send the shortcut again. Keep the note
    open and wait for Typeless to paste the transcript. Edit or submit it normally.
 
-The microphone button sends a shortcut; it does not submit the note. Failures
-leave existing text intact. The settings card shows the detected shortcut and
-explains missing installation, configuration, permissions, or a stopped app.
+The microphone button shows a spinner during delivery, briefly shows a checkmark
+on success, then returns to the microphone. Only errors add a visible message;
+screen readers also receive the delivery result. Sending does not submit the
+note, and failures leave existing text intact. The settings card shows the
+detected shortcut and explains missing installation, configuration, permissions,
+or a stopped app.
 After changing settings in Typeless, select **Refresh** to update that card.
 Every actual send also rereads the configuration.
 
 ## What the experiment can and cannot confirm
 
-**“Sent” means the native keyboard events were posted.** Check Typeless's own
+**The checkmark means the native keyboard events were posted.** Check Typeless's own
 voice bar or sound to tell whether it started, stopped, or is still processing.
 Papilot does not read recordings, history, or an authoritative recording state.
 If Typeless is already recording when a note opens, the shortcut can stop it.
@@ -101,7 +104,9 @@ update-server startup, and Writer model naming. All three failures were also
 reproduced on the unchanged base with the same built review assets. The full UI
 suite stopped at a manuscript-source check; it is not reported as passing.
 
-The `switch` and `accessibility` Modern Web Guidance guides informed the labeled
-native checkbox, keyboard-operable button, focus handling and status announcements.
+The `switch`, `spinner` and `accessibility` Modern Web Guidance guides informed the
+labeled native checkbox, keyboard-operable button, busy state, focus handling and
+status announcements. The existing spinner respects reduced-motion preferences;
+the checkmark is distinguishable by shape, with a screen-reader announcement.
 The existing checkbox/ARIA styling supports browsers without a native switch
 attribute, and the microphone button does not announce an invented recording state.

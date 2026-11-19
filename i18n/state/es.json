@@ -6539,64 +6539,59 @@
     "textHash": "53d9cd7ce4dc95142ecafc33216647d595ff3db7d7e850a07a13bdfcba6e019c",
     "model": "gemini-4-argon-medium"
   },
-  "Allow Papilot in System Settings → Privacy & Security → Accessibility, then refresh.": {
-    "revision": "4634f14c95b23eb2d7e28544090fd87485a77d8ccfc67c05e5e45b0b27c40b80",
-    "textHash": "8cddc801b6717168a4ee9f5d9a7058deb561afa76d949d77e64b8fef18e709a1",
+  "Allow Papilot in macOS Accessibility settings.": {
+    "revision": "488d60e7821e5d0099afd32d27fe319ee17a420183a1f749c7b845e1a128d39e",
+    "textHash": "e22c26dbd0eb9c0211625519d464293a91b6376f0de57b0e0bb018d598313605",
     "model": "codex"
   },
-  "Could not send the Typeless shortcut. Focus this note and try again.": {
-    "revision": "005466b1239273ec612832e1fcfe3b86d213e71b724178b91ae2741f5eed3f73",
-    "textHash": "e85d4f8ddf0b8a1b859a95275dae1f5d8fae1c8b0290ea15a1102e8068f29d19",
+  "Shortcut failed. Try again.": {
+    "revision": "9e48a9cb31fa4ab944c04ffb723aa220b5c172fe1b1acc0309344241f2d685f3",
+    "textHash": "f1d774c7511cf6da9cb9525a4befa29ea481e8674891888c25bc418035f3a3b7",
     "model": "codex"
   },
-  "Install Typeless on this Mac to use voice notes.": {
-    "revision": "b472ba22c9763f1f0fedafad5524b3ca11fec165160980a129a443938c0e5930",
-    "textHash": "ecde09566a9fdb2eddbec46fe3136b00bbf7bbae08eb4c85e297b2d2d9e8acbf",
+  "Install Typeless first.": {
+    "revision": "0d1f14f24e535d6ebcde4c211cda09d02b93958cb8c329c49a1b87acec20e36d",
+    "textHash": "0724d48619c0f05266cf2d5e99c7cde01a695fae7d119dc299baeecbc58a360e",
     "model": "codex"
   },
-  "New PDF notes send your Typeless shortcut. Use the microphone button to send it again; wait for the transcript before leaving the note.": {
-    "revision": "4327e0a8712659920e7c336c92e6224834ef9f447bd3fac6c46a90c9017c512e",
-    "textHash": "5ea9d53f63cbe8433df59b18ee5e3e7f2db26ff2f381ac72a458485826ec6688",
+  "Dictate PDF notes with Typeless.": {
+    "revision": "5a2ee686cc3cf6f9e4900334a2fc3c76e47fc527accda8858abff1cf10dfc4bc",
+    "textHash": "913b0a534795dfdf916cd8f317bdde6af515036e8cdcf4002d8a269d19098f86",
     "model": "codex"
   },
-  "Open Typeless, then try again.": {
-    "revision": "9324823306f6228811b1e669fe1ded083f20cc0697beb34c4037610bad57c231",
-    "textHash": "36f3cfd515e4bb4c2cfffc46753f304edee26819eab7b906d79e8869738ac7a3",
+  "Open Typeless first.": {
+    "revision": "dedcaac7ec27c4b81b3d2dd13e72a6be19a30a61ef15b5c4912836f47852cbec",
+    "textHash": "5422224af23c6e9c226f6c0e48bfe2f64350a1446c083d8fb6bf6058f712f727",
     "model": "codex"
   },
-  "Release the modifier keys, then try again.": {
-    "revision": "698b88df536ceeaf80646defd7954d729b8fc8e441bf910346a84f37645de2cf",
-    "textHash": "83f98a5ab471fcdf5da2654b6953d29bf1ff4f67c4d254e628cbf1cb4fd2254b",
+  "Release modifier keys and retry.": {
+    "revision": "d61f94125cd997fd9b8a9cce725bab2276beebae9272c787db35ae90d548a66c",
+    "textHash": "ed5f27fe6c3bbcde7524d7851954d7c7d24c7794732d00f613e2d652cad75e85",
     "model": "codex"
   },
-  "Send Typeless shortcut": {
-    "revision": "8ff780118f9d367557e066ca5e3016f05f17be583916fa652060a5be0c822f08",
-    "textHash": "35c617bb3fbfd1d9e057a1f3c85183a1dfb6fa51512b997d48eb9db53d403c93",
+  "Toggle dictation": {
+    "revision": "5ce2a98ff626ed7fe361445172737809d7f0e7f76e74c1dfcf373d2d9d6c07b1",
+    "textHash": "40f8274cf996ace408ff34b887741c818836421995eaabf51e60e887dede349a",
     "model": "codex"
   },
-  "Sent {shortcut}. Check the Typeless voice bar.": {
-    "revision": "4537b53d573af37e13d5ebe24b13c4aa34efb7097c49249e4cb6efa425e03ff9",
-    "textHash": "fe41e707db6733ac6af0a5dee3507d14409eb0ec205e801bf3d0132055d1e5c7",
+  "{shortcut} sent": {
+    "revision": "7eb27841c8739ffc713d21082ebff19a7dd2c9f95747de5af724673f59ad33a3",
+    "textHash": "fb504670cbf743c3e5ab7cf4500dc3e5a98197413f14346cb1b717d53e72d77f",
     "model": "codex"
   },
-  "Set a supported keyboard shortcut in Typeless, then refresh.": {
-    "revision": "b79168807ce2ef2a80675fca6941ff47b36e131651c096974c0bd4137b993f23",
-    "textHash": "b7a93dce92aa84ad51d6fab30bc22937e69d1931543bd195da8ff0e275f0d515",
+  "Check your Typeless shortcut.": {
+    "revision": "cf66535e97d32b3ed0f9e84ddaeffacab7b82c9b335e2abe61354379c0d0382b",
+    "textHash": "5bbb00eb0ac78acdec5b851770e8f589637f434708dd2ec64a673794a9ef3875",
     "model": "codex"
   },
-  "Typeless shortcut: {shortcut}": {
-    "revision": "b084865dfabdb3ef11bd6eb76a41c1b21bdb4a34f4919fa6500bba12188c0dee",
-    "textHash": "ecd010b3fc4d101073d6acd4fb81f4e146100c678e4d64a4acc4316e5c807d5f",
+  "Shortcut: {shortcut}": {
+    "revision": "7d95da9397fa2c144cec4ed95bf4fb538617444779818ae18295dcd7d8132991",
+    "textHash": "952e620ba8e84ade61cf19568546a2facc753d94731ec53034d4b2811f6b8f90",
     "model": "codex"
   },
-  "Voice notes with Typeless": {
-    "revision": "52bc519520fbab80e869ff5cbd8800e066c2fc2d5ab76a44868b276039459833",
+  "Typeless voice notes": {
+    "revision": "216ece45f52e392aea740ee822701581052bd7473e2e2abca868b5c76a906741",
     "textHash": "586525d4482567aa623ecd0e42401460b4ee4efa1bf971b456554d3d123cb1fd",
-    "model": "codex"
-  },
-  "Wait for Typeless to finish before leaving this note.": {
-    "revision": "6495b43286a9267305d1966e1eb90fec436a1f4c8040815e997f44cd1a9928f0",
-    "textHash": "1adcae07f87abc3c4f777dc5c49de8d8aa2266753b7e9313a974d51f832dc387",
     "model": "codex"
   }
 }

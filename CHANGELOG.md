@@ -6,7 +6,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Added
 
-- Add the opt-in **Voice notes with Typeless** experiment in the macOS desktop app. New PDF notes send the configured Typeless dictation shortcut; a microphone button sends it again while keeping the draft focused. The experiment reports shortcut delivery, not recording state, and requires waiting for transcription before leaving a note. See [setup and limitations](docs/typeless.md). ([#231](https://github.com/PapilotAI/papilot/issues/231))
+- Add the opt-in **Typeless voice notes** experiment in the macOS desktop app. New PDF notes send the configured Typeless dictation shortcut; a microphone button sends it again while keeping the draft focused. Brief icon feedback confirms shortcut delivery; only errors add visible text. The experiment does not report recording state and requires waiting for transcription before leaving a note. See [setup and limitations](docs/typeless.md). ([#231](https://github.com/PapilotAI/papilot/issues/231))
 
 ### Changed
 
