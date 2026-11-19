@@ -3,6 +3,7 @@ import path from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export const blogLanguageNames = JSON.parse(fs.readFileSync(new URL('../i18n/languages.json', import.meta.url), 'utf8'));
 export const blogLocales = Object.keys(blogLanguageNames);
@@ -176,17 +177,36 @@ ${published ? `<meta property="article:published_time" content="${published}T00:
         if (level === 'h2') toc.push({ id, label });
         return React.createElement(level, { id }, children);
       };
-      const body = renderToStaticMarkup(React.createElement(Markdown, { skipHtml: true, components: {
+      let tableCount = 0;
+      const accessibleTables = () => tree => {
+        const visit = node => {
+          if (node.tagName === 'table') {
+            const elements = parent => (parent?.children || []).filter(child => child.type === 'element');
+            const head = elements(node).find(child => child.tagName === 'thead');
+            const bodyNode = elements(node).find(child => child.tagName === 'tbody');
+            const labels = elements(elements(head)[0]).map(cell => { cell.properties = { ...cell.properties, scope: 'col' }; return text(cell).trim(); });
+            for (const row of elements(bodyNode)) elements(row).forEach((cell, index) => {
+              if (index === 0) { cell.tagName = 'th'; cell.properties = { ...cell.properties, scope: 'row' }; }
+              else if (labels[index]) cell.properties = { ...cell.properties, 'data-label': labels[index] };
+            });
+          }
+          for (const child of node.children || []) visit(child);
+        };
+        visit(tree);
+      };
+      const body = renderToStaticMarkup(React.createElement(Markdown, { skipHtml: true, remarkPlugins: [remarkGfm], rehypePlugins: [accessibleTables], components: {
         h2: heading('h2'), h3: heading('h3'),
         img: ({ src, alt }) => picture(src, alt),
+        table: ({ children }) => React.createElement('div', { className: 'blog-table-wrap', role: 'region', tabIndex: 0, 'aria-label': `${entry.title} (${++tableCount})` }, React.createElement('table', null, children)),
         p: ({ node, children }) => {
           const images = node.children.filter(child => child.tagName === 'img');
           if (images.length && node.children.every(child => child.tagName === 'img' || child.type === 'text' && !child.value.trim())) return React.createElement('figure', { className: 'blog-figure' }, children, images[0].properties.title && React.createElement('figcaption', { 'data-label': t.figureLabel }, images[0].properties.title));
           return React.createElement('p', null, children);
         },
       } }, entry.body));
+      const category = escape(entry.category || t.category);
       const metadata = `<span>${t.author}</span><span aria-hidden="true">/</span><time datetime="${post.published}">${localizedDate(post.published, locale)}</time><span aria-hidden="true">/</span><span>${escape(t.readingTime.replace('{minutes}', new Intl.NumberFormat(locale).format(entry.minutes)))}</span>`;
-      const main = `<article class="wrap blog-article" data-figure-label="${escape(t.figureLabel)}"><header class="blog-article-head"><nav class="blog-breadcrumb" aria-label="${escape(t.breadcrumb)}"><a href="${blogRoute(locale)}">${t.blog}</a><span aria-hidden="true">/</span><span>${t.category}</span></nav><h1>${escape(entry.title)}</h1><p class="blog-deck">${escape(entry.lead)}</p><div class="blog-meta">${metadata}</div></header><div class="blog-hero">${illustration(entry.hero, entry.heroAlt, entry.heroCaption, true, t.figureLabel)}</div><div class="blog-reading-layout"><div class="blog-prose">${body}</div><aside class="blog-toc"><nav aria-label="${t.contents}"><p>${t.contents}</p><ol>${toc.map(item => `<li><a href="#${escape(item.id)}">${escape(item.label)}</a></li>`).join('')}</ol><a class="blog-toc-back" href="${blogRoute(locale)}">← ${t.back}</a></nav></aside></div></article>`;
+      const main = `<article class="wrap blog-article" data-figure-label="${escape(t.figureLabel)}"><header class="blog-article-head"><nav class="blog-breadcrumb" aria-label="${escape(t.breadcrumb)}"><a href="${blogRoute(locale)}">${t.blog}</a><span aria-hidden="true">/</span><span>${category}</span></nav><h1>${escape(entry.title)}</h1><p class="blog-deck">${escape(entry.lead)}</p><div class="blog-meta">${metadata}</div></header><div class="blog-hero">${illustration(entry.hero, entry.heroAlt, entry.heroCaption, true, t.figureLabel)}</div><div class="blog-reading-layout"><div class="blog-prose">${body}</div><aside class="blog-toc"><nav aria-label="${t.contents}"><p>${t.contents}</p><ol>${toc.map(item => `<li><a href="#${escape(item.id)}">${escape(item.label)}</a></li>`).join('')}</ol><a class="blog-toc-back" href="${blogRoute(locale)}">← ${t.back}</a></nav></aside></div></article>`;
       const schema = { '@context': 'https://schema.org', '@graph': [
         { '@type': 'BlogPosting', '@id': url(route) + '#article', url: url(route), mainEntityOfPage: url(route), isPartOf: { '@id': url(blogRoute(locale)) + '#blog' }, headline: entry.title, description: entry.description, inLanguage: locale, datePublished: post.published + 'T00:00:00+08:00', ...(post.updated ? { dateModified: post.updated + 'T00:00:00+08:00' } : {}), image: [url(entry.hero)], author: { '@type': 'Organization', name: 'Papilot', url: site }, publisher: { '@type': 'Organization', name: 'Papilot', url: site, logo: { '@type': 'ImageObject', url: url('/apple-touch-icon.png') } } },
         { '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: t.blog, item: url(blogRoute(locale)) }, { '@type': 'ListItem', position: 2, name: entry.title, item: url(route) }] },

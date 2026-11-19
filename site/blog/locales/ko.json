@@ -77,6 +77,63 @@
         "수락, 거절 또는 추가 주석."
       ]
     ],
-    "under": "AI가 백그라운드에서 로컬 LaTeX 파일 수정"
+    "under": "AI가 백그라운드에서 로컬 LaTeX 파일 수정",
+    "workflowsTitle": "세 가지 LaTeX 집필 워크플로",
+    "workflowsDesc": "브라우저 기반 Overleaf, 코딩 에이전트를 결합한 소스 IDE, 실시간 Overleaf 동기화를 지원하는 PDF 중심 Papilot을 비교합니다.",
+    "workflowsCards": [
+      {
+        "tag": "01 / 브라우저",
+        "name": "Overleaf",
+        "points": [
+          ".tex 및 PDF 분할 화면",
+          "설치 없는 실시간 협업",
+          "수동 소스 변경 확인"
+        ]
+      },
+      {
+        "tag": "02 / 소스 IDE",
+        "name": "IDE + AI",
+        "points": [
+          "로컬 Git 및 CLI 도구",
+          ".tex 코드에서 프롬프트",
+          "원시 git diff 패치"
+        ]
+      },
+      {
+        "tag": "03 / PDF 중심",
+        "name": "Papilot",
+        "points": [
+          "PDF 위에 직접 주석",
+          "조판된 PDF 비교 검토",
+          "실시간 Overleaf 동기화"
+        ]
+      }
+    ],
+    "workflowsSync": "Overleaf 실시간 동기화(~1초)로 공저자 연결",
+    "pipelineTitle": "증분 조판 검토 파이프라인",
+    "pipelineDesc": "Git 워크트리에서 수정을 격리하고 변경된 장만 병렬 컴파일하여 조판 비교와 실행 취소 가능한 검토 기록을 생성합니다.",
+    "pipelineSteps": [
+      [
+        "Git 워크트리",
+        "작업 수정 격리",
+        "전용 Git 증분 스냅샷 인덱스."
+      ],
+      [
+        "시드 빌드",
+        "복제 및 컴파일",
+        "변경된 챕터만 병렬 빌드."
+      ],
+      [
+        "비교 엔진",
+        "조판 전후 비교",
+        "본문 오프셋과 수식 보존."
+      ],
+      [
+        "검토 저널",
+        "주석별 수락 결정",
+        "적용 전까지 원본을 보호."
+      ]
+    ],
+    "pipelineFoot": "적용·커밋 전까지 작업 폴더는 그대로 유지."
   }
 }

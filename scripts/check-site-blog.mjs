@@ -115,6 +115,12 @@ try {
       assert.equal(sitemapDoc.urls.find(item=>item.loc===canonical).alternates.length,Object.keys(post.locales).length+1);
       assert.ok(feedState.dates.includes(new Date(article.datePublished).toUTCString()));
       assert.deepEqual(await page.locator('.blog-toc a[href^="#"]').evaluateAll(links => links.filter(link => !document.getElementById(decodeURIComponent(link.hash.slice(1)))).map(link => link.hash)), []);
+      if (await page.locator('.blog-prose table').count()) {
+        assert.ok(await page.locator('.blog-table-wrap[role="region"][tabindex="0"]').count() >= 1, 'comparison tables stay keyboard-scrollable regions');
+        assert.ok(await page.locator('.blog-prose thead th[scope="col"]').count() >= 2, 'column headers carry scope=col');
+        assert.ok(await page.locator('.blog-prose tbody th[scope="row"]').count() >= 1, 'row headers carry scope=row');
+        assert.ok(await page.locator('.blog-prose tbody td[data-label]').count() >= 1, 'mobile stacked cells carry column labels');
+      }
       for (const width of [1440, 768, 390, 320]) {
         await page.setViewportSize({ width, height: 1000 });
         await page.evaluate(() => document.fonts.ready);

@@ -77,6 +77,63 @@
         "Accetta, rifiuta o commenta."
       ]
     ],
-    "under": "L'IA modifica i file LaTeX in background"
+    "under": "L'IA modifica i file LaTeX in background",
+    "workflowsTitle": "Tre flussi LaTeX a confronto",
+    "workflowsDesc": "Confronto tra Overleaf nel browser, un IDE locale con agente IA e Papilot centrato sul PDF con sincronia Overleaf.",
+    "workflowsCards": [
+      {
+        "tag": "01 / Browser",
+        "name": "Overleaf",
+        "points": [
+          "Vista divisa .tex e PDF",
+          "Coautori zero setup",
+          "Revisione codice .tex"
+        ]
+      },
+      {
+        "tag": "02 / IDE codice",
+        "name": "IDE + Agente",
+        "points": [
+          "Git locale e tool CLI",
+          "Prompt nei file .tex",
+          "Patch git diff grezze"
+        ]
+      },
+      {
+        "tag": "03 / Prima il PDF",
+        "name": "Papilot",
+        "points": [
+          "Annota sul PDF",
+          "Diff PDF impaginati",
+          "Sync vivo con Overleaf"
+        ]
+      }
+    ],
+    "workflowsSync": "Sincronia Overleaf (~1 s) tra web e PDF",
+    "pipelineTitle": "Pipeline incrementale di revisione",
+    "pipelineDesc": "Papilot isola le modifiche in un worktree Git, compila i capitoli in parallelo e salva decisioni annullabili per nota.",
+    "pipelineSteps": [
+      [
+        "Worktree Git",
+        "Isola il compito",
+        "Indice Git privato incrementale."
+      ],
+      [
+        "Build base",
+        "Clona e compila",
+        "Capitoli in parallelo."
+      ],
+      [
+        "Motore diff",
+        "Confronto PDF",
+        "Prosa fine e formule intere."
+      ],
+      [
+        "Registro",
+        "Decidi per nota",
+        "Annullabile fino ad Applica."
+      ]
+    ],
+    "pipelineFoot": "Cartella intatta finché non premi Applica."
   }
 }

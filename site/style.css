@@ -576,6 +576,9 @@ html:is([lang=zh-CN],[lang=zh-Hant]) .hero .review-page :is(del,ins){white-space
 .era.ours .era-text{align-self:center;padding:32px 44px}
 .era.ours h3{font-size:32px}
 .era.ours .era-text>p:last-child{font-size:16.5px}
+.why-links{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 28px;margin-top:28px;text-align:center;font-size:14.5px;font-weight:500}
+.why-links a{color:var(--accent)}
+.why-links a:hover,.why-links a:focus-visible{color:var(--accent-hover)}
 /* The wide card's drawing is larger, so its page is too. */
 @media(min-width:961px){
   .era.ours .mini-bar{height:26px;gap:6px;padding:0 12px}

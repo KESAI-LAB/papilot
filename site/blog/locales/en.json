@@ -77,6 +77,63 @@
         "Accept, reject, or add a comment."
       ]
     ],
-    "under": "AI edits local LaTeX files in background"
+    "under": "AI edits local LaTeX files in background",
+    "workflowsTitle": "Three LaTeX workflows, side by side",
+    "workflowsDesc": "Comparing Overleaf in the browser, a local source IDE with a coding agent, and Papilot on the compiled PDF with live Overleaf sync.",
+    "workflowsCards": [
+      {
+        "tag": "01 / Browser",
+        "name": "Overleaf",
+        "points": [
+          "Split .tex & PDF view",
+          "Zero-setup coauthors",
+          "Manual source review"
+        ]
+      },
+      {
+        "tag": "02 / Code IDE",
+        "name": "IDE + Agent",
+        "points": [
+          "Local Git & CLI tools",
+          "Prompt in .tex files",
+          "Raw git diff patches"
+        ]
+      },
+      {
+        "tag": "03 / PDF-first",
+        "name": "Papilot",
+        "points": [
+          "Annotate on the PDF",
+          "Typeset PDF diff review",
+          "Live Overleaf sync"
+        ]
+      }
+    ],
+    "workflowsSync": "Live Overleaf sync (~1 s) links browser & PDF",
+    "pipelineTitle": "Incremental typeset review pipeline",
+    "pipelineDesc": "How Papilot isolates agent edits in a Git worktree, compiles changed chapters incrementally, attributes typeset diffs, and records undoable decisions.",
+    "pipelineSteps": [
+      [
+        "Git worktree",
+        "Isolate the task",
+        "Private Git snapshot index."
+      ],
+      [
+        "Seeded build",
+        "Clone & compile",
+        "Changed chapters in parallel."
+      ],
+      [
+        "Diff engine",
+        "Typeset comparison",
+        "Fine prose & atomic math."
+      ],
+      [
+        "Review journal",
+        "Decide per note",
+        "Undoable until you Apply."
+      ]
+    ],
+    "pipelineFoot": "Working tree stays untouched until Apply."
   }
 }

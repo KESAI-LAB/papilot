@@ -77,6 +77,63 @@
         "Annehmen, ablehnen, nachhaken."
       ]
     ],
-    "under": "KI ändert lokal LaTeX im Hintergrund"
+    "under": "KI ändert lokal LaTeX im Hintergrund",
+    "workflowsTitle": "Drei LaTeX-Workflows im Vergleich",
+    "workflowsDesc": "Vergleich zwischen Overleaf im Browser, einer lokalen Quellcode-IDE mit KI-Agent und Papilot auf dem PDF mit Live-Overleaf-Sync.",
+    "workflowsCards": [
+      {
+        "tag": "01 / Browser",
+        "name": "Overleaf",
+        "points": [
+          "Geteilte Code/PDF-Sicht",
+          "Sofort gemeinsam tippen",
+          "Manuelle Code-Prüfung"
+        ]
+      },
+      {
+        "tag": "02 / Code-IDE",
+        "name": "IDE + Agent",
+        "points": [
+          "Lokales Git & CLI-Tools",
+          "Prompts im .tex-Code",
+          "Rohe git-diff-Patches"
+        ]
+      },
+      {
+        "tag": "03 / PDF-zuerst",
+        "name": "Papilot",
+        "points": [
+          "Direkt im PDF notieren",
+          "Gesetzte PDF-Diffs",
+          "Live-Overleaf-Sync"
+        ]
+      }
+    ],
+    "workflowsSync": "Live-Sync mit Overleaf (~1 s) im Team",
+    "pipelineTitle": "Inkrementelle PDF-Diff-Pipeline",
+    "pipelineDesc": "Papilot isoliert KI-Edits im Git-Worktree, kompiliert geänderte Kapitel parallel und speichert widerrufbare Entscheidungen.",
+    "pipelineSteps": [
+      [
+        "Git-Worktree",
+        "Aufgabe isolieren",
+        "Privater Git-Snapshot-Index."
+      ],
+      [
+        "Seed-Build",
+        "Klonen & bauen",
+        "Kapitel parallel bauen."
+      ],
+      [
+        "Diff-Engine",
+        "Satz-Vergleich",
+        "Feiner Text & ganze Formeln."
+      ],
+      [
+        "Prüfjournal",
+        "Pro Notiz wählen",
+        "Widerrufbar bis Anwenden."
+      ]
+    ],
+    "pipelineFoot": "Arbeitsordner bleibt bis Anwenden unberührt."
   }
 }

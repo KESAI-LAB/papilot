@@ -77,6 +77,63 @@
         "Acepta, rechaza o comenta."
       ]
     ],
-    "under": "La IA edita archivos LaTeX locales"
+    "under": "La IA edita archivos LaTeX locales",
+    "workflowsTitle": "Tres flujos de LaTeX comparados",
+    "workflowsDesc": "Comparación entre Overleaf en navegador, un IDE de código con agente IA y Papilot sobre el PDF con sincronización Overleaf.",
+    "workflowsCards": [
+      {
+        "tag": "01 / Navegador",
+        "name": "Overleaf",
+        "points": [
+          "Vista dividida .tex/PDF",
+          "Coautoría sin instalar",
+          "Revisión manual de .tex"
+        ]
+      },
+      {
+        "tag": "02 / IDE código",
+        "name": "IDE + Agente",
+        "points": [
+          "Git local y CLI",
+          "Prompts en archivos .tex",
+          "Parches git diff puros"
+        ]
+      },
+      {
+        "tag": "03 / PDF primero",
+        "name": "Papilot",
+        "points": [
+          "Anotar sobre el PDF",
+          "Diffs PDF maquetados",
+          "Sync vivo con Overleaf"
+        ]
+      }
+    ],
+    "workflowsSync": "Sincronización Overleaf (~1 s) web y PDF",
+    "pipelineTitle": "Pipeline incremental de revisión",
+    "pipelineDesc": "Papilot aísla cambios en un worktree Git, compila capítulos en paralelo y guarda decisiones reversibles antes de aplicar.",
+    "pipelineSteps": [
+      [
+        "Worktree Git",
+        "Aislar la tarea",
+        "Índice Git privado incremental."
+      ],
+      [
+        "Build semilla",
+        "Clonar y compilar",
+        "Capítulos en paralelo."
+      ],
+      [
+        "Motor diff",
+        "Comparación PDF",
+        "Prosa fina y mates íntegras."
+      ],
+      [
+        "Registro",
+        "Decidir por nota",
+        "Reversible hasta Aplicar."
+      ]
+    ],
+    "pipelineFoot": "Tu carpeta no cambia hasta pulsar Aplicar."
   }
 }

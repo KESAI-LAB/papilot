@@ -77,6 +77,63 @@
         "承認、却下、または追加コメント。"
       ]
     ],
-    "under": "AI が裏でローカルの LaTeX ファイルを変更"
+    "under": "AI が裏でローカルの LaTeX ファイルを変更",
+    "workflowsTitle": "3つの LaTeX 執筆ワークフロー",
+    "workflowsDesc": "ブラウザの Overleaf、AI エージェント付きソース IDE、Overleaf リアルタイム同期を備えた PDF 中心の Papilot を比較します。",
+    "workflowsCards": [
+      {
+        "tag": "01 / ブラウザ",
+        "name": "Overleaf",
+        "points": [
+          "ソースと PDF の分割",
+          "環境構築不要の共同編集",
+          "ソース変更を手動確認"
+        ]
+      },
+      {
+        "tag": "02 / ソース IDE",
+        "name": "IDE + AI",
+        "points": [
+          "ローカル Git と CLI",
+          ".tex コード上で指示",
+          "生の git diff を確認"
+        ]
+      },
+      {
+        "tag": "03 / PDF 中心",
+        "name": "Papilot",
+        "points": [
+          "PDF 上に直接注釈",
+          "組版済み PDF 差分確認",
+          "Overleaf と即時同期"
+        ]
+      }
+    ],
+    "workflowsSync": "Overleaf 即時同期（約1秒）で共著者と連携",
+    "pipelineTitle": "差分コンパイルと組版確認の流れ",
+    "pipelineDesc": "Git ワークツリーで編集を隔離し、変更章を並列ビルドして組版差分と取り消し可能な判断履歴を作ります。",
+    "pipelineSteps": [
+      [
+        "Git ワークツリー",
+        "タスクを隔離",
+        "専用 Git 差分インデックス。"
+      ],
+      [
+        "シードビルド",
+        "複製と並列構築",
+        "変更された章だけを組版。"
+      ],
+      [
+        "差分エンジン",
+        "組版前後の比較",
+        "本文位置と数式の保護。"
+      ],
+      [
+        "判断ジャーナル",
+        "注釈ごとに判断",
+        "適用するまで原稿を保護。"
+      ]
+    ],
+    "pipelineFoot": "適用・コミットまで作業フォルダは不変。"
   }
 }
