@@ -87,8 +87,30 @@ try {
     await menu.getByRole('combobox').press('Escape');
     await page.getByRole('textbox', { name: existing ? 'Instructions for Antigravity' : 'Describe the revision' }).fill('Continue editing.');
     await expect(page.getByRole('button', { name: existing ? 'Send instructions' : 'Start task', exact: true })).toBeEnabled();
+    if (!existing) {
+      // Settings uses the same picker, including fresh quota data and retries.
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await page.locator('[data-settings-page="git"]').click();
+      if (mobile) await page.setViewportSize({ width: 390, height: 844 });
+      nextUsage = quota;
+      const beforeSettings = refreshes;
+      await page.locator('.settings-dialog').getByRole('button', { name: 'Agent settings', exact: true }).click();
+      await expect.poll(() => refreshes).toBe(beforeSettings + 1);
+      const settingsUsage = menu.getByRole('region', { name: 'Antigravity usage', exact: true });
+      await settingsUsage.locator('summary').click();
+      await expect(settingsUsage.getByRole('meter')).toHaveCount(quota.windows.length);
+      await page.screenshot({ path: `test-results/quota-commit-${mobile ? 'mobile' : 'desktop'}-${colorScheme}.png` });
+      failure = true;
+      await menu.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await expect(menu.getByText('Usage not reported', { exact: true })).toBeVisible();
+      failure = false;
+      await menu.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await expect(settingsUsage.locator('summary')).toBeVisible();
+      await expect(menu.getByText('Usage not reported', { exact: true })).toHaveCount(0);
+    }
     await context.close();
   }
   assert.deepEqual(errors, []);
-  console.log('PASS: Antigravity quota scopes, windows, resets, failures and partial data in both composers, desktop/mobile, light/dark');
+  console.log('PASS: Antigravity quota scopes, windows, resets, failures and partial data in both composers and commit settings, desktop/mobile, light/dark');
 } finally { await browser.close(); await server.close(); }

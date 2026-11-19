@@ -24,7 +24,9 @@ test('Chat and PDF share application progress, suppress concurrent clicks and pe
 test('commit and apply share the same lock and generated messages never replace author edits', async () => {
   const state = new TaskApplyState('Task title');
   let finish!: (message: string) => void;
-  const writing = state.write(() => new Promise(resolve => { finish = resolve; }));
+  const writing = state.write(() => new Promise(resolve => { finish = resolve; }), 'Claude');
+  await state.write(async () => 'Another message', 'Codex');
+  assert.equal(state.getSnapshot().writingAgent, 'Claude');
   state.edit('Author message');
   finish('Generated message'); await writing;
   assert.equal(state.getSnapshot().message, 'Author message');

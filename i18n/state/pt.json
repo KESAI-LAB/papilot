@@ -5620,7 +5620,7 @@
     "model": "codex-reviewed"
   },
   "Write a commit message for the chosen files with {agent}": {
-    "revision": "7a60d80df50bbfad19e96f04995ae4b0867cdad303b0d6f25e8cf16841d9d118",
+    "revision": "661ec50619eff39d5fd8e33f909b75f49f3517687e5ef8ace321810fa121181e",
     "textHash": "7ea4e7cfc0d6b1cd99e9dee169c1b3c590ef5694a84863eb7e034ae45a919883",
     "model": "gemini-4-argon-medium"
   },
@@ -6538,5 +6538,20 @@
     "revision": "005caacf91433792ba444a65483114dc9f5226f506ee55bd38818cf225b277f8",
     "textHash": "427014c2cd37e48ff89581e1d3b8d03e4747c79d167af69a7a556a159bb02adf",
     "model": "gemini-4-argon-medium"
+  },
+  "Commit-message agent": {
+    "revision": "cdfa38a8f1c17c75145e065c3acf3e64a26e9583919db2906550bf00fb6eaad5",
+    "textHash": "3c2c2407b9c8b3921a945753354d0266477bee901c0d248d84b5314c2b9c182d",
+    "model": "manual"
+  },
+  "Follow current conversation": {
+    "revision": "40efc0787220176a04c7ab0a9957f2288c5091f6ce9fd550e0fb46747f0ee2ca",
+    "textHash": "c427bc1b6ccaed03b5de62407829c0e7d5836cd5f9c7b74bd19b81207b6fb45c",
+    "model": "manual"
+  },
+  "Use the conversation’s model and reasoning effort, or the new-task settings if none. An explicit choice applies only to commit messages and is saved in this browser.": {
+    "revision": "f9900bbdffacd70f2f6f07cc95f201493e62b0f5f2d60b622f1d8cfcae04739b",
+    "textHash": "43c285745c8e9f5928c92669371071b525448cc1130c7e4f8f3a97118743aaa6",
+    "model": "manual"
   }
 }
