@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
-import { selectOption } from './select.mjs';
 import { afterRender, chromium, expect } from './playwright.mjs';
 
 fs.mkdirSync('test-results', { recursive: true });
@@ -23,8 +22,8 @@ page.on('requestfailed', request => {
   if (new URL(request.url()).pathname.endsWith('/git/diff')) diffFailures.push(request.failure()?.errorText);
 });
 const project = { id: 'git-paper', name: 'Example paper', path: '/tmp/git-paper', createdAt: 1 };
-const task = { id: 'git-task', projectId: project.id, title: 'Clarify the introduction', name: 'git-task', instructions: '', agent: 'claude', status: 'idle', createdAt: 1, updatedAt: 1, review: null };
-const runtime = { connected: true, authenticated: true, models: [{ id: 'model', name: 'Model', isDefault: true, efforts: [] }] };
+const task = { id: 'git-task', projectId: project.id, title: 'Clarify the introduction', name: 'git-task', instructions: '', agent: 'claude', model: 'model', effort: 'high', status: 'idle', createdAt: 1, updatedAt: 1, review: null };
+const runtime = { connected: true, authenticated: true, models: [{ id: 'model', name: 'Model', isDefault: true, efforts: ['low', 'high'], defaultEffort: 'low', fastMode: { serviceTier: 'priority', description: '' } }, { id: 'other-model', name: 'Other model', isDefault: false, efforts: ['low', 'high'], defaultEffort: 'high' }] };
 const snapshot = { version: 'test', csrf: 'fixture', projects: [project], tasks: [task], requests: [], runtime, runtimes: { codex: runtime, claude: { ...runtime } }, gitAvailable: true };
 const initialFiles = [{ path: 'main.tex', status: 'M', staged: false, unstaged: true, lines: [2, 4] }, { path: 'references.bib', status: '?', staged: false, unstaged: true }];
 const git = { branch: 'main', remote: true, upstream: 'origin/main', ahead: 1, behind: 0, head: { hash: 'abc1234', subject: 'Clarify the introduction', date: 1 }, files: structuredClone(initialFiles) };
@@ -271,12 +270,23 @@ try {
   const settings = async () => {
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.locator('[data-settings-page="git"]').click();
-    return page.getByRole('combobox', { name: 'Commit-message agent', exact: true });
+    return page.locator('.settings-dialog').getByRole('button', { name: 'Agent settings', exact: true });
+  };
+  const selectCommit = async (picker, agent, model = 'Model', effort = 'high', fast = false) => {
+    if (agent === 'conversation') { await page.getByRole('switch', { name: 'Follow current conversation', exact: true }).check(); return; }
+    await picker.click();
+    const menu = page.getByRole('dialog', { name: 'Agent settings', exact: true });
+    await menu.getByRole('option', { name: `${model} · ${agent === 'codex' ? 'Codex' : 'Claude'}`, exact: true }).first().click();
+    await menu.getByRole('slider', { name: 'Reasoning effort' }).fill(effort === 'high' ? '1' : '0');
+    if (agent === 'codex' && model === 'Model') await menu.getByRole('switch', { name: 'Fast mode' }).setChecked(fast);
+    await page.keyboard.press('Escape');
   };
   const closeSettings = () => page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
   await openTask(); await openGit();
   await expect(generate).toHaveAttribute('title', /Claude/);
   await expectAgent('claude');
+  assert.equal(messageRequests.at(-1).model, 'model');
+  assert.equal(messageRequests.at(-1).effort, 'high');
   await page.reload();
   await expectAgent('claude');
   const otherTask = { ...task, id: 'other-conversation', name: 'other-conversation', title: 'Another conversation', agent: 'codex' };
@@ -291,8 +301,11 @@ try {
   await otherTab.close();
   await message.fill('Keep my manual message');
   let picker = await settings();
-  await expect(picker).toContainText('Follow current conversation');
-  await selectOption(picker, 'codex');
+  await expect(page.getByRole('switch', { name: 'Follow current conversation' })).toBeChecked();
+  await expect(picker).toContainText('Model');
+  await expect(picker).toContainText('High');
+  await selectCommit(picker, 'codex', 'Other model', 'low');
+  await expect(page.getByRole('switch', { name: 'Follow current conversation' })).not.toBeChecked();
   await page.screenshot({ path: 'test-results/commit-agent-settings-light.png' });
   await closeSettings();
   await expect(message).toHaveValue('Keep my manual message');
@@ -300,20 +313,25 @@ try {
   await expect(message).toHaveValue('Keep my manual message');
   await expect(generate).toHaveAttribute('title', /Codex/);
   await expectAgent('codex');
+  assert.equal(messageRequests.at(-1).model, 'other-model');
+  assert.equal(messageRequests.at(-1).effort, 'low');
+  await page.reload(); await expectAgent('codex');
+  assert.equal(messageRequests.at(-1).model, 'other-model');
+  assert.equal(messageRequests.at(-1).effort, 'low');
   // Settings may change while the request is in flight; its label must keep
   // identifying the agent actually generating this message.
   let releaseMessage;
   messageGate = new Promise(resolve => { releaseMessage = resolve; });
   await generate.click();
   await expect(message).toHaveAttribute('placeholder', 'Codex is writing a commit message…');
-  picker = await settings(); await selectOption(picker, 'claude'); await closeSettings();
+  picker = await settings(); await selectCommit(picker, 'claude'); await closeSettings();
   await expect(generate).toHaveAttribute('title', /Codex/);
   await expect(message).toHaveAttribute('placeholder', 'Codex is writing a commit message…');
   messageGate = null; releaseMessage();
   await expect(generate).toBeEnabled();
   await expect(message).toHaveValue('Written by codex');
   await expect(generate).toHaveAttribute('title', /Claude/);
-  picker = await settings(); await selectOption(picker, 'codex'); await closeSettings();
+  picker = await settings(); await selectCommit(picker, 'codex', 'Model', 'high', true); await closeSettings();
   await page.reload();
   await expectAgent('codex');
   // A response from an old Git panel must not overwrite a draft entered
@@ -338,12 +356,15 @@ try {
   await taskGenerate.click();
   await expect(page.locator('.task-apply:visible').getByRole('textbox', { name: 'Commit message' }).first()).toHaveValue('Written by codex');
   assert.equal(messageRequests.at(-1).agent, 'codex');
+  assert.equal(messageRequests.at(-1).model, 'model');
+  assert.equal(messageRequests.at(-1).effort, 'high');
+  assert.equal(messageRequests.at(-1).serviceTier, 'priority');
   await openGit();
-  picker = await settings(); await selectOption(picker, 'claude'); await closeSettings();
+  picker = await settings(); await selectCommit(picker, 'claude'); await closeSettings();
   // An explicit override survives a conversation using another agent.
   task.agent = 'codex'; await page.reload(); await openTask(); await openGit();
   await expectAgent('claude');
-  picker = await settings(); await selectOption(picker, 'conversation'); await closeSettings();
+  picker = await settings(); await selectCommit(picker, 'conversation'); await closeSettings();
   assert.equal(await page.evaluate(() => localStorage.getItem('papilot:commit-message-agent')), null);
   await expectAgent('codex');
   // Another paper with no visited conversation uses the new-task default.
@@ -355,7 +376,7 @@ try {
   // Returning to this paper restores only its own conversation context.
   await page.evaluate(id => localStorage.setItem('papilot:project', id), project.id);
   await page.reload(); await expectAgent('claude');
-  picker = await settings(); await selectOption(picker, 'claude'); await closeSettings();
+  picker = await settings(); await selectCommit(picker, 'claude'); await closeSettings();
   snapshot.runtimes.claude = { ...runtime, connected: false, authenticated: false, installed: false };
   messageError = 'The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.';
   await page.reload(); await message.fill('Keep this when generation fails'); await generate.click();
@@ -363,17 +384,22 @@ try {
   assert.equal(messageRequests.at(-1).agent, 'claude');
   await expect(message).toHaveValue('Keep this when generation fails');
   picker = await settings(); await picker.click();
-  await expect(page.getByRole('option', { name: /Claude/ })).toContainText('Unavailable');
+  await expect(page.getByRole('dialog', { name: 'Agent settings', exact: true }).getByRole('option', { name: /Claude/ }).first()).toContainText('Not found');
   await page.keyboard.press('Escape');
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.screenshot({ path: 'test-results/commit-agent-settings-dark.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'test-results/commit-agent-settings-mobile.png' });
-  await selectOption(picker, 'conversation'); await closeSettings();
+  await selectCommit(picker, 'conversation'); await closeSettings();
   snapshot.runtimes.claude = { ...runtime }; messageError = null;
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ colorScheme: 'light' });
   await page.reload(); await expectAgent('claude');
+  // Preferences saved by the agent-only version still select that agent.
+  await page.evaluate(() => localStorage.setItem('papilot:commit-message-agent', 'claude'));
+  await page.reload(); await expectAgent('claude');
+  assert.equal(messageRequests.at(-1).model, ''); assert.equal(messageRequests.at(-1).effort, '');
+  picker = await settings(); await selectCommit(picker, 'conversation'); await closeSettings();
   // A persisted Git page must not bypass the missing-Git gate. Background Git
   // requests also stop; installation is picked up by the normal state refresh.
   await page.setViewportSize({ width: 1440, height: 900 });

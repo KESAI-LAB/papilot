@@ -417,6 +417,11 @@ export async function buildApp(options: AppOptions) {
   const agent = (value: unknown): AgentId => isAgentId(value) ? value : 'codex';
   const effort = (value: unknown) => typeof value === 'string' && /^[a-z]{1,16}$/.test(value) ? value : undefined;
   const string = (value: unknown, name: string, max?: number) => { if (typeof value !== 'string' || !value.trim()) throw new Error(`${name} is required.`); if (max !== undefined && value.length > max) throw new Error(`${name} is required and must be no longer than ${max} characters.`); return value.trim(); };
+  const commitModelSettings = (b: Record<string, unknown>) => {
+    if (b.model !== undefined && (typeof b.model !== 'string' || b.model.length > 200)) throw new Error('Invalid model.');
+    if (b.effort !== undefined && b.effort !== '' && !effort(b.effort)) throw new Error('Invalid reasoning effort.');
+    return { model: b.model as string | undefined, effort: b.effort as string | undefined, serviceTier: b.serviceTier === undefined ? undefined : string(b.serviceTier, 'Service tier', 64) };
+  };
   app.get('/api/projects/create-defaults', () => creations!.defaults());
   app.get('/api/universe', async () => {
     if (!universe) return { templates: [], error: 'Templates are not available here.' };
@@ -708,9 +713,10 @@ export async function buildApp(options: AppOptions) {
     return result;
   });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/commit-message', task, request => {
-    const task = store.task(request.params.id), b = request.body as any;
-    if (b?.agent !== undefined && !isAgentId(b.agent)) throw new Error('Invalid agent.');
-    return workspace.commitMessage(task.projectId, task.review?.files || [], { taskId: task.id, agent: b?.agent === undefined ? task.agent : agent(b.agent), fresh: b?.fresh === true });
+    const task = store.task(request.params.id), b = (request.body || {}) as Record<string, unknown>;
+    if (b.agent !== undefined && !isAgentId(b.agent)) throw new Error('Invalid agent.');
+    const settings = commitModelSettings({ ...(b.agent === undefined ? { model: task.model || undefined, effort: task.effort || undefined, serviceTier: task.serviceTier } : {}), ...b });
+    return workspace.commitMessage(task.projectId, task.review?.files || [], { taskId: task.id, agent: b.agent === undefined ? task.agent : agent(b.agent), ...settings, fresh: b.fresh === true });
   });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/permissions', task, request => workspace.updateTaskPermissions(request.params.id, (request.body as any)?.permissions));
   app.post<{ Params: { id: string } }>('/api/tasks/:id/model', task, request => {
@@ -789,7 +795,7 @@ export async function buildApp(options: AppOptions) {
   app.post<{ Params: { id: string } }>('/api/projects/:id/git/message', project(), request => {
     const b = request.body as any;
     if (b.agent !== undefined && !isAgentId(b.agent)) throw new Error('Invalid agent.');
-    return workspace.commitMessage(store.project(request.params.id).id, paths(b.paths), { agent: b.agent === undefined ? undefined : agent(b.agent), fresh: b.fresh === true, staged: b.staged === true });
+    return workspace.commitMessage(store.project(request.params.id).id, paths(b.paths), { agent: b.agent === undefined ? undefined : agent(b.agent), ...commitModelSettings(b), fresh: b.fresh === true, staged: b.staged === true });
   });
   // A merge in progress is resolved by an agent, committed, or abandoned.
   app.post<{ Params: { id: string } }>('/api/projects/:id/git/resolve', project(), request => {

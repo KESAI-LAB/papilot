@@ -2065,7 +2065,7 @@ test('feedback alone cannot be sent when there is none, so the chat never shows 
   } finally { f.close(); }
 });
 
-test('a commit message goes to the small model each agent offers, when it offers one', () => {
+test('light helpers can select the small model each agent offers, when it offers one', () => {
   const model = (id: string, name = id) => ({ id, name, isDefault: false, efforts: [], defaultEffort: null });
   assert.equal(lightModel([model('gpt-6.1-sol'), model('gpt-6-luna'), model('gpt-5.6-luna')])?.id, 'gpt-6-luna');
   assert.equal(lightModel([model('opus', 'Opus 5.5'), model('sonnet', 'Sonnet 5.5'), model('haiku', 'Haiku 5.5')])?.id, 'haiku');
@@ -2103,7 +2103,7 @@ test('an agent writes a commit message from the chosen changes, in a read-only t
     };
     assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'codex' }), { message: 'Tighten the opening sentence', agent: 'codex' });
     const start = f.codex.calls.find(call => call.method === 'thread/start')!.params, turn = f.codex.calls.find(call => call.method === 'turn/start')!.params;
-    assert.deepEqual([start.sandbox, start.approvalPolicy, start.ephemeral, start.model, turn.effort], ['read-only', 'never', true, 'gpt-6-luna', 'low']);
+    assert.deepEqual([start.sandbox, start.approvalPolicy, start.ephemeral, start.model, turn.effort], ['read-only', 'never', true, 'gpt-6.1-sol', 'high']);
     // The helper runs in an empty folder of its own, never the manuscript, and the folder is removed.
     assert.notEqual(start.cwd, root); assert.equal(turn.cwd, start.cwd);
     assert.match(path.basename(start.cwd), /^papilot-helper-/); assert.equal(fs.existsSync(start.cwd), false);
@@ -2145,6 +2145,52 @@ test('commit-message overrides use the requested agent and cache messages separa
       assert.deepEqual(await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent, taskId: f.task.id }), { message: `Message from ${agent}`, agent });
     }
     assert.deepEqual(calls, ['codex', 'claude']);
+  } finally { f.close(); }
+});
+
+test('commit messages honor model, effort and Fast mode and cache each selection separately', async () => {
+  const f = fixture();
+  try {
+    f.codex.ready = true;
+    f.workspace.runtimes.codex.models = [
+      { id: 'full', name: 'Full', isDefault: true, efforts: ['low', 'high'], defaultEffort: 'high', fastMode: { serviceTier: 'priority', description: '' } },
+      { id: 'small', name: 'Small', isDefault: false, efforts: ['low', 'high'], defaultEffort: 'low' },
+    ];
+    const calls: unknown[] = [];
+    (f.workspace as any).taskCommitChanges = async () => ({ files: [{ path: 'main.tex', status: 'M' }], patch: '-Old\n+New', recent: [] });
+    (f.workspace as any).oneOff = async (agent: string, options: any) => { calls.push([agent, options.model.id, options.effort, options.serviceTier]); return 'Clarify the introduction'; };
+    const write = (choice: { model?: string; effort?: string; serviceTier?: string } = {}) => f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'codex', taskId: f.task.id, ...choice });
+    await write(); await write();
+    await write({ model: 'small', effort: 'high' }); await write({ model: 'small', effort: 'high' });
+    await write({ model: 'small', effort: 'low' });
+    await write({ model: 'full', effort: 'high', serviceTier: 'priority' });
+    assert.deepEqual(calls, [['codex', 'full', 'high', undefined], ['codex', 'small', 'high', undefined], ['codex', 'small', 'low', undefined], ['codex', 'full', 'high', 'priority']]);
+    await assert.rejects(write({ model: 'missing' }), /Choose an available model/);
+    await assert.rejects(write({ model: 'small', effort: 'ultra' }), /does not support that reasoning effort/);
+    await assert.rejects(write({ model: 'small', serviceTier: 'priority' }), /Fast mode is not available/);
+    assert.equal(calls.length, 4);
+  } finally { f.close(); }
+});
+
+test('commit-message model settings reach the actual helper turn', async () => {
+  const f = fixture();
+  try {
+    f.codex.ready = true;
+    f.workspace.runtimes.codex.models = [{ id: 'chosen', name: 'Chosen', isDefault: true, efforts: ['low', 'high'], defaultEffort: 'low', fastMode: { serviceTier: 'priority', description: '' } }];
+    (f.workspace as any).taskCommitChanges = async () => ({ files: [{ path: 'main.tex', status: 'M' }], patch: '-Old\n+New', recent: [] });
+    f.codex.handler = async method => {
+      if (method === 'thread/start') return { thread: { id: 'chosen-helper' } };
+      if (method !== 'turn/start') return {};
+      setImmediate(() => {
+        f.codex.emit('notification', { method: 'item/completed', params: { threadId: 'chosen-helper', item: { type: 'agentMessage', text: 'Clarify the introduction' } } });
+        f.codex.emit('notification', { method: 'turn/completed', params: { threadId: 'chosen-helper', turn: { id: 'helper-turn', status: 'completed' } } });
+      });
+      return { turn: { id: 'helper-turn' } };
+    };
+    await f.workspace.commitMessage(f.task.projectId, ['main.tex'], { agent: 'codex', taskId: f.task.id, model: 'chosen', effort: 'high', serviceTier: 'priority' });
+    assert.equal(f.codex.calls.find(call => call.method === 'thread/start')!.params.model, 'chosen');
+    const turn = f.codex.calls.find(call => call.method === 'turn/start')!.params;
+    assert.equal(turn.effort, 'high'); assert.equal(turn.serviceTier, 'priority');
   } finally { f.close(); }
 });
 

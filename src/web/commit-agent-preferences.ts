@@ -4,10 +4,17 @@ import { isPlayground } from './playground-mode.ts';
 import { browserStorage } from './storage.ts';
 
 const KEY = 'papilot:commit-message-agent';
-export type CommitMessageAgent = AgentId | 'conversation';
+export type CommitMessageChoice = { agent: AgentId; model: string; effort: string; serviceTier?: string };
+export type CommitMessageAgent = CommitMessageChoice | 'conversation';
 const read = (): CommitMessageAgent => {
   const value = browserStorage.getItem(KEY);
-  return isAgentId(value) ? value : 'conversation';
+  // Migrate the original agent-only preference without changing its agent.
+  if (isAgentId(value)) return { agent: value, model: '', effort: '' };
+  try {
+    const saved = JSON.parse(value || 'null');
+    if (saved && isAgentId(saved.agent) && typeof saved.model === 'string' && typeof saved.effort === 'string') return { agent: saved.agent, model: saved.model, effort: saved.effort, ...(typeof saved.serviceTier === 'string' ? { serviceTier: saved.serviceTier } : {}) };
+  } catch { /* An invalid preference follows the conversation. */ }
+  return 'conversation';
 };
 let choice = read();
 const listeners = new Set<() => void>();
@@ -17,7 +24,7 @@ if (typeof window !== 'undefined') window.addEventListener('storage', event => {
 });
 export function saveCommitMessageAgent(value: CommitMessageAgent) {
   if (value === 'conversation') browserStorage.removeItem(KEY);
-  else browserStorage.setItem(KEY, value);
+  else browserStorage.setItem(KEY, JSON.stringify(value));
   apply(value);
 }
 export function useCommitMessageAgent() {

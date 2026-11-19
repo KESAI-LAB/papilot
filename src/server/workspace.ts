@@ -1704,7 +1704,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   }
   // One turn on a thread the agent does not keep, outside any task: its
   // reply is returned and no chat shows it.
-  private async oneOff(id: AgentId, options: { cwd: string; sandbox: 'read-only' | 'workspace-write'; instructions: string; prompt: string; model?: AgentModel; effort?: string | null; timeout: number; what: string }) {
+  private async oneOff(id: AgentId, options: { cwd: string; sandbox: 'read-only' | 'workspace-write'; instructions: string; prompt: string; model?: AgentModel; effort?: string | null; serviceTier?: string; timeout: number; what: string }) {
     if (this.closing) throw new Error('The server is shutting down.');
     // A read-only helper (a title, a commit message) has everything in its
     // prompt. It runs in an empty folder, so an agent that does not enforce a
@@ -1714,7 +1714,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     // An empty folder left behind must not discard the reply.
     finally { if (scratch) await fs.promises.rm(scratch, { recursive: true, force: true, maxRetries: 5 }).catch(() => {}); }
   }
-  private async helperTurn(id: AgentId, options: { cwd: string; sandbox: 'read-only' | 'workspace-write'; instructions: string; prompt: string; model?: AgentModel; effort?: string | null; timeout: number; what: string }) {
+  private async helperTurn(id: AgentId, options: { cwd: string; sandbox: 'read-only' | 'workspace-write'; instructions: string; prompt: string; model?: AgentModel; effort?: string | null; serviceTier?: string; timeout: number; what: string }) {
     const agent = this.agents[id], name = AGENT_NAMES[id];
     // Codex unloads the thread as soon as it is released, not a minute later.
     const thread = await agent.request('thread/start', { cwd: options.cwd, approvalPolicy: 'never', sandbox: options.sandbox, ephemeral: true, config: { thread_unload_delay_secs: 0 }, developerInstructions: options.instructions, ...(options.model ? { model: options.model.id } : {}) }, options.timeout);
@@ -1724,7 +1724,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       return await this.helperReply(agent, name, threadId, options);
     } finally { await releaseThread(agent, threadId); }
   }
-  private helperReply(agent: AgentRuntime, name: string, threadId: string, options: { cwd: string; prompt: string; effort?: string | null; timeout: number; what: string }) {
+  private helperReply(agent: AgentRuntime, name: string, threadId: string, options: { cwd: string; prompt: string; effort?: string | null; serviceTier?: string; timeout: number; what: string }) {
     return new Promise<string>((resolve, reject) => {
       let text = '', turnId = '', settled = false;
       const listen = (message: any) => {
@@ -1746,7 +1746,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       const stop = () => finish(new Error('The server is shutting down.'));
       this.helperStops.add(stop); agent.on('disconnected', disconnected);
       agent.on('notification', listen);
-      agent.request('turn/start', { threadId, input: [{ type: 'text', text: options.prompt }], cwd: options.cwd, ...(options.effort ? { effort: options.effort } : {}) })
+      agent.request('turn/start', { threadId, input: [{ type: 'text', text: options.prompt }], cwd: options.cwd, ...(options.effort ? { effort: options.effort } : {}), ...(options.serviceTier ? { serviceTier: options.serviceTier } : {}) })
         .then(result => { turnId = result?.turn?.id || ''; }, error => finish(error instanceof Error ? error : new Error(String(error))));
     });
   }
@@ -1785,11 +1785,15 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     return written;
   }
   // Writes a commit message for the chosen manuscript files, like Cursor's
-  // generate button: one read-only turn on the agent's small model, with the
-  // lightest reasoning it offers. The same changes get the message already
+  // generate button: one read-only turn with the selected model and reasoning
+  // effort. The same changes get the message already
   // written, or being written, for them unless the author asks for a fresh one.
-  async commitMessage(projectId: string, paths: string[], choice: { agent?: AgentId; fresh?: boolean; staged?: boolean; taskId?: string } = {}) {
-    const project = this.store.project(projectId), { id, model } = this.helper(choice, 'write a commit message', { light: true, readOnly: true, strict: true });
+  async commitMessage(projectId: string, paths: string[], choice: { agent?: AgentId; model?: string; effort?: string; serviceTier?: string; fresh?: boolean; staged?: boolean; taskId?: string } = {}) {
+    const project = this.store.project(projectId), { id, model } = this.helper(choice, 'write a commit message', { readOnly: true, strict: true });
+    if (choice.model && model?.id !== choice.model) throw new Error('Choose an available model for this agent.');
+    if (choice.effort && model && !model.efforts.includes(choice.effort)) throw new Error('This model does not support that reasoning effort.');
+    if (choice.serviceTier && choice.serviceTier !== 'default' && (id !== 'codex' || choice.serviceTier !== model?.fastMode?.serviceTier)) throw new Error('Fast mode is not available for this model.');
+    const effort = choice.effort || model?.defaultEffort, serviceTier = id === 'codex' ? choice.serviceTier : undefined;
     const task = choice.taskId ? this.store.task(choice.taskId) : undefined;
     if (task && task.projectId !== projectId) throw new Error('Invalid task ID.');
     const { files, patch, recent } = task ? await this.taskCommitChanges(task) : await commitChanges(project.path, paths, choice.staged);
@@ -1800,9 +1804,9 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       `Changed files:\n${files.map(file => `${file.status === '?' ? 'A' : file.status} ${file.from ? `${file.from} -> ` : ''}${file.path}`).join('\n')}`,
       `Diff:\n${patch}`,
     ].filter(Boolean).join('\n\n');
-    const key = createHash('sha256').update(`${id}\0${model?.id ?? ''}\0${prompt}`).digest('hex'), kept = this.messages.get(key);
+    const key = createHash('sha256').update(`${id}\0${model?.id ?? ''}\0${effort ?? ''}\0${serviceTier ?? ''}\0${prompt}`).digest('hex'), kept = this.messages.get(key);
     if (kept && !choice.fresh) return kept;
-    const written = this.oneOff(id, { cwd: project.path, sandbox: 'read-only', instructions: commitInstructions, prompt, model, effort: model?.efforts[0], timeout: 120000, what: 'write a commit message' }).then(reply => {
+    const written = this.oneOff(id, { cwd: project.path, sandbox: 'read-only', instructions: commitInstructions, prompt, model, effort, serviceTier, timeout: 120000, what: 'write a commit message' }).then(reply => {
       const message = commitMessageFrom(reply);
       if (!message) throw new Error(`${AGENT_NAMES[id]} did not return a commit message. Try again.`);
       return { message, agent: id };

@@ -11,7 +11,8 @@ import { loadIndirectChanges, saveIndirectChanges, useIndirectChanges } from './
 import { loadNoteAlternatives } from './note-option-preferences.ts';
 import { NoteOptionSettings } from './note-option-settings.tsx';
 import { agentLabel, offeredAgents } from './agent-choice.ts';
-import { saveCommitMessageAgent, useCommitMessageAgent, type CommitMessageAgent } from './commit-agent-preferences.ts';
+import { CommitAgentSettings } from './commit-agent-settings.tsx';
+import type { CommitMessageChoice } from './commit-agent-preferences.ts';
 import { saveAdvancedGit, useAdvancedGit } from './git-preferences.ts';
 import { saveDefaultReviewView, useDefaultReviewView } from './review-view.ts';
 import { ModeSwitch } from './mode-switch.tsx';
@@ -38,16 +39,12 @@ type SettingsEntry = { page: SettingsPage; label: string; icon: string; keywords
 // Shared with the review page's bibliography checks.
 const REFERENCE_CHECKS = 'papilot:review:references';
 
-export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, diagnostics, requirements, skills, updates, modelDefaults, workflow, overleaf, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; diagnostics?: DiagnosticsSettingsProps; requirements?: { state: RequirementsState; online: boolean }; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; workflow?: CollaborationSettingsProps; overleaf?: { api: UpdateApi; state: OverleafState | undefined }; initialPage?: SettingsInitialPage }) {
+export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, diagnostics, requirements, skills, updates, modelDefaults, workflow, overleaf, commitWriter, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; diagnostics?: DiagnosticsSettingsProps; requirements?: { state: RequirementsState; online: boolean }; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; commitWriter: CommitMessageChoice; workflow?: CollaborationSettingsProps; overleaf?: { api: UpdateApi; state: OverleafState | undefined }; initialPage?: SettingsInitialPage }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const skillControls = useRef<SkillLibraryControls>(null);
   const { choice } = useLanguage();
   const indirectChanges = useIndirectChanges(), reviewView = useDefaultReviewView();
   const advancedGit = useAdvancedGit();
-  const commitAgent = useCommitMessageAgent();
-  const commitOptions = diagnostics ? offeredAgents(diagnostics.runtimes).map(value => ({ value, label: agentLabel(value), runtime: diagnostics.runtimes[value] })) : modelDefaults.agents;
-  const commitAgents = commitOptions.map(item => ({ value: item.value, label: item.label, detail: !item.runtime?.connected || !item.runtime.authenticated ? t('Unavailable') : undefined }));
-  if (commitAgent !== 'conversation' && !commitAgents.some(item => item.value === commitAgent)) commitAgents.push({ value: commitAgent, label: agentLabel(commitAgent), detail: t('Unavailable') });
   useEffect(loadIndirectChanges, []);
   useEffect(loadNoteAlternatives, []);
   const [page, setPage] = useState<SettingsPage>(initialPage);
@@ -178,10 +175,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
         {page === 'git' && <div className="settings-page">
           {requirements && <section className="settings-card settings-card-body"><ToolRequirement tool="git" {...requirements}/></section>}
           <section className="settings-card">
-            <div className="settings-row settings-choice">
-              <div className="settings-text"><span className="settings-name">{t('Commit-message agent')}</span><p>{t('Use the last conversation in this paper, or the new-task agent if none. An explicit choice applies only to commit messages and is saved in this browser.')}</p></div>
-              <ChipSelect label={t('Commit-message agent')} value={commitAgent} onChange={value => saveCommitMessageAgent(value as CommitMessageAgent)} options={[{ value: 'conversation', label: t('Follow current conversation') }, ...commitAgents]}/>
-            </div>
+            <CommitAgentSettings current={commitWriter} agents={diagnostics ? offeredAgents(diagnostics.runtimes).map(value => ({ value, label: agentLabel(value), runtime: diagnostics.runtimes[value] })) : modelDefaults.agents} reconnect={diagnostics?.reconnect}/>
             <div className="settings-row settings-toggle">
               <div className="settings-text">
                 <label className="settings-name" htmlFor="settings-advanced-git">{t('Show advanced Git features')}</label>

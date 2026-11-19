@@ -715,18 +715,18 @@
     "model": "gemini-4-argon-medium"
   },
   "Commit-message agent": {
-    "revision": "84e247ef775419bb8a5ad9b585c7cf85a697939a8af62ef719ff9e25af04ea19",
+    "revision": "103b199545ce37ea3f97fd998455194db761ec22649179bb292e6008929585fe",
     "textHash": "c2cad342cda99ca274103f00d6dd68b0b5daf2e0a5868ea53caeaca08ce8c330",
     "model": "manual"
   },
   "Follow current conversation": {
-    "revision": "089150350fddffd8120a280a8771c5a232ad7d66016db3dabe777ff4c5248d11",
+    "revision": "cb8d724a8069020c595349d92a66f83d42e6e7aafeeadebb72d22bed14922353",
     "textHash": "05b557592ccdd6ad1eb56da1e623ca451a61998d9173186775c46275979fbf31",
     "model": "manual"
   },
-  "Use the last conversation in this paper, or the new-task agent if none. An explicit choice applies only to commit messages and is saved in this browser.": {
-    "revision": "5df55f579b0d0d1a7c9edb87370e035355aa63693b63e1cb06ee177fac179b21",
-    "textHash": "82d6ece82634369fe762afc577c44e3cc5f310f745256c15d4e3a11a695c1895",
+  "Use the conversation’s model and reasoning effort, or the new-task settings if none. An explicit choice applies only to commit messages and is saved in this browser.": {
+    "revision": "83e8e0fec1047ad15a09db64485dbd4a4e18c6a3c891b873506252ea93c2af0e",
+    "textHash": "b571b8974356668023294a21a1fa6445012da414c4c2889c3bb58d00c172c725",
     "model": "manual"
   }
 }
