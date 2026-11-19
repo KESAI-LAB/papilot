@@ -312,6 +312,9 @@ jobs:
       - name: task-restart
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-task-restart.mjs
+      - name: antigravity-usage
+        if: ${{ !cancelled() }}
+        run: node --import tsx scripts/check-antigravity-usage.mjs
       - name: task-permissions
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-task-permissions.mjs

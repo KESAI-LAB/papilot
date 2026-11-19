@@ -1850,3 +1850,22 @@ test('manual source edits need CSRF, retain authors, refuse stale saves and wait
     assert.equal(place.statusCode, 404, 'a PDF that is no longer shown cannot place lines');
   } finally { await f.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test('quota refresh validates the agent and CSRF and never reconnects conversations', async () => {
+  const f = await fixture();
+  const url = '/api/runtime/antigravity/usage';
+  let reads = 0;
+  f.workspace.readUsage = async id => {
+    assert.equal(id, 'antigravity'); reads++;
+    f.workspace.runtimes.antigravity.usage = null;
+  };
+  try {
+    assert.equal((await f.local.inject({ method: 'POST', url, headers: LOCAL, payload: {} })).statusCode, 403);
+    assert.equal((await f.local.inject({ method: 'POST', url: '/api/runtime/unknown/usage', headers: f.as, payload: {} })).statusCode, 400);
+    assert.deepEqual((await f.local.inject({ method: 'POST', url, headers: f.as, payload: {} })).json(), { usage: null });
+    assert.equal(reads, 0, 'do not query disconnected accounts');
+    Object.assign(f.workspace.runtimes.antigravity, { connected: true, authenticated: true });
+    assert.deepEqual((await f.local.inject({ method: 'POST', url, headers: f.as, payload: {} })).json(), { usage: null });
+    assert.equal(reads, 1);
+  } finally { await f.close(); }
+});

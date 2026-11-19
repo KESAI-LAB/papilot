@@ -13,6 +13,7 @@ import { AGENT_NAMES, type TaskPermissions, type TaskPermissionOption } from '..
 import { DATA, ROOT } from './paths.ts';
 import { imageType } from './attachments.ts';
 import { ClaudeText } from './claude-text.ts';
+import { antigravityLimits } from './antigravity-usage.ts';
 
 // Papilot drives every agent through the request and notification surface of
 // the Codex app-server: thread/start, thread/resume, turn/start,
@@ -537,8 +538,12 @@ export class AntigravityAgent extends Adapter {
   }
   private catalog: { model: string; displayName: string; efforts: string[]; ids: Record<string, string>; isDefault: boolean; defaultEffort: string | null }[] = [];
   private conversations: Record<string, string> = {};
+  private quota: { at: number; result: ReturnType<typeof antigravityLimits> } | null = null;
+  private quotaRead: Promise<ReturnType<typeof antigravityLimits>> | null = null;
+  private quotaRevision = 0;
   constructor(private binary = process.env.PAPILOT_AGY_BIN || 'agy', private file = path.join(DATA, 'antigravity-conversations.json'),
-    private launch: (command: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }) => ChildProcess = (command, args, options) => spawnCommand(command, args, { ...options, stdio: ['pipe', 'pipe', 'pipe'] }), private isolation?: 'read-only' | { files: string[] }) {
+    private launch: (command: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }) => ChildProcess = (command, args, options) => spawnCommand(command, args, { ...options, stdio: ['pipe', 'pipe', 'pipe'] }), private isolation?: 'read-only' | { files: string[] },
+    private execute: (command: string, args: string[], options: { env: NodeJS.ProcessEnv; timeout: number }) => Promise<string> = execCommand) {
     super();
     try { this.conversations = JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { /* None yet. */ }
   }
@@ -558,6 +563,34 @@ export class AntigravityAgent extends Adapter {
     this.ready = true;
   }
   protected account() { return { account: this.ready ? { type: 'Google account' } : null, requiresOpenaiAuth: false }; }
+  protected async limits() {
+    if (this.quotaRead) return this.quotaRead;
+    if (this.quota && Date.now() - this.quota.at < 30_000) return this.quota.result;
+    const revision = this.quotaRevision;
+    this.quotaRead = (async () => {
+      const stdout = await this.execute(findExecutable(this.binary) || this.binary, ['--print', '/usage', '--output-format', 'json'], { env: this.env(), timeout: 20_000 });
+      const result = antigravityLimits(JSON.parse(stdout));
+      if (revision === this.quotaRevision) this.quota = { at: Date.now(), result };
+      return result;
+    })();
+    try { return await this.quotaRead; }
+    catch (error) { this.quota = null; throw error; }
+    finally {
+      this.quotaRead = null;
+      // A turn may finish during the query. Read again instead of caching
+      // a snapshot taken before that turn consumed its quota.
+      if (revision !== this.quotaRevision) this.notify('account/rateLimits/updated', {});
+    }
+  }
+  protected finish(turn: Turn, status: Turn['status'], error?: string) {
+    const active = turn.status === 'inProgress';
+    super.finish(turn, status, error);
+    if (active) {
+      this.quotaRevision++;
+      this.quota = null;
+      this.notify('account/rateLimits/updated', {});
+    }
+  }
   protected models() {
     return { data: this.catalog.map(model => ({ model: model.model, displayName: model.displayName, isDefault: model.isDefault, supportedReasoningEfforts: model.efforts.map(effort => ({ reasoningEffort: effort })), defaultReasoningEffort: model.defaultEffort })) };
   }

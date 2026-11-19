@@ -405,6 +405,14 @@ export async function buildApp(options: AppOptions) {
   });
   app.post<{ Params: { id: string } }>('/api/writer/logins/:id/code', async request => { const credentials = await writer(); credentials.input(request.params.id, string((request.body as any)?.code, 'Code', 4096)); return credentials.status(); });
   app.post<{ Params: { id: string } }>('/api/writer/logins/:id/cancel', async request => { const credentials = await writer(); credentials.cancel(request.params.id); return credentials.status(); });
+  app.post<{ Params: { agent: string } }>('/api/runtime/:agent/usage', async (request, reply) => {
+    const id = request.params.agent;
+    if (!isAgentId(id)) return reply.code(400).send({ error: 'Unknown agent.' });
+    const runtime = workspace.runtimes[id];
+    if (!runtime.connected || !runtime.authenticated) return { usage: null };
+    await workspace.readUsage(id);
+    return { usage: runtime.usage };
+  });
   // Codex names reasoning efforts with short lowercase words (low, medium, xhigh).
   const agent = (value: unknown): AgentId => isAgentId(value) ? value : 'codex';
   const effort = (value: unknown) => typeof value === 'string' && /^[a-z]{1,16}$/.test(value) ? value : undefined;

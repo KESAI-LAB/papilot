@@ -6,6 +6,7 @@ import { errorText, t } from './i18n.ts';
 import { browserStorage } from './storage.ts';
 import { EffortSlider, effortName } from './effort-slider.tsx';
 import { permissionText } from './task-permissions.tsx';
+import { PickerUsage, type RefreshUsage } from './usage.tsx';
 
 // The picker and an existing conversation use the same compact model label.
 export function ModelLabel({ model, effort, fast }: { model: string; effort?: string | null; fast?: boolean }) {
@@ -88,11 +89,12 @@ function agentState(runtime?: RuntimeStatus) {
 // selected model's reasoning effort, fast mode and permissions sit below the list. Native
 // popovers keep the menu above the PDF and scrolling panels, with
 // outside-click and Escape dismissal.
-export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, onReconnect, onSelect, onChange, disabled, description, permissions, permissionMode, allowUnknownDefault = true, noAgent = false }: {
+export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, onReconnect, onSelect, onChange, disabled, description, permissions, permissionMode, allowUnknownDefault = true, noAgent = false, refreshUsage }: {
   agents: AgentOption[]; agent: AgentId; model: string; effort: string; fast: boolean;
   reconnecting: boolean; onReconnect: () => void;
   onSelect: (agent: AgentId, model: string) => void; onChange: (change: Partial<{ effort: string; fast: boolean }>) => void; disabled?: boolean; description?: string; allowUnknownDefault?: boolean;
   permissions?: ReactNode; permissionMode?: TaskPermissions; noAgent?: boolean;
+  refreshUsage?: RefreshUsage;
 }) {
   const id = useId(), trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null), search = useRef<HTMLInputElement>(null), list = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false), [query, setQuery] = useState(''), [active, setActive] = useState(''), [recent, setRecent] = useState(readRecent);
@@ -221,6 +223,7 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
         {!visible.length && <p className="model-empty">{t('No models match “{query}”', { query: query.trim() })}</p>}
       </div>
       <AgentConnectionNotice key={agent} name={agentName} runtime={runtime} reconnecting={reconnecting} onReconnect={onReconnect}/>
+      {open && runtime?.connected && runtime.authenticated && (agent === 'antigravity' || runtime.usage) && <PickerUsage key={agent} agent={agent} name={agentName} runtime={runtime} refresh={agent === 'antigravity' ? refreshUsage : undefined}/>}
       {description && <p className="effort-description">{description}</p>}
       {selected?.efforts.length ? <EffortSlider efforts={selected.efforts} value={effort} fallback={selected.defaultEffort} onChange={value => onChange({ effort: value })}/> : null}
       {fastMode && <label className="agent-fast"><span><strong><Icon name="bolt" size={14}/>{t('Fast mode')}</strong><small>{t('Faster, higher usage')}</small></span><input type="checkbox" role="switch" aria-label={t('Fast mode')} checked={fast} onChange={event => onChange({ fast: event.target.checked })}/></label>}
