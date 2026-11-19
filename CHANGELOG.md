@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- Add the opt-in **Typeless voice notes** experiment in the macOS desktop app. New PDF notes send the configured Typeless dictation shortcut; a microphone button sends it again while keeping the draft focused. Brief icon feedback confirms shortcut delivery; only errors add visible text. The experiment does not report recording state and requires waiting for transcription before leaving a note. See [setup and limitations](docs/typeless.md). ([#231](https://github.com/PapilotAI/papilot/issues/231))
+
 ### Changed
 
 - **Check Antigravity quotas from either task composer.** The agent/model menu shows the account's reported five-hour and weekly usage, reset times and model groups, with automatic and manual refresh. Missing quota data stays unavailable and quota queries do not delay conversations. ([#229](https://github.com/PapilotAI/papilot/issues/229))

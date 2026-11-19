@@ -324,6 +324,9 @@ jobs:
       - name: task-preparation
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-task-preparation.mjs
+      - name: typeless
+        if: ${{ !cancelled() }}
+        run: node scripts/check-typeless.mjs
       - name: ui
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-ui.mjs
@@ -352,6 +355,7 @@ jobs:
             test-results/section-comments-*.png
             test-results/anchors-*.png
             test-results/bulk-tasks-*.png
+            test-results/typeless-*.png
           if-no-files-found: ignore
           retention-days: 7
       - name: Keep screenshots of a failed check
