@@ -14,7 +14,7 @@ function fixture() {
   const write = (cwd: string, name: string, text: string) => fs.writeFileSync(path.join(cwd, name), text);
   function clone(target: string) {
     git(base, 'clone', '-q', remote, target);
-    for (const [key, value] of [['user.name', 'Test'], ['user.email', 'test@localhost'], ['commit.gpgsign', 'false'], ['core.hooksPath', path.join(base, 'no-hooks')]]) git(target, 'config', key, value);
+    for (const [key, value] of [['user.name', 'Test'], ['user.email', 'test@localhost'], ['commit.gpgsign', 'false'], ['merge.conflictStyle', 'merge'], ['core.hooksPath', path.join(base, 'no-hooks')]]) git(target, 'config', key, value);
   }
   function edit(cwd: string, name: string, text: string) { write(cwd, name, text); git(cwd, 'add', '--', name); git(cwd, 'commit', '-qm', 'Edit ' + name); }
   git(base, 'init', '-q', '--bare', '-b', 'main', remote); clone(mine);
