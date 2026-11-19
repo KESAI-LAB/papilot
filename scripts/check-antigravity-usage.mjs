@@ -90,8 +90,6 @@ try {
     if (!existing) {
       // Settings uses the same picker, including fresh quota data and retries.
       await page.setViewportSize({ width: 1440, height: 1000 });
-      const showTasks = page.getByRole('button', { name: 'Show task list', exact: true });
-      if (await showTasks.isVisible()) await showTasks.click();
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       await page.locator('[data-settings-page="git"]').click();
       if (mobile) await page.setViewportSize({ width: 390, height: 844 });
