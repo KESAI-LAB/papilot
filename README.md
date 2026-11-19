@@ -61,6 +61,19 @@ Mark a sentence, an equation or a figure, and write a note.<br>
   </picture>
 </p>
 
+<a id="overleaf"></a>
+
+## 🔄 Your coauthors can stay on Overleaf
+
+Link your paper to its Overleaf project, or import one with syncing on.<br>
+**You work on the PDF in Papilot, they keep editing in Overleaf, and both stay in step live.**
+
+<img src="docs/assets/readme-icons/sync.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Live, both ways.** Your accepted changes reach Overleaf in about a second. Theirs land in your files and PDF, merged character by character when you both type at once.
+
+<img src="docs/assets/readme-icons/users.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**See who is there.** Papilot shows who is on Overleaf and which file each person is in, and colours the words each coauthor wrote since your last commit.
+
+<img src="docs/assets/readme-icons/sign-in.svg" width="20" height="20" align="absmiddle" alt=""> &nbsp;**Sign in your way.** Google and institutional logins, free accounts and self-hosted servers all work.
+
 <a id="features"></a>
 
 ## 🔒 Your files stay yours
