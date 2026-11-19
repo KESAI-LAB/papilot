@@ -7,6 +7,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 ### Added
 
 - Choose the language of generated commit messages in **Settings → Git**, independently of the interface language. **Auto** keeps following recent commits; an explicit language applies to Git, staged commits and task commits.
+- Add the opt-in **Typeless voice notes** experiment in the macOS desktop app. New PDF notes send the configured Typeless dictation shortcut; a microphone button sends it again while keeping the draft focused. Brief icon feedback confirms shortcut delivery; only errors add visible text. The experiment does not report recording state and requires waiting for transcription before leaving a note. See [setup and limitations](docs/typeless.md). ([#231](https://github.com/PapilotAI/papilot/issues/231))
 
 ### Changed
 
@@ -18,7 +19,9 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Fixed
 
+- Prepare annotation alternatives earlier, prioritize the option being inspected and reuse unfinished comparisons under cache pressure. Optional PDFs still do not hold up the main review, application or commit. ([#228](https://github.com/PapilotAI/papilot/issues/228))
 - Let successful Antigravity turns proceed to review when the CLI repeats an earlier model-capacity error after switching models. New errors and unfinished replies still report failure.
+- Find DeepSeek Harness on Windows when it was installed in a custom folder without registering `dsh` on PATH. Reconnect checks the installation record and uses the bundled CLI; explicit paths and existing PATH commands retain priority.
 - Preserve the full five-stripe Papilot logo at every size in the app, including the sidebar and Settings navigation. ([#226](https://github.com/PapilotAI/papilot/issues/226))
 - Keep successful task statuses green, including **Completed** answers without manuscript changes. Use gray for current results applied or committed to the manuscript. ([#227](https://github.com/PapilotAI/papilot/issues/227))
 - Show “Creating your paper…” in **New paper** only after **Create paper**, not while choosing a save folder. ([#224](https://github.com/PapilotAI/papilot/issues/224))
