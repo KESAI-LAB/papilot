@@ -19,6 +19,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 - Clear a document’s annotations from **My notes** with a confirmation and batch undo. The confirmation fixes which annotations will be cleared, including retained positions and agent-authored notes. ([#261](https://github.com/PapilotAI/papilot/issues/261))
 - Return an original task annotation to **My notes** from Chat or the PDF note drawer. The returned copy retains its mark and instructions for another task, while the original conversation and review decisions stay in place. ([#264](https://github.com/PapilotAI/papilot/issues/264))
+- Pin several tasks at the top of a paper's current task list. Pins keep their order across replies, reloads and connected clients, and return when an archived task is restored. ([#265](https://github.com/PapilotAI/papilot/issues/265))
 
 ## [0.12.0] - 2026-11-20
 

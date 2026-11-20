@@ -139,6 +139,7 @@
   "Invalid task ID.": "無效的任務 ID。",
   "Invalid task permissions for this agent.": "此 agent 不支援所選權限。",
   "Invalid task permissions.": "無效的任務權限。",
+  "Invalid task pin state.": "任務置頂參數無效。",
   "Invalid update activation.": "無效的更新啟用。",
   "Invalid upload data.": "上傳資料無效。",
   "Manage this suggestion in its AI review task, or copy it to the manuscript first.": "請在其 AI 審閱任務中管理此建議，或先將其複製到論文原稿。",
