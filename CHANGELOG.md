@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep PDF review crops near the edit in single- and two-column ACM papers with review line numbers. The full PDF retains the original rulers. ([#266](https://github.com/PapilotAI/papilot/issues/266), [#272](https://github.com/PapilotAI/papilot/issues/272))
+
 ## [0.12.0] - 2026-11-20
 
 Turn feedback into PDF notes, keep track of passages being revised, and preview references without leaving the page. See the [release notes](docs/releases/0.12.0/release-notes.md) for setup and update instructions.
