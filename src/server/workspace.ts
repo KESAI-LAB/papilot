@@ -970,9 +970,11 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     const item = this.liveItems.get(id) || this.store.item(task.id, id) || { id, taskId: task.id, type, text: '', createdAt: Date.now() };
     if (type === 'command') item.detail = ((item.detail || '') + (params.delta || '')).slice(-40000);
     else {
-      if (type === 'assistant' && this.active.get(task.id)?.noteOptionsRequested) {
-        item.rawText = (item.rawText ?? item.text) + (params.delta || '');
-        item.text = noteOptionsSummary(item.rawText);
+      if (type === 'assistant') {
+        const raw = (item.rawText ?? item.text) + (params.delta || '');
+        item.text = noteOptionsSummary(raw, true);
+        if (raw !== item.text || this.active.get(task.id)?.noteOptionsRequested) item.rawText = raw;
+        else delete item.rawText;
       } else item.text += params.delta || '';
       // Explicit state distinguishes live replies (including interrupted ones)
       // from the unmarked stream copies left by old Claude adapters.
@@ -993,9 +995,10 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   private timelineEntry(task: Task, id: string, item: any, completed: boolean, previous: TimelineItem | undefined, agent: AgentId, worker = false): TimelineItem {
     const entry: TimelineItem = { id, taskId: task.id, createdAt: previous?.createdAt || Date.now(), type: item.type, text: item.text || item.command || '', status: item.status || (completed ? 'completed' : 'inProgress') };
     if (item.type === 'agentMessage') entry.type = task.mode === 'review' && !worker ? 'reviewOutput' : 'assistant';
-    if (item.type === 'agentMessage' && !worker && this.active.get(task.id)?.noteOptionsRequested) {
-      entry.rawText = item.text || previous?.rawText || '';
-      entry.text = noteOptionsSummary(entry.rawText || '');
+    if (item.type === 'agentMessage') {
+      const raw = item.text || previous?.rawText || previous?.text || '';
+      entry.text = noteOptionsSummary(raw, !completed);
+      if ((!worker && this.active.get(task.id)?.noteOptionsRequested) || (!completed && raw !== entry.text)) entry.rawText = raw;
     }
     if (item.type === 'commandExecution') { entry.type = 'command'; entry.detail = String(item.aggregatedOutput || previous?.detail || '').slice(-40000); }
     if (item.type === 'fileChange') {
@@ -1062,7 +1065,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       const entry = this.timelineEntry(task, id, item, method === 'item/completed', previous, agent);
       const pages = previous?.pages || this.pendingPages.get(id);
       if (pages) { entry.pages = pages; this.pendingPages.delete(id); }
-      if (entry.text || entry.detail || entry.rawText) this.store.saveItem(entry);
+      if (entry.text || entry.detail || entry.rawText || previous?.rawText) this.store.saveItem(entry);
       if (method === 'item/completed' && item.type === 'fileChange' && task.mode !== 'review') this.prefetch(task);
     } else if (method === 'serverRequest/resolved') {
       const buffered = this.earlyRequests.get(task.id);
