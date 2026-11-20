@@ -154,6 +154,7 @@
   "None of the synced files are in the paper folder. Syncing resumes when they are back.": "論文フォルダに同期されたファイルがありません。ファイルが戻ると同期を再開します。",
   "Not found": "見つかりません",
   "Note not found.": "注釈が見つかりません。",
+  "Only submitted manuscript annotations can be returned.": "タスクに送信した原稿の注釈のみ戻せます。",
   "Only the model and its settings can be changed.": "モデルとその設定のみ変更できます。",
   "Overleaf answered unexpectedly. Papilot keeps trying.": "Overleaf から予期しない応答がありました。Papilot は再試行を続けます。",
   "Overleaf asked Papilot to reconnect.": "Overleaf から Papilot に再接続が要求されました。",

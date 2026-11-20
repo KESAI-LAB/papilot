@@ -1,5 +1,5 @@
 import { PaperTools } from './paper-tools.ts';
-import { isNoteGroup } from '../note-groups.ts';
+import { canonicalGroup, isNoteGroup } from '../note-groups.ts';
 import { isCommitMessageLanguage, type CommitMessageLanguage } from '../commit.ts';
 import { noteAlternativeRange, NOTE_ALTERNATIVE_RANGES, validRoutes, taskFinished, type InFlightMark } from '../shared.ts';
 import Fastify from 'fastify';
@@ -536,9 +536,37 @@ export async function buildApp(options: AppOptions) {
       serviceTier: typeof body.serviceTier === 'string' ? body.serviceTier : undefined, permissions: body.permissions, stop: body.stop === true, draftAttachments: attachmentIds(body.draftAttachments) });
   });
   app.get<{ Params: { id: string }; Querystring: { since?: string } }>('/api/tasks/:id/items', task, request => { store.task(request.params.id); return store.itemsSince(request.params.id, typeof request.query.since === 'string' ? request.query.since : undefined); });
+  const returnedAnnotationId = (task: string, note: string) => 'returned-' + createHash('sha256').update(JSON.stringify([task, note])).digest('hex').slice(0, 40);
+  const submittedAnnotation = (task: Task, id: string) => {
+    // A failed preparation can still release the original note on deletion.
+    if (task.preparation || task.status === 'preparing' || task.status === 'deleting') return undefined;
+    const note = store.findAnnotation(task.projectId, id);
+    return note?.taskId === task.id && note.deletedAt === undefined && !isTaskReviewNote(note) ? note : undefined;
+  };
   app.get<{ Params: { id: string } }>('/api/tasks/:id/note-results', task, async request => {
     const task = store.task(request.params.id), client = await connectReview(store.project(task.projectId).path);
-    return { notes: await taskNoteResults(task, store.items(task.id), store.runs().filter(run => run.taskId === task.id), client) };
+    const notes = await taskNoteResults(task, store.items(task.id), store.runs().filter(run => run.taskId === task.id), client);
+    const current = store.task(task.id);
+    for (const result of notes) {
+      const id = result.note.id;
+      if (id && !result.note.anchor?.round && submittedAnnotation(current, id))
+        result.returned = Boolean(store.findAnnotation(task.projectId, returnedAnnotationId(task.id, id)));
+    }
+    return { notes };
+  });
+  app.post<{ Params: { id: string; note: string } }>('/api/tasks/:id/notes/:note/return', task, request => {
+    const task = store.task(request.params.id), noteId = request.params.note;
+    const note = submittedAnnotation(task, noteId);
+    const snapshot = store.items(task.id).find(item => item.type === 'user' && item.meta?.notes?.some(summary => summary.id === noteId && !summary.anchor?.round));
+    if (!note || !snapshot) throw new Error('Only submitted manuscript annotations can be returned.');
+    const id = returnedAnnotationId(task.id, noteId), existing = store.findAnnotation(task.projectId, id);
+    if (existing) return existing;
+    // Only the copy belongs to My notes. Keep its original PDF key so the
+    // manuscript read can place it safely or show the existing location warning.
+    const { taskId: _, context: _context, groupInstruction: _oldInstruction, aiReview: _adoption, ...copy } = note;
+    const document = note.document ?? manuscripts.documentOf(note.projectId, note.key) ?? task.document;
+    const groupInstruction = note.group && snapshot.meta?.groupInstructions?.[canonicalGroup(note.group)];
+    return store.saveAnnotation({ ...copy, id, createdAt: Date.now(), ...(document ? { document } : {}), ...(groupInstruction ? { groupInstruction } : {}) });
   });
   // A task's file in the editor beside its review. The review engine reads
   // it from the task's worktree and reviews a save in a new round; a save

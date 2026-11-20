@@ -1303,6 +1303,11 @@ body.resizing iframe{pointer-events:none}
    the PDF workspace; the document keeps its width and native layout. */
 .sent-notes li[data-note-result] { cursor: pointer; }
 .sent-notes li[data-note-result]:focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
+.note-return-action{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.note-return-action .note-link{display:inline-flex;align-items:center;min-block-size:24px}
+@media(pointer:coarse){.note-return-action .note-link{min-block-size:36px}}
+.note-return-action .note-link[aria-disabled=true]{color:var(--text-2);cursor:default;text-decoration:none}
+.review-note-controls>.note-return-action{padding:0 12px 8px}
 .review-note-controls { position: absolute; z-index: 5; inset: auto 0 0; padding: 0 0 env(safe-area-inset-bottom, 0px); border: 0; border-top: 1px solid var(--line); border-radius: 0; background: var(--bg); max-height: min(44%, 300px); display: flex; flex-direction: column; overflow: hidden; transform: translateY(100%); transition: transform .18s var(--ease); }
 /* Open, the drawer shares the selected change's accent, linking the two. */
 .review-note-controls[data-open="true"] { transform: translateY(0); border-top: 2px solid var(--primary); }
