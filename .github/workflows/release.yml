@@ -112,3 +112,11 @@ jobs:
           # then the installers and the update layer it names are uploaded.
           gh release upload "$GITHUB_REF_NAME" release/desktop/*.dmg release/desktop/*.zip release/desktop/*.AppImage release/desktop/*.deb release/desktop/*.exe release/desktop/papilot-app-*.tgz --clobber
           gh release upload "$GITHUB_REF_NAME" release/desktop/desktop.json --clobber
+
+  aur:
+    needs: release
+    uses: ./.github/workflows/aur.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets:
+      AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
