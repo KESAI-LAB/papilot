@@ -1286,6 +1286,12 @@ function App() {
   // Appearance, language and notifications live in Settings; a new language re-renders everything.
   const theme = useTheme(); const { language: uiLanguage } = useLanguage();
   const [settings, setSettings] = useState<false | SettingsInitialPage>(false);
+  const openSettings = useCallback(() => {
+    const dialog = document.querySelector('.settings-dialog')?.closest('dialog');
+    if (dialog?.open && !dialog.contains(document.activeElement)) dialog.focus({ preventScroll: true });
+    setSettings(current => current || 'general');
+  }, []);
+  useEffect(() => window.papilotDesktop?.onOpenSettings?.(openSettings), [openSettings]);
   useEffect(() => {
     const shortcuts = () => setSettings('shortcuts'), quickNotes = () => setSettings('quickNotes');
     window.addEventListener('papilot:open-shortcuts', shortcuts); window.addEventListener('papilot:open-quick-notes', quickNotes);
@@ -2221,7 +2227,7 @@ function App() {
           <a href="/" className="brand-home" aria-label="Papilot" onClick={e => { e.preventDefault(); setSelected(''); setPage('manuscript'); if (mobile) setManuscriptView('pdf'); setSidebar(false); }}><PapilotMark size={16} className="brand-mark"/><span>Papilot</span></a>
           {state && (!isPlayground ? <UpdateNotice api={api} version={state.version}/> : <span className="brand-version" title={t('Papilot {version}', { version: state.version })}>v{versionLabel(state.version)}</span>)}
         </div>
-        <button type="button" className="icon-button settings-link" aria-label={t('Settings')} title={t('Settings')} aria-haspopup="dialog" onClick={() => setSettings('general')}><Icon name="settings" size={18}/></button>
+        <button type="button" className="icon-button settings-link" aria-label={t('Settings')} title={t('Settings')} aria-haspopup="dialog" onClick={openSettings}><Icon name="settings" size={18}/></button>
       </div>
     </aside>
     {sidebar && narrow && <button tabIndex={-1} className="sidebar-scrim" aria-label={t('Close task list')} onClick={() => setSidebar(false)}/>}
