@@ -140,6 +140,42 @@ test('the editing response carries prepared choices into publication without put
     assert.equal(assistant.rawText, reply);
   } finally { f.close(); }
 });
+test('plain follow-ups hide stale note choices while streaming and on completion', async () => {
+  const f = fixture();
+  try {
+    f.store.savePreference('note-alternatives', true);
+    const initial = await f.workspace.enqueue(f.task.id, 'Polish this.', 'initial-notes', false, {
+      reviewNotes: [{ where: 'main.tex line 1', quote: 'fast', comment: 'Clarify.' }],
+    });
+    assert.equal(initial.noteOptionsRequested, true);
+    f.store.saveRun({ ...initial, status: 'completed' });
+    const followUp = await f.workspace.enqueue(f.task.id, 'Please try that.', 'plain-follow-up', false);
+    assert.equal(followUp.noteOptionsRequested, undefined);
+    (f.workspace as any).active.set(f.task.id, followUp);
+    f.store.updateTask(f.task.id, { status: 'running', turnId: 'follow-up-turn' });
+    const params = { threadId: 'thread', turnId: 'follow-up-turn', itemId: 'reply' };
+    const chunks = [
+      'Clarified the wording.\n\n```papilot-note-',
+      'options\n{"notes":[',
+      ']}\n```',
+      '\n\nThe references are unchanged.',
+    ];
+    const summaries = ['Clarified the wording.', 'Clarified the wording.', 'Clarified the wording.', 'Clarified the wording.\n\n\nThe references are unchanged.'];
+    for (let i = 0; i < chunks.length; i++) {
+      await (f.workspace as any).notification({ method: 'item/agentMessage/delta', params: { ...params, delta: chunks[i] } });
+      (f.workspace as any).flush();
+      assert.equal(f.store.items(f.task.id).find(item => item.type === 'assistant')?.text, summaries[i]);
+    }
+    await (f.workspace as any).notification({ method: 'item/completed', params: { ...params, item: { id: 'reply', type: 'agentMessage', text: chunks.join('') } } });
+    const reply = f.store.items(f.task.id).find(item => item.type === 'assistant');
+    assert.equal(reply?.text, summaries.at(-1));
+    assert.equal(reply?.rawText, undefined);
+    f.workspace.publish = async (_id, run) => { assert.equal(run?.noteOptions, undefined); };
+    await (f.workspace as any).notification({ method: 'turn/completed', params: { threadId: 'thread', turn: { id: 'follow-up-turn', status: 'completed' } } });
+    assert.equal(f.store.runByKey('plain-follow-up')?.noteOptions, undefined);
+  } finally { f.close(); }
+});
+
 const feedback = { cursor: 7, feedback: [{ body: 'Preserve the boundary condition.' }] };
 const summary = { state: 'reviewing', round: 1, counts: { pending: 1 } };
 

@@ -35,6 +35,7 @@ import type { SourceFileRead } from '../../engine/src/types.ts';
 import { parseGroupInstructions } from '../note-groups.ts';
 import { noteOptionContext, noteOptionsKey } from './note-options.ts';
 import { taskNoteResults } from './note-results.ts';
+import { noteOptionsSummary } from './prepared-note-options.ts';
 import type { Updates } from './updates.ts';
 import { Diagnostics } from './diagnostics.ts';
 import { attachmentIds } from './attachments.ts';
@@ -535,7 +536,14 @@ export async function buildApp(options: AppOptions) {
       model: typeof body.model === 'string' ? body.model : undefined, effort: typeof body.effort === 'string' ? body.effort : undefined,
       serviceTier: typeof body.serviceTier === 'string' ? body.serviceTier : undefined, permissions: body.permissions, stop: body.stop === true, draftAttachments: attachmentIds(body.draftAttachments) });
   });
-  app.get<{ Params: { id: string }; Querystring: { since?: string } }>('/api/tasks/:id/items', task, request => { store.task(request.params.id); return store.itemsSince(request.params.id, typeof request.query.since === 'string' ? request.query.since : undefined); });
+  app.get<{ Params: { id: string }; Querystring: { since?: string } }>('/api/tasks/:id/items', task, request => {
+    store.task(request.params.id);
+    const result = store.itemsSince(request.params.id, typeof request.query.since === 'string' ? request.query.since : undefined);
+    return { ...result, items: result.items.map(({ rawText: _, ...item }) =>
+      item.type === 'assistant' || item.type === 'reviewOutput'
+        ? { ...item, text: noteOptionsSummary(item.text, item.status === 'inProgress') }
+        : item) };
+  });
   const returnedAnnotationId = (task: string, note: string) => 'returned-' + createHash('sha256').update(JSON.stringify([task, note])).digest('hex').slice(0, 40);
   const submittedAnnotation = (task: Task, id: string) => {
     // A failed preparation can still release the original note on deletion.
