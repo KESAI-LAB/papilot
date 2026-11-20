@@ -6,6 +6,8 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Fixed
 
+- Keep internal note-alternative data out of live and saved Chat replies, including plain follow-ups after a note task. ([#271](https://github.com/PapilotAI/papilot/issues/271))
+
 - Link PDF annotations through citations, inline math, hyperlinks, headings and captions. Follow-up notes on pending proposals link to the revised change when the original source range can still be identified. ([#270](https://github.com/PapilotAI/papilot/issues/270))
 
 - Generate initial task-review commit drafts in the selected commit-message language instead of copying the task title. Manual edits and preserved reconciliation messages remain intact. ([#255](https://github.com/PapilotAI/papilot/issues/255))

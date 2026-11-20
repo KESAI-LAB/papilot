@@ -124,6 +124,14 @@ test('old Claude streamed duplicates disappear without hiding legitimate repeate
   assert.deepEqual(visibleTimeline([...full, live]), [final, again, otherTurn, tool, different, live], 'a later block is not a legacy duplicate');
 });
 
+test('metadata-only assistant replies stay hidden after incremental updates', () => {
+  const initial = { id: 'reply', type: 'assistant', text: 'A reply.', createdAt: 1 };
+  const metadata = { ...initial, text: '', status: 'completed' };
+  const user = { id: 'user', type: 'user', text: '', createdAt: 0 };
+  assert.deepEqual(visibleTimeline([user, metadata]), [user]);
+  assert.deepEqual(visibleTimeline(mergeTimeline([user, initial], [metadata])), [user]);
+});
+
 test('legacy duplicates stay hidden when a later final overwrote an earlier record', () => {
   const store = new Store(':memory:');
   try {
