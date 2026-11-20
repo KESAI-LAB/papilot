@@ -2587,7 +2587,7 @@ test('an agent resolves a merge in the manuscript checkout, and review writes wa
     f.store.saveProject({ id: f.task.projectId, name: 'Paper', path: root, createdAt: 1 });
     await assert.rejects(f.workspace.reviewWrite(f.task.id, true, async () => undefined), /Finish or abort the merge/);
     f.codex.ready = true;
-    f.workspace.runtimes.codex.models = [{ id: 'deep', name: 'Deep', isDefault: true, efforts: ['low', 'high'], defaultEffort: 'high' }];
+    f.workspace.runtimes.codex.models = [{ id: 'deep', name: 'Deep', isDefault: true, efforts: ['low', 'high'], defaultEffort: 'high', fastMode: { serviceTier: 'priority', description: '' } }];
     f.codex.handler = async method => {
       if (method === 'thread/start') return { thread: { id: 'merge-thread' } };
       fs.writeFileSync(path.join(root, 'main.tex'), 'My opening, as reworded.\n');
@@ -2597,10 +2597,19 @@ test('an agent resolves a merge in the manuscript checkout, and review writes wa
       });
       return { turn: { id: 'merge-turn' } };
     };
-    const result = await f.workspace.resolveConflicts(f.task.projectId);
+    const before = run(root, 'rev-parse', 'HEAD');
+    const resolve = (choice: Parameters<Workspace['resolveConflicts']>[1]) => f.workspace.resolveConflicts(f.task.projectId, choice);
+    await assert.rejects(resolve({ agent: 'claude' }), /selected conflict-resolution agent is unavailable/);
+    await assert.rejects(resolve({ agent: 'codex', model: 'unknown' }), /available model/);
+    await assert.rejects(resolve({ agent: 'codex', model: 'deep', effort: 'medium' }), /does not support that reasoning effort/);
+    await assert.rejects(resolve({ agent: 'codex', model: 'deep', serviceTier: 'unknown' }), /Fast mode is not available/);
+    assert.ok(!f.codex.calls.some(call => call.method === 'thread/start'));
+    const result = await resolve({ agent: 'codex', model: 'deep', effort: 'low', serviceTier: 'priority' });
+    assert.equal(run(root, 'rev-parse', 'HEAD'), before, 'The author still commits the merge');
+    assert.equal(run(root, 'diff', '--name-only', '--diff-filter=U'), 'main.tex');
     assert.deepEqual([result.summary, result.remaining, result.agent, result.git.merging?.conflicts], ['Kept your rewrite and their wording.', [], 'codex', []]);
     const start = f.codex.calls.find(call => call.method === 'thread/start')!.params, turn = f.codex.calls.find(call => call.method === 'turn/start')!.params;
-    assert.deepEqual([start.cwd, start.sandbox, start.approvalPolicy, start.ephemeral, turn.effort], [root, 'workspace-write', 'never', true, 'high']);
+    assert.deepEqual([start.cwd, start.sandbox, start.approvalPolicy, start.ephemeral, start.model, turn.effort, turn.serviceTier], [root, 'workspace-write', 'never', true, 'deep', 'low', 'priority']);
     for (const part of ['- main.tex', '- Rewrite the opening', '- Reword the opening', 'origin/main']) assert.ok(turn.input[0].text.includes(part), part);
     await assert.rejects(f.workspace.resolveConflicts(f.task.projectId), /No file has conflict markers left/);
   } finally { f.close(); fs.rmSync(base, { recursive: true, force: true }); }

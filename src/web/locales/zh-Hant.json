@@ -1631,5 +1631,9 @@
   "Check your Typeless shortcut.": "請檢查 Typeless 快速鍵。",
   "Shortcut: {shortcut}": "快速鍵：{shortcut}",
   "Typeless voice notes": "Typeless 語音註解",
-  "Saved page {page}": "上次位置 · 第 {page} 頁"
+  "Saved page {page}": "上次位置 · 第 {page} 頁",
+  "Conflict-resolution agent": "衝突解決代理",
+  "Follow current conversation for conflicts": "解決衝突時跟隨目前對話",
+  "Uses the current conversation or new-task settings. Your choice only applies to Git conflicts.": "使用目前對話或新任務的設定。選擇僅用於解決 Git 衝突。",
+  "Change conflict agent": "更換衝突解決代理"
 }

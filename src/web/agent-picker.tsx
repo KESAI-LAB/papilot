@@ -89,8 +89,8 @@ function agentState(runtime?: RuntimeStatus) {
 // selected model's reasoning effort, fast mode and permissions sit below the list. Native
 // popovers keep the menu above the PDF and scrolling panels, with
 // outside-click and Escape dismissal.
-export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, onReconnect, onSelect, onChange, disabled, description, permissions, permissionMode, allowUnknownDefault = true, noAgent = false, refreshUsage }: {
-  agents: AgentOption[]; agent: AgentId; model: string; effort: string; fast: boolean;
+export function AgentPicker({ label, agents, agent, model, effort, fast, reconnecting, onReconnect, onSelect, onChange, disabled, description, permissions, permissionMode, allowUnknownDefault = true, noAgent = false, refreshUsage }: {
+  label?: string; agents: AgentOption[]; agent: AgentId; model: string; effort: string; fast: boolean;
   reconnecting: boolean; onReconnect: () => void;
   onSelect: (agent: AgentId, model: string) => void; onChange: (change: Partial<{ effort: string; fast: boolean }>) => void; disabled?: boolean; description?: string; allowUnknownDefault?: boolean;
   permissions?: ReactNode; permissionMode?: TaskPermissions; noAgent?: boolean;
@@ -189,7 +189,7 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
   };
   const activeChoice = visible.find(choice => choice.key === active);
   return <span className="agent-picker">
-    <button ref={trigger} type="button" className="agent-picker-trigger" aria-label={t('Agent settings')} aria-description={summary} title={summary + (disconnected ? ` · ${t('{agent} is unavailable', { agent: agentName })}` : '')} aria-haspopup="dialog" aria-expanded={open} aria-controls={id} disabled={disabled || noAgent}
+    <button ref={trigger} type="button" className="agent-picker-trigger" aria-label={label || t('Agent settings')} aria-description={summary} title={summary + (disconnected ? ` · ${t('{agent} is unavailable', { agent: agentName })}` : '')} aria-haspopup="dialog" aria-expanded={open} aria-controls={id} disabled={disabled || noAgent}
       onClick={() => panel.current?.matches(':popover-open') ? panel.current.hidePopover() : show()}
       onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); show(); } }}>
       {noAgent ? <span className="agent-picker-selection">{t('No agent')}</span> : <><BrandIcon name={agent} size={15}/>{!permission && modelName !== agentName && <span className="agent-picker-agent">{agentName}</span>}
@@ -199,7 +199,7 @@ export function AgentPicker({ agents, agent, model, effort, fast, reconnecting, 
       </span>
       <Icon name="chevronDown" size={13}/>{disconnected && <span className="agent-status-mark"><Icon name="alert" size={13}/></span>}</>}
     </button>
-    <div ref={panel} id={id} popover="auto" role="dialog" aria-label={t('Agent settings')} className={'agent-picker-panel' + (permission ? ' has-permissions' : '')} onToggle={event => {
+    <div ref={panel} id={id} popover="auto" role="dialog" aria-label={label || t('Agent settings')} className={'agent-picker-panel' + (permission ? ' has-permissions' : '')} onToggle={event => {
       const shown = (event.nativeEvent as ToggleEvent).newState === 'open'; setOpen(shown);
       if (!shown && (!document.activeElement || document.activeElement === document.body || panel.current?.contains(document.activeElement))) trigger.current?.focus();
     }} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); panel.current?.hidePopover(); trigger.current?.focus(); } }}>

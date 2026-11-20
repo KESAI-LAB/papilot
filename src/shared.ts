@@ -234,7 +234,7 @@ export interface OverleafComparison { name: string; same: number; overleaf: stri
 // index is the staged status where it differs from status, which is the working tree's when it has changes.
 export interface GitFile { path: string; status: string; staged: boolean; unstaged: boolean; lines?: [number, number]; from?: string; index?: string; incoming?: string }
 // merging is a merge in progress, with the files whose conflict markers remain.
-export interface GitStatus { branch: string | null; upstream: string | null; ahead: number; behind: number; files: GitFile[]; head: { hash: string; subject: string; date: number } | null; remote?: boolean; merging?: { message: string; conflicts: string[] } | null }
+export interface GitStatus { branch: string | null; upstream: string | null; ahead: number; behind: number; files: GitFile[]; head: { hash: string; subject: string; date: number } | null; remote?: boolean; merging?: { head?: string; message: string; conflicts: string[] } | null }
 export interface GitDiff { path: string; diff: string; truncated: boolean }
 export type GitDiffScope = 'all' | 'staged' | 'unstaged';
 export interface GitVersion { hash: string; message: string; author: string; date: number }

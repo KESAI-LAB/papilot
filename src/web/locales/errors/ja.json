@@ -475,5 +475,7 @@
   "Enable collaboration mode in Settings → Experiments first.": "まず設定 → 実験的な機能で協調モードを有効にしてください。",
   "The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.": "選択したコミットメッセージのエージェントは読み取り専用タスクに対応していません。設定 → Git で別のエージェントを選択してください。",
   "The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "選択したコミットメッセージのエージェントは利用できません。設定 → エージェントで接続するか、設定 → Git で別のエージェントを選択してください。",
-  "Invalid agent.": "無効なエージェントです。"
+  "Invalid agent.": "無効なエージェントです。",
+  "The selected conflict-resolution agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "選択した競合解決エージェントは利用できません。設定 → エージェントで接続するか、設定 → Git で別のエージェントを選んでください。",
+  "Choose a supported agent.": "対応しているエージェントを選んでください。"
 }

@@ -475,5 +475,7 @@
   "Enable collaboration mode in Settings → Experiments first.": "请先在设置 → 实验功能中启用协作模式。",
   "The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.": "所选提交信息智能体不支持只读任务。请在设置 → Git 中选择其他智能体。",
   "The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "所选提交信息智能体不可用。请在设置 → 智能体中连接它，或在设置 → Git 中选择其他智能体。",
-  "Invalid agent.": "无效的智能体。"
+  "Invalid agent.": "无效的智能体。",
+  "The selected conflict-resolution agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "所选冲突解决代理不可用。请在「设置 → 智能体」中连接，或在「设置 → Git」中更换。",
+  "Choose a supported agent.": "请选择受支持的代理。"
 }
