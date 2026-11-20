@@ -79,6 +79,9 @@ export interface Unit {
   new_end: number;
   old_text: string;
   old_context?: { text: string; start: number; source_hash?: string };
+  new_context?: { text: string; start: number; source_hash?: string };
+  /** Unchanged original source ranges translated to a requested later baseline. */
+  continued_ranges?: [number, number][];
   new_text: string;
   truncated: boolean;
   /** Identifies this version of the change across rounds: its file and
@@ -493,6 +496,8 @@ export interface History {
   new_text: string;
 }
 export interface RoundDetail extends Omit<RenderedRound, "units"> {
+  /** Proposed source edits needed to reach a requested later baseline. */
+  proposal_edits?: Record<string, Op[]>;
   task: string;
   round: number;
   before: string;

@@ -324,13 +324,14 @@ export function createServer(app: App) {
       });
     server.post<{ Params: { name: string }; Body: OptionInput }>("/api/tasks/:name/source/options",
       request => useNoteOption(app, app.tasks.get(request.params.name).name, request.body));
-    server.get<{ Params: { name: string; number: string } }>(
+    server.get<{ Params: { name: string; number: string }; Querystring: { proposedFor?: string } }>(
       "/api/tasks/:name/rounds/:number",
       async (request) => ({
         ...(await app.review.positioned(
           app.review.roundDetail(
             request.params.name,
             Number(request.params.number),
+            /^\d+$/.test(request.query.proposedFor ?? "") ? Number(request.query.proposedFor) : undefined,
           ),
         )),
         // The root document the task compiles, for its complete PDF.
