@@ -130,7 +130,13 @@ export class Store extends EventEmitter {
   deleteAnnotation(projectId: string, id: string) {
     const note = this.annotation(projectId, id);
     if (note.taskId) throw new Error('This note has already been sent.');
-    this.saveAnnotation({ ...note, deletedAt: note.deletedAt ?? Date.now() });
+    if (note.deletedAt !== undefined) return;
+    const { deletedBatch: _, ...active } = note;
+    this.saveAnnotation({ ...active, deletedAt: Date.now() });
+  }
+  restoreAnnotation(note: Annotation) {
+    const { deletedAt: _, deletedBatch: _batch, ...active } = note;
+    return this.saveAnnotation(active);
   }
   taskDeleted(id: string) { return Boolean(this.db.prepare('SELECT 1 FROM deleted_tasks WHERE id=?').get(id)); }
   deleteTask(id: string) {
