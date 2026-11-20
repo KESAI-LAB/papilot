@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { App } from '../engine/src/server.ts';
 import { loadProject, settingsFile } from '../engine/src/core/config.ts';
+import { realPath } from '../engine/src/core/files.ts';
 
 function createPaper(dir: string) {
   fs.mkdirSync(dir, { recursive: true });
@@ -14,7 +15,7 @@ function createPaper(dir: string) {
   fs.writeFileSync(path.join(dir, 'main.tex'), '\\documentclass{article}\n\\begin{document}\nAn example.\n\\end{document}\n');
   git('add', 'main.tex');
   git('-c', 'user.name=Test', '-c', 'user.email=test@example.test', 'commit', '-qm', 'Add paper');
-  return fs.realpathSync(dir);
+  return realPath(dir);
 }
 
 test('task worktrees default to a stable per-repository folder under the home directory', () => {
@@ -38,7 +39,7 @@ test('task worktrees default to a stable per-repository folder under the home di
 });
 
 test('an implicit home directory inside the paper uses a sibling and keeps an accessible name', t => {
-  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-home-paper-')));
+  const base = realPath(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-home-paper-')));
   const original = process.env.PAPILOT_WORKTREES;
   delete process.env.PAPILOT_WORKTREES;
   try {
@@ -65,7 +66,7 @@ test('an implicit home directory inside the paper uses a sibling and keeps an ac
 });
 
 test('new task worktrees use the new default while earlier paths and explicit overrides still work', async () => {
-  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-worktree-paths-')));
+  const base = realPath(fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-worktree-paths-')));
   const original = process.env.PAPILOT_WORKTREES;
   process.env.PAPILOT_WORKTREES = path.join(base, 'isolated-worktrees');
   const root = createPaper(path.join(base, 'thesis'));
