@@ -18,6 +18,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Added
 
+- Prepare automatic signed APT distribution for stable amd64 desktop releases. Debian packages use system-managed app upgrades and retain agent setup. ([#268](https://github.com/PapilotAI/papilot/issues/268))
 - Add an Arch Linux package recipe for the official x86_64 desktop build and automate validation and publication from stable releases after maintainer setup. ([#267](https://github.com/PapilotAI/papilot/issues/267))
 - Clear a document’s annotations from **My notes** with a confirmation and batch undo. The confirmation fixes which annotations will be cleared, including retained positions and agent-authored notes. ([#261](https://github.com/PapilotAI/papilot/issues/261))
 - Return an original task annotation to **My notes** from Chat or the PDF note drawer. The returned copy retains its mark and instructions for another task, while the original conversation and review decisions stay in place. ([#264](https://github.com/PapilotAI/papilot/issues/264))

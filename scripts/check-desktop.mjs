@@ -65,6 +65,11 @@ try {
   const health = await (await fetch(`${origin}/api/health`)).json();
   assert.equal(health.name, 'Papilot');
   assert.equal(health.version, version);
+  if (process.env.PAPILOT_EXPECT_PACKAGE_MANAGED === '1') {
+    const update = await (await fetch(`${origin}/api/updates`)).json();
+    assert.equal(update.packageManager, 'managed');
+    assert.equal(update.canUpdate, false);
+  }
   const state = await (await fetch(`${origin}/api/state`)).json();
   assert.ok(state.csrf); assert.equal('viewer' in state, false, 'Desktop uses the single-user workspace');
   assert.equal(state.projects.length, 1, 'First launch includes the demo paper');
