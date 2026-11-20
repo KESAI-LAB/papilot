@@ -10,6 +10,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 - Keep the manuscript PDF marking toolbar in place when selecting the Note tool or opening a note. ([#256](https://github.com/PapilotAI/papilot/issues/256))
 - Keep PDF reference previews aligned with their links as the PDF scrolls, zooms or resizes. Previews stay inside the visible viewport and close when the reference leaves view. ([#260](https://github.com/PapilotAI/papilot/issues/260))
 - Open Settings from the macOS Papilot menu or with Command–Comma. Repeating the shortcut keeps the current settings page and edits. ([#262](https://github.com/PapilotAI/papilot/issues/262))
+- Keep PDF review crops near the edit in single- and two-column ACM papers with review line numbers. The full PDF retains the original rulers. ([#266](https://github.com/PapilotAI/papilot/issues/266), [#272](https://github.com/PapilotAI/papilot/issues/272))
 
 ### Changed
 
@@ -17,6 +18,8 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Added
 
+- Prepare automatic signed APT distribution for stable amd64 desktop releases. Debian packages use system-managed app upgrades and retain agent setup. ([#268](https://github.com/PapilotAI/papilot/issues/268))
+- Add an Arch Linux package recipe for the official x86_64 desktop build and automate validation and publication from stable releases after maintainer setup. ([#267](https://github.com/PapilotAI/papilot/issues/267))
 - Clear a document’s annotations from **My notes** with a confirmation and batch undo. The confirmation fixes which annotations will be cleared, including retained positions and agent-authored notes. ([#261](https://github.com/PapilotAI/papilot/issues/261))
 - Return an original task annotation to **My notes** from Chat or the PDF note drawer. The returned copy retains its mark and instructions for another task, while the original conversation and review decisions stay in place. ([#264](https://github.com/PapilotAI/papilot/issues/264))
 - Pin several tasks at the top of a paper's current task list. Pins keep their order across replies, reloads and connected clients, and return when an archived task is restored. ([#265](https://github.com/PapilotAI/papilot/issues/265))

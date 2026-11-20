@@ -21,6 +21,8 @@ if (process.platform === 'win32') fs.writeFileSync(path.join(data, 'environment.
 const env = { ...process.env, PAPILOT_DESKTOP_DATA: data, PAPILOT_DESKTOP_NODE: process.execPath, PAPILOT_UPDATE_PROBE: '1', LANG: 'en_US.UTF-8' };
 delete env.ELECTRON_RUN_AS_NODE;
 const packaged = process.env.PAPILOT_DESKTOP_EXECUTABLE;
+const packageManaged = process.env.PAPILOT_EXPECT_PACKAGE_MANAGED === '1';
+const layerUpdates = Boolean(packaged && !packageManaged);
 const resources = packaged && (process.env.PAPILOT_DESKTOP_RESOURCES || path.resolve(path.dirname(packaged), process.platform === 'darwin' ? '../Resources' : 'resources'));
 const base = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
 // A nightly dev build bundles a dev version.
@@ -181,9 +183,13 @@ try {
   assert.ok(fs.existsSync(path.join(data, 'papilot.sqlite')), 'The bundled Node runtime can open SQLite');
   const rejected = await fetch(`${origin}/api/state`, { headers: { Origin: 'https://example.com' } });
   assert.equal(rejected.status, 403, 'The ephemeral port still enforces origin checks');
-  // Packaged apps update in place on a channel; the development app runs its checkout.
+  // Only standalone installers use update layers and channels.
   const status = await (await fetch(`${origin}/api/updates`)).json();
-  assert.deepEqual([status.canUpdate, status.downloadUrl, status.channel], packaged ? [true, undefined, /-dev\./.test(version) ? 'dev' : 'stable'] : [false, 'https://github.com/PapilotAI/papilot/releases', undefined]);
+  const expectedUpdates = layerUpdates
+    ? [true, undefined, /-dev\./.test(version) ? 'dev' : 'stable']
+    : [false, packageManaged ? undefined : 'https://github.com/PapilotAI/papilot/releases', undefined];
+  assert.deepEqual([status.canUpdate, status.downloadUrl, status.channel], expectedUpdates);
+  assert.equal(status.packageManager, packageManaged ? 'managed' : undefined);
   assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
   const windowOptions = await application.evaluate(({ BrowserWindow }) => {
     const preferences = BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences();
@@ -260,11 +266,16 @@ try {
   await checkDesktopNotifications(application, page, await (await fetch(`${origin}/api/state`)).json());
   await settings.click();
   await page.getByRole('button', { name: /^(Updates|版本更新)$/ }).click();
-  await expect(page.getByRole('button', { name: /^(Check for updates|检查更新)$/ })).toBeVisible();
+  const checkUpdate = page.getByRole('button', { name: /^(Check for updates|检查更新)$/ });
+  if (packageManaged) {
+    await expect(page.getByText(/^(Updates are managed outside Papilot\.|更新不由 Papilot 管理。)$/)).toBeVisible();
+    await expect(checkUpdate).toHaveCount(0);
+    await page.screenshot({ path: 'test-results/desktop-apt-updates.png' });
+  } else await expect(checkUpdate).toBeVisible();
   await expect(page.locator('.update-current-version')).toBeVisible();
   // A download appears only with a newer release; the app menu keeps the releases page.
   assert.equal(await page.getByRole('link', { name: /Download desktop updates|下载桌面版更新/ }).count(), 0);
-  assert.equal(await page.getByRole('combobox', { name: /Update channel|更新通道/ }).count(), packaged ? 1 : 0);
+  assert.equal(await page.getByRole('combobox', { name: /Update channel|更新通道/ }).count(), layerUpdates ? 1 : 0);
   fs.mkdirSync('test-results', { recursive: true });
   await page.screenshot({ path: `test-results/desktop-${packaged ? 'packaged' : 'dev'}.png` });
   assert.deepEqual(errors, []);
@@ -315,12 +326,12 @@ try {
     const run = await opened();
     assert.equal(run.health.version, version, 'The app always runs its bundled server');
     assert.equal(run.status.currentVersion, version);
-    assert.equal(run.status.canUpdate, Boolean(packaged));
+    assert.equal(run.status.canUpdate, layerUpdates);
     assert.equal(fs.existsSync(active), true, 'Legacy records are ignored without deleting shared data');
     await application.close(); application = null;
   }
   // Linux runs this once, on the AppImage, whose path changes at every launch.
-  if (packaged && process.env.PAPILOT_DESKTOP_UPDATE_CHECK !== '0') {
+  if (layerUpdates && process.env.PAPILOT_DESKTOP_UPDATE_CHECK !== '0') {
     // A newer dev build for this installer's shell installs in place: only
     // Papilot's own code is downloaded, from a local stand-in for GitHub.
     const output = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-layer-'));

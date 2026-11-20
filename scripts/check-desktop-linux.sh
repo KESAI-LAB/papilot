@@ -23,6 +23,6 @@ image=("$PWD"/release/desktop/*.AppImage)
 APPIMAGE_EXTRACT_AND_RUN=1 PAPILOT_DESKTOP_RESOURCES="$(dirname "$app")/resources" PAPILOT_DESKTOP_EXECUTABLE="${image[0]}" npm run test:desktop
 cp test-results/desktop-demo-packaged.png test-results/desktop-linux-appimage.png
 
-sudo apt-get install -y ./release/desktop/*.deb
-PAPILOT_DESKTOP_UPDATE_CHECK=0 PAPILOT_DESKTOP_EXECUTABLE=/opt/Papilot/papilot npm run test:desktop
+bash scripts/check-debian-repo.sh ./release/desktop/*.deb
+PAPILOT_EXPECT_PACKAGE_MANAGED=1 PAPILOT_DESKTOP_UPDATE_CHECK=0 PAPILOT_DESKTOP_EXECUTABLE=/opt/Papilot/papilot npm run test:desktop
 cp test-results/desktop-demo-packaged.png test-results/desktop-linux-deb.png

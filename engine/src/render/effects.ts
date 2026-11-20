@@ -48,13 +48,15 @@ export interface Words {
   tokens: ReturnType<typeof tokens>;
   /** The tokens of each printed line, as [start, end) ranges. */
   lines: [number, number][];
+  /** Identical side rulers can be left out of the alignment. */
+  rulers?: Map<number, string>;
 }
 // Repeated edge lines suggest a separate reading flow, but may be body
 // text. This is a pairing hint only: no line or glyph is excluded.
 export function furniture(document: Pick<PdfDocument, "length" | "page">) {
   const edges = Array.from({ length: document.length }, (_, number) => {
       const page = document.page(number),
-        lines = page.lines.filter((l) => l.text.trim());
+        lines = page.lines.filter((l) => l.text.trim() && !page.lineRulers.has(l));
       if (!lines.length) return [];
       const top = Math.min(...lines.map((l) => l.rect[1])),
         bottom = Math.max(...lines.map((l) => l.rect[3])),
@@ -82,8 +84,8 @@ export function furniture(document: Pick<PdfDocument, "length" | "page">) {
   );
 }
 const read = new WeakMap<Build, Words>();
-// Furniture is only a reading-flow hint. Every printed glyph is retained;
-// a word split across pages can refer to glyphs on both sides of a header.
+// Running heads are a reading-flow hint. Retain the glyphs of side rulers
+// so changed numbers or changed placement remain available to comparison.
 export function words(build: Build): Words {
   const known = read.get(build);
   if (known) return known;
@@ -91,11 +93,21 @@ export function words(build: Build): Words {
     edges = furniture(document),
     glyphs: Glyph[] = [],
     body: number[] = [],
-    edge: number[] = [];
+    edge: number[] = [],
+    rulers = new Map<number, string>();
   let pair = 0;
-  for (let page = 0; page < document.length; page++)
-    for (const line of document.page(page).lines) {
+  for (let page = 0; page < document.length; page++) {
+    const { lines, lineRulers } = document.page(page);
+    for (const line of lines) {
       if (!line.text.trim()) continue;
+      if (lineRulers.has(line)) {
+        rulers.set(pair, JSON.stringify([
+          page,
+          line.text.trim(),
+          line.rect.map((value) => Math.round(value * 10)),
+          line.chars.map((char) => char.appearance),
+        ]));
+      }
       const target = edges[page].some((r) => containsCenter(r, line.rect))
         ? edge
         : body;
@@ -120,6 +132,7 @@ export function words(build: Build): Words {
         }
       pair++;
     }
+  }
   function tokenize(ids: number[], flow: "body" | "edge") {
     const result: Token[] = [];
     let wasWord = false;
@@ -199,6 +212,7 @@ export function words(build: Build): Words {
     glyphs,
     tokens: list,
     lines: ranges.filter(Boolean),
+    rulers,
   };
   read.set(build, result);
   return result;
@@ -230,11 +244,30 @@ export function comparison(a: Words, b: Words): Comparison {
   return result;
 }
 const documentPairs = new WeakMap<Build, WeakMap<Build, Comparison>>();
+function comparableWords(...builds: Build[]) {
+  const documents = builds.map(words);
+  const rulers = documents.map((document) => new Set(document.rulers?.values()));
+  const common = new Set([...rulers[0]].filter((key) => rulers.every((set) => set.has(key))));
+  if (!common.size) return sharedWords(...documents);
+  return sharedWords(...documents.map((document) => {
+    const tokens: Token[] = [];
+    const lines: Words["lines"] = [];
+    for (const [start, end] of document.lines) {
+      const pair = document.glyphs[document.tokens[start].start].pair;
+      const ruler = document.rulers?.get(pair);
+      if (ruler && common.has(ruler)) continue;
+      lines.push([tokens.length, tokens.length + end - start]);
+      for (let i = start; i < end; i++) tokens.push(document.tokens[i]);
+    }
+    // Keep the physical glyph indices valid across pair and variant views.
+    return { ...document, tokens, lines };
+  }));
+}
 /** The shared token domain for every stage of a rendered PDF comparison. */
 export function compareDocuments(old: Build, next: Build): Comparison {
   const known = documentPairs.get(old)?.get(next);
   if (known) return known;
-  const [a, b] = sharedWords(words(old), words(next)),
+  const [a, b] = comparableWords(old, next),
     result = comparison(a, b);
   if (!documentPairs.has(old)) documentPairs.set(old, new WeakMap());
   documentPairs.get(old)!.set(next, result);
@@ -974,7 +1007,7 @@ export function shownBy(
   final: Build,
 ) {
   const original = compareDocuments(old, final),
-    [a, b, c] = sharedWords(words(old), words(variant), words(final)),
+    [a, b, c] = comparableWords(old, variant, final),
     changes = allDifferences(a, b),
     finalChanges = allDifferences(a, c),
     rangeMap = (from: Words, to: Words) => {

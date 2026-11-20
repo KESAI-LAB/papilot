@@ -91,6 +91,9 @@ export class Updates {
   private target: DesktopRelease | null = null;
   // Only packaged desktop apps install layers; the development app links to releases.
   private layers: boolean;
+  private packageManager() {
+    return managedInstall() || (this.options.desktop && process.env.PAPILOT_DESKTOP_PACKAGE_UPDATES === '1' ? 'managed' : null);
+  }
   constructor(private options: Options) {
     const folder = path.join(options.data, options.desktop ? 'updates/desktop' : 'updates');
     this.file = path.join(folder, 'status.json'); this.lock = path.join(folder, 'install.lock'); this.channelFile = path.join(folder, 'channel.json');
@@ -101,12 +104,12 @@ export class Updates {
     let supported = options.desktop ? this.layers : options.supported ?? true;
     if (!options.desktop && options.supported === undefined) try { npmCli(); } catch { supported = false; }
     this.state = { currentVersion: options.version, latestVersion: null, phase: 'idle', checkedAt: null, error: null, canUpdate: supported };
-    const saved = managedInstall() || options.desktop && !this.layers ? null : readJson(this.file);
+    const saved = this.packageManager() || options.desktop && !this.layers ? null : readJson(this.file);
     if (saved && ['failed', 'updated', 'installing', 'waiting', 'restarting'].includes(saved.phase)) this.state = { ...this.state, ...saved, currentVersion: options.version, canUpdate: supported };
     if (saved && activePhases.has(saved.phase) && !alive(saved.pid)) this.change({ phase: 'failed', checkedAt: Date.now(), error: 'The update was interrupted. Your current installation is still available; retry the update.' });
   }
   snapshot(): UpdateStatus {
-    const method = managedInstall();
+    const method = this.packageManager();
     if (method) return { currentVersion: this.options.version, latestVersion: null, phase: 'idle', checkedAt: null, error: null, canUpdate: false, packageManager: method };
     const saved = readJson(this.file);
     if (saved && activePhases.has(this.state.phase) && ['updated', 'failed'].includes(saved.phase)) this.state = { ...this.state, ...saved, currentVersion: this.options.version };
@@ -126,7 +129,7 @@ export class Updates {
     };
   }
   start() {
-    if (managedInstall()) return;
+    if (this.packageManager()) return;
     if (this.state.phase !== 'failed') void this.check();
     this.timer = setInterval(() => {
       if (this.state.phase === 'waiting') void this.activate();
@@ -139,7 +142,7 @@ export class Updates {
     writeJson(this.file, { ...this.state, pid: process.pid });
   }
   setChannel(channel: unknown) {
-    const method = managedInstall();
+    const method = this.packageManager();
     if (method) throw managedError(method);
     if (this.options.desktop && !this.layers) throw new Error('Download desktop updates from GitHub Releases.');
     if (channel !== 'stable' && channel !== 'dev') throw new Error('Choose a valid update channel.');
@@ -153,7 +156,7 @@ export class Updates {
     return this.check();
   }
   check(): Promise<UpdateStatus> {
-    if (managedInstall()) return Promise.resolve(this.snapshot());
+    if (this.packageManager()) return Promise.resolve(this.snapshot());
     if (this.checking) return this.checking;
     if (activePhases.has(this.state.phase)) return Promise.resolve(this.snapshot());
     this.change({ phase: 'checking' });
@@ -202,7 +205,7 @@ export class Updates {
     return (this.options.installLayer || installLayer)(this.options.data, version, release.layer, bundle);
   }
   install(version: unknown) {
-    const method = managedInstall();
+    const method = this.packageManager();
     if (method) throw managedError(method);
     if (this.options.desktop && !this.layers) throw new Error('Download desktop updates from GitHub Releases.');
     if (activePhases.has(this.state.phase)) return this.snapshot();
