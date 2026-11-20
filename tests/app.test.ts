@@ -14,6 +14,7 @@ import { buildApp, gitQueue, type AppOptions } from '../src/server/app.ts';
 import { Updates } from '../src/server/updates.ts';
 import { Diagnostics } from '../src/server/diagnostics.ts';
 import { OverleafService } from '../src/server/overleaf/service.ts';
+import { annotationRevision, PaperTools } from '../src/server/paper-tools.ts';
 import type { SystemRequirements } from '../src/shared.ts';
 import { PassThrough } from 'node:stream';
 import type { Codex } from '../src/server/codex.ts';
@@ -1093,6 +1094,97 @@ test('the AI review skill uses normal task submission with paper validation and 
     assert.equal(editing.statusCode, 200, editing.body);
     assert.equal(inputs[1].prepareReview, undefined);
   } finally { await f.close(); }
+});
+
+test('clear and undo only the confirmed manuscript annotation batch', async () => {
+  const f = await fixture();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-clear-notes-'));
+  try {
+    for (const file of ['main.tex', 'appendix.tex']) fs.writeFileSync(path.join(root, file), '\\documentclass{article}\n\\begin{document}Text\\end{document}');
+    f.store.saveProject({ ...f.store.project('thesis'), path: root });
+    let document = 'main.tex';
+    f.manuscripts.document = async () => document;
+    f.manuscripts.state = async () => ({ git: { branch: 'main', upstream: null, ahead: 0, behind: 0, files: [], head: null }, build: { key: 'pdf', status: 'ready', current: true } });
+    f.manuscripts.reanchor = async (_id, _root, notes) => notes;
+    f.manuscripts.noteSections = async () => ({ sections: [], contexts: {}, unplaced: 0 });
+    f.store.updateTask('thesis-task', { status: 'preparing' });
+    const sample: Omit<Annotation, 'id'> = { projectId: 'thesis', document: 'main.tex', key: 'pdf', page: 0, rect: [0.1, 0.2, 0.3, 0.4], comment: 'Check this.', quote: 'Passage', source: null, createdAt: 1 };
+    const note = (id: string, override: Partial<Annotation> = {}) => f.store.saveAnnotation({ ...sample, id, ...override });
+    note('yellow', { group: 'yellow' });
+    note('agent-retained', { key: 'earlier-pdf', page: 4, group: 'purple', agentAnnotation: { taskId: 'thesis-task', request: 'agent-request' } });
+    note('copied', { aiReview: { taskId: 'thesis-task', agent: 'codex', sourceId: 'review' } });
+    const sending = note('sending', { taskId: 'thesis-task' });
+    note('review', { aiReview: { taskId: 'thesis-task', agent: 'codex' } });
+    note('other-doc', { document: 'appendix.tex' });
+    note('other-project', { projectId: 'grant' });
+    note('old-deletion', { deletedAt: 1 });
+    const snapshot = ['yellow', 'agent-retained', 'copied', 'sending'];
+    note('newly-created'); // A note added after the confirmation was opened.
+
+    const post = (operation: string, ids: string[], batch = 'confirmed', expectedDocument = 'main.tex') => f.local.inject({
+      method: 'POST', url: `/api/projects/thesis/annotations/${operation}`, headers: f.as,
+      payload: { ids, batch, document: expectedDocument },
+    });
+    assert.equal((await post('clear', [])).statusCode, 400);
+    document = 'appendix.tex';
+    assert.equal((await post('clear', snapshot)).statusCode, 400, 'A stale confirmation cannot clear another document');
+    document = 'main.tex';
+    const targets = [...snapshot, 'review', 'other-doc', 'other-project', 'old-deletion'];
+    const first = await post('clear', targets);
+    assert.equal(first.statusCode, 200, first.body);
+    assert.deepEqual(first.json().changed, snapshot.slice(0, 3));
+    assert.deepEqual(first.json().failed.map((failure: { id: string }) => failure.id), targets.slice(3));
+    assert.match(first.json().failed[0].error, /being sent/);
+    assert.deepEqual(first.json().annotations.map((note: Annotation) => note.id), ['newly-created']);
+    assert.equal(f.store.annotation('thesis', 'yellow').deletedBatch, 'confirmed');
+    assert.equal(f.store.annotation('thesis', 'other-doc').deletedAt, undefined);
+    assert.equal(f.store.annotation('thesis', 'review').deletedAt, undefined);
+    assert.equal(f.store.annotation('grant', 'other-project').deletedAt, undefined);
+
+    const retryResponse = await post('clear', ['yellow']);
+    assert.deepEqual(retryResponse.json().changed, ['yellow'], 'A response lost in transit can be retried without a second write');
+    assert.equal((await post('undo-clear', ['yellow'], 'unrelated')).json().changed.length, 0);
+    assert.equal((await post('undo-clear', ['old-deletion'])).json().changed.length, 0);
+    f.store.saveAnnotation({ ...sending, taskId: undefined });
+    const cleared = await post('clear', ['sending']);
+    assert.deepEqual(cleared.json().changed, ['sending']);
+    assert.deepEqual(cleared.json().annotations.map((note: Annotation) => note.id), ['newly-created']);
+    const restoredElsewhere = await f.local.inject({ method: 'POST', url: '/api/projects/thesis/annotations/yellow/restore', headers: f.as, payload: {} });
+    assert.equal(restoredElsewhere.statusCode, 200);
+    assert.deepEqual((await post('clear', ['yellow'])).json().changed, [], 'A delayed retry preserves a note restored elsewhere');
+    assert.equal((await post('clear', ['newly-created'])).statusCode, 400, 'A retry cannot expand the confirmation');
+    const undone = await post('undo-clear', snapshot);
+    assert.deepEqual(undone.json().changed, snapshot);
+    assert.deepEqual(undone.json().restoredIds, snapshot.slice(1), 'Do not reselect notes restored elsewhere');
+    const replayedUndo = await post('undo-clear', snapshot);
+    assert.deepEqual(replayedUndo.json().changed, snapshot);
+    assert.deepEqual(replayedUndo.json().restoredIds, snapshot.slice(1), 'A lost Undo response retains the original selection scope');
+    assert.deepEqual(undone.json().annotations.map((note: Annotation) => note.id), [...snapshot, 'newly-created']);
+    assert.equal(f.store.annotation('thesis', 'agent-retained').key, 'earlier-pdf');
+    assert.equal(f.store.annotation('thesis', 'agent-retained').deletedBatch, undefined);
+    assert.equal(f.store.annotation('thesis', 'old-deletion').deletedAt, 1);
+    const reread = await f.local.inject({ url: '/api/projects/thesis/manuscript', headers: f.as });
+    assert.equal(reread.statusCode, 200, reread.body);
+    assert.equal(reread.json().document, 'main.tex');
+    assert.deepEqual(reread.json().annotations.map((note: Annotation) => note.id), [...snapshot, 'newly-created']);
+
+    const agentNote = 'agent-retained';
+    const agentTask = { ...f.store.task('thesis-task'), document };
+    f.store.saveTask(agentTask);
+    const tools = new PaperTools(f.store, f.manuscripts, () => false);
+    const agentAction = (tool: string) => tools.call(agentTask, tool, {
+      id: agentNote, revision: annotationRevision(f.store.annotation('thesis', agentNote)),
+    }, () => true);
+    assert.deepEqual((await post('clear', [agentNote], 'second')).json().changed, [agentNote]);
+    await agentAction('annotation_restore');
+    assert.equal(f.store.annotation('thesis', agentNote).deletedBatch, undefined);
+    await agentAction('annotation_delete');
+    assert.deepEqual((await post('undo-clear', [agentNote], 'second')).json().changed, []);
+    assert.notEqual(f.store.annotation('thesis', agentNote).deletedAt, undefined, 'An old Undo cannot restore a later individual deletion');
+  } finally {
+    await f.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('AI review findings stay in their task and copy individually, once, into the manuscript', async () => {

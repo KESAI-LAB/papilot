@@ -65,6 +65,8 @@ export class Store extends EventEmitter {
       this.db.prepare('INSERT OR IGNORE INTO deleted_tasks SELECT id, ? FROM tasks WHERE project_id=?').run(Date.now(), id);
       for (const table of ['items', 'runs', 'ai_review_inputs']) this.db.prepare(`DELETE FROM ${table} WHERE task_id IN (SELECT id FROM tasks WHERE project_id=?)`).run(id);
       for (const task of tasks) { const prefix = `note-options:${task}:`; this.db.prepare('DELETE FROM settings WHERE substr(key,1,?)=?').run(prefix.length, prefix); }
+      const clearPrefix = `annotation-clear:${id}:`;
+      this.db.prepare('DELETE FROM settings WHERE substr(key,1,?)=?').run(clearPrefix.length, clearPrefix);
       for (const table of ['tasks', 'annotations', 'anchor_sources']) this.db.prepare(`DELETE FROM ${table} WHERE project_id=?`).run(id);
       this.db.prepare('DELETE FROM projects WHERE id=?').run(id);
     });
@@ -128,7 +130,13 @@ export class Store extends EventEmitter {
   deleteAnnotation(projectId: string, id: string) {
     const note = this.annotation(projectId, id);
     if (note.taskId) throw new Error('This note has already been sent.');
-    this.saveAnnotation({ ...note, deletedAt: note.deletedAt ?? Date.now() });
+    if (note.deletedAt !== undefined) return;
+    const { deletedBatch: _, ...active } = note;
+    this.saveAnnotation({ ...active, deletedAt: Date.now() });
+  }
+  restoreAnnotation(note: Annotation) {
+    const { deletedAt: _, deletedBatch: _batch, ...active } = note;
+    return this.saveAnnotation(active);
   }
   taskDeleted(id: string) { return Boolean(this.db.prepare('SELECT 1 FROM deleted_tasks WHERE id=?').get(id)); }
   deleteTask(id: string) {
