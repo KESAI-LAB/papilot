@@ -103,6 +103,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Isolate test worktrees
+        run: echo "PAPILOT_WORKTREES=$RUNNER_TEMP/papilot-worktrees" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
@@ -166,6 +168,8 @@ jobs:
     env:
       PAPILOT_BROWSER_CHANNEL: chromium
     steps:
+      - name: Isolate test worktrees
+        run: echo "PAPILOT_WORKTREES=$RUNNER_TEMP/papilot-worktrees" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:

@@ -10,9 +10,11 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "node ../scripts/with-test-worktrees.mjs test:unit",
+    "test:unit": "vitest run",
     "check": "npm run typecheck && npm test && npm run build",
-    "test:browser": "playwright test",
+    "test:browser": "node ../scripts/with-test-worktrees.mjs test:browser:checks",
+    "test:browser:checks": "playwright test",
     "test:corpus": "tsx scripts/validate-corpus.ts",
     "fixture:prepare": "tsx scripts/prepare-fixture.ts",
     "format": "prettier --write src tests scripts examples/demo.ts *.ts *.json"
