@@ -113,7 +113,7 @@ export class PaperTools {
       if (!belongs(note) || note.taskId || this.sending(note.id) || (note.deletedAt !== undefined && tool !== 'annotation_restore')) throw agentToolError('This annotation is not an editable manuscript note in this document.');
       if (text(args, 'revision') !== annotationRevision(note)) throw agentToolError('This annotation changed. List annotations again before updating it.');
       check();
-      if (tool === 'annotation_restore') { const { deletedAt: _, ...restored } = note; return describe(this.store.saveAnnotation(restored)); }
+      if (tool === 'annotation_restore') return describe(this.store.restoreAnnotation(note));
       if (tool === 'annotation_delete') { this.store.deleteAnnotation(task.projectId, note.id); return { id: note.id, deleted: true }; }
       const comment = typeof args.comment === 'string' && (note.kind === 'delete' || note.group) ? args.comment : text(args, 'comment');
       return describe(this.store.saveAnnotation({ ...note, comment }));
