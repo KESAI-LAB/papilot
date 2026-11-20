@@ -76,6 +76,7 @@ jobs:
         if: matrix.node == 22
         run: |
           engine/node_modules/.bin/playwright install chromium
+          node scripts/check-site-stars.mjs
           node scripts/check-site-blog.mjs
           node scripts/check-site.mjs
           node scripts/check-site-analytics.mjs
@@ -83,6 +84,14 @@ jobs:
           node scripts/check-playground.mjs
         env:
           PAPILOT_BROWSER_CHANNEL: chromium
+      - name: Keep star counter screenshots
+        if: matrix.node == 22 && !cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-stars
+          path: test-results/site/stars-*.png
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Pack
         run: npm pack --ignore-scripts --dry-run
 
