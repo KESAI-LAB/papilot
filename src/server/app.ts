@@ -1014,8 +1014,7 @@ export async function buildApp(options: AppOptions) {
     if (isTaskReviewNote(note)) throw new Error('Manage this suggestion in its AI review task, or copy it to the manuscript first.');
     if (workspace.annotationSending(note.id)) throw new Error('This note is being sent. Wait for the task to finish creating.');
     if (note.taskId) throw new Error('This note has already been sent.');
-    const { deletedAt: _, deletedBatch: _batch, ...restored } = note;
-    store.saveAnnotation(restored);
+    store.restoreAnnotation(note);
     // Return the original order, including any notes added since the deletion.
     return { annotations: await paperNotes(request.params.id) };
   });
@@ -1063,8 +1062,7 @@ export async function buildApp(options: AppOptions) {
             } else {
               if (note.deletedAt !== undefined) {
                 if (note.deletedBatch !== batch) throw new Error('Note not found.');
-                const { deletedAt: _, deletedBatch: _batch, ...active } = note;
-                store.saveAnnotation(active);
+                store.restoreAnnotation(note);
                 restored.add(noteId);
               }
               if (restored.has(noteId)) restoredIds.push(noteId);
