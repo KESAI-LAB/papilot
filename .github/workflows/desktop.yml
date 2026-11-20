@@ -75,7 +75,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           missing=()
-          for package in libgtk-3-0 libnss3 libxss1 libxtst6 libasound2 libgbm1 libnotify4 libsecret-1-0 libfuse2 xvfb xauth openbox; do
+          for package in libgtk-3-0 libnss3 libxss1 libxtst6 libasound2 libgbm1 libnotify4 libsecret-1-0 libfuse2 xvfb xauth openbox dpkg-dev gnupg jq; do
             dpkg -s "$package" >/dev/null 2>&1 || missing+=("$package")
           done
           echo "Missing: ${missing[*]:-none}"

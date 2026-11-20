@@ -10,7 +10,9 @@ import { overleafSignIn } from './overleaf-sign-in.js';
 import { typelessControl } from './typeless-control.js';
 
 const nix = process.env.PAPILOT_INSTALL_METHOD === 'nix';
-const packageUpdates = process.env.PAPILOT_DESKTOP_PACKAGE_UPDATES === '1';
+const packageUpdates = process.env.PAPILOT_DESKTOP_PACKAGE_UPDATES === '1' ||
+  (process.platform === 'linux' && app.isPackaged && fs.existsSync(path.join(process.resourcesPath, 'package-managed')));
+
 const releases = 'https://github.com/PapilotAI/papilot/releases';
 app.setName('Papilot');
 if (process.platform === 'win32') app.setAppUserModelId('ai.papilot.desktop');
@@ -198,6 +200,7 @@ else {
     const backendEnv = (server: string) => {
       const env: NodeJS.ProcessEnv = backendEnvironment(node, server, data, inheritedEnv);
       if (port) env.PAPILOT_PORT = String(port);
+      if (packageUpdates) env.PAPILOT_DESKTOP_PACKAGE_UPDATES = '1';
       if (proxy) env.HTTPS_PROXY = env.HTTP_PROXY = proxy;
       env.NO_PROXY = [env.NO_PROXY || env.no_proxy, 'localhost', '127.0.0.1', '::1'].filter(Boolean).join(',');
       // Node's fetch and SDK HTTP clients can use the system proxy as well.
