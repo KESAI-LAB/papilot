@@ -10,7 +10,7 @@ import { taskRoute } from './review.ts';
 import { textEdits } from '../../engine/src/core/text-edits.ts';
 
 const execute = promisify(execFile);
-const marker = '```papilot-note-options';
+const language = 'papilot-note-options';
 export function preparedNoteOptionsInstructions(range: unknown = 'few') {
   const [min, max] = NOTE_ALTERNATIVE_RANGES[noteAlternativeRange(range)];
   return `For manuscript edits the author requests, prepare alternatives during this editing turn, together with the main revision, for the numbered PDF notes in this message. Apply only the preferred proposal to the source. Respect requests for discussion or explanation without editing; this preference does not authorize extra manuscript changes. For each edited note with a meaningful wording choice, aim for ${min}–${max} extra alternatives, excluding the main proposal, now; do not leave generation for the review UI. This is a target range, not a quota: fewer or more useful choices are fine, up to ${MAX_NOTE_ALTERNATIVES}. Never pad the response with repetitive or weak choices. Do not invent alternatives to factual corrections, deletions, or changes that have only one valid result.
@@ -19,23 +19,49 @@ After your normal concise summary, append one fenced block whose language is pap
 The JSON shape above illustrates two alternatives; use the requested range for the actual options array. Use the note numbers in this message (1-based). Use short titles and specific reasons in the note's language, at most 80 and 180 characters respectively. Each find string must occur exactly once in the final source; include unchanged surrounding text to disambiguate it when needed and preserve that context verbatim in replace. Only vary source you changed for that note; keep all other notes' edits, whitespace, citations, facts, quantities, and mathematical meaning intact. Compare your main revision to the original source and keep every unchanged prefix and suffix unchanged in each alternative. For example, if you change "The estimates are stable." to "The estimates exhibit stability.", vary "exhibit stability"; do not add "resulting" before the unchanged word "estimates". For overlapping notes, prepare each note's alternatives against the same final proposed file. Do not apply alternatives or write metadata files. This block is application data shown as choices in the PDF pane, not part of the conversational summary. Omit notes with no meaningful alternatives.`;
 }
 
-// Keep the original response in rawText while streaming only the human summary.
-// A partly received marker must not briefly flash JSON in the conversation.
-export function noteOptionsSummary(text: string) {
-  const at = text.indexOf(marker);
-  if (at >= 0) return text.slice(0, at).trimEnd();
-  const last = text.lastIndexOf('\n');
-  const tail = text.slice(last + 1);
-  return tail && marker.startsWith(tail) ? text.slice(0, last < 0 ? 0 : last).trimEnd() : text;
+const fenceLine = /^ {0,3}(`{3,}|~{3,})([^\r\n]*)/;
+
+// Share fence recognition between the visible reply and the options reader.
+// A marker inside an unrelated fenced block is example text.
+function scanNoteOptions(text: string, streaming: boolean) {
+  if (!text.includes('`') && !text.includes('~')) return { summary: text };
+  let summary = '', body = '', payload: string | undefined, hidden = false;
+  let fence: { delimiter: string; internal: boolean } | undefined;
+  for (const line of text.match(/[^\n]*\n|[^\n]+$/g) || []) {
+    const content = line.replace(/\r?\n$/, ''), opening = content.match(fenceLine);
+    if (fence) {
+      const closing = opening && opening[1][0] === fence.delimiter[0]
+        && opening[1].length >= fence.delimiter.length && !opening[2].trim();
+      if (!fence.internal) summary += line;
+      else if (closing) payload ??= body;
+      else body += line;
+      if (closing) fence = undefined;
+      continue;
+    }
+    if (opening && (opening[1][0] === '~' || !opening[2].includes('`'))) {
+      const internal = opening[2].trim().split(/[ \t]+/, 1)[0] === language;
+      fence = { delimiter: opening[1], internal };
+      if (internal) { hidden = true; body = ''; continue; }
+    }
+    // Hold a partial marker at the end of a stream. An ordinary code fence
+    // will appear as soon as the next chunk identifies its language.
+    const partial = streaming && !line.endsWith('\n') && content.match(/^ {0,3}(?:`+|~+)[ \t]*([a-z-]*)$/);
+    if (partial && language.startsWith(partial[1])) { hidden = true; continue; }
+    summary += line;
+  }
+  return { summary: hidden ? summary.trimEnd() : summary, payload };
+}
+
+export function noteOptionsSummary(text: string, streaming = false) {
+  return scanNoteOptions(text, streaming).summary;
 }
 
 export function readPreparedNoteOptions(text: string, count: number): PreparedNoteOptions[] {
-  const at = text.indexOf(marker);
-  if (at < 0 || text.length > 1024 * 1024) return [];
-  const body = text.slice(at + marker.length), end = body.indexOf('```');
-  if (end < 0) return [];
+  if (text.length > 1024 * 1024) return [];
+  const { payload } = scanNoteOptions(text, false);
+  if (!payload) return [];
   let value: any;
-  try { value = JSON.parse(body.slice(0, end)); } catch { return []; }
+  try { value = JSON.parse(payload); } catch { return []; }
   if (!Array.isArray(value?.notes) || value.notes.length > count) return [];
   const title = (entry: any) => typeof entry?.label === 'string' && Boolean(entry.label.trim()) && entry.label.length <= 80
     && typeof entry.reason === 'string' && Boolean(entry.reason.trim()) && entry.reason.length <= 180 && !entry.reason.includes('\0');

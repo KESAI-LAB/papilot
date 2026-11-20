@@ -59,6 +59,20 @@ for (const change of ['accept', 'reject another change', 'new round'] as const) 
   } finally { release(); await work; store.close(); }
 });
 
+test('internal fences preserve normal Markdown and prose on either side', () => {
+  const example = '````text\r\n```papilot-note-options\r\n{"notes":[]}\r\n```\r\n````';
+  const unrelated = '```papilot-note-options-example\n{"sample":true}\n```';
+  const intro = ['Discuss `papilot-note-options` here.', example, unrelated].join('\n\n');
+  assert.equal(noteOptionsSummary(intro), intro);
+  assert.deepEqual(readPreparedNoteOptions(intro, 1), []);
+  const choices = { ...prepared, options: [{ ...prepared.options[0], edits: [{ file: 'main.tex', find: 'Before', replace: '```' }] }] };
+  const reply = intro + '\n\n   ~~~papilot-note-options title=Internal\r\n' + JSON.stringify({ notes: [choices] }) + '\r\n   ~~~\n\nThe rest is unchanged.';
+  assert.equal(noteOptionsSummary(reply), intro + '\n\n\nThe rest is unchanged.');
+  assert.deepEqual(readPreparedNoteOptions(reply, 1), [choices]);
+  assert.equal(noteOptionsSummary('Still visible\n```papilot-note-options\n{"notes":'), 'Still visible');
+  assert.equal(noteOptionsSummary('Ordinary marker sample\n```papilot-note-'), 'Ordinary marker sample\n```papilot-note-');
+});
+
 test('prepared choice counts are guidance, with a bounded response size', () => {
   for (const count of [0, 1, 2, 3, 5, 6]) {
     const entry = { ...prepared, options: Array.from({ length: count }, (_, index) => ({ ...prepared.options[0], label: `Choice ${index}` })) };
@@ -101,7 +115,7 @@ test('prepared choices are extracted once and streaming preserves the conversati
   assert.deepEqual(readPreparedNoteOptions(response([{ ...prepared, note: 2 }]), 1), []);
   assert.deepEqual(readPreparedNoteOptions(response([{ ...prepared, current: { label: 'Current', reason: '' } }]), 1), []);
   const text = response();
-  for (let n = text.indexOf('```'); n <= text.length; n++) assert.equal(noteOptionsSummary(text.slice(0, n)).trimEnd(), 'Revised the speed description.');
+  for (let n = text.indexOf('```'); n <= text.length; n++) assert.equal(noteOptionsSummary(text.slice(0, n), true).trimEnd(), 'Revised the speed description.');
   assert.equal(noteOptionsSummary('A normal response.\nAnother paragraph.'), 'A normal response.\nAnother paragraph.');
 });
 

@@ -77,6 +77,32 @@ test('changing task pins updates shared state without changing task activity', a
   } finally { await f.close(); }
 });
 
+test('timeline reads redact internal alternatives from saved assistant replies', async () => {
+  const f = await fixture();
+  try {
+    const taskId = 'thesis-task', payload = '```papilot-note-options\n{"notes":[]}\n```';
+    const user = { id: 'user-1', taskId, type: 'user', text: payload, createdAt: 1 };
+    const assistant = { id: 'assistant-1', taskId, type: 'assistant', text: 'Revised.\n\n' + payload, rawText: payload, createdAt: 2 };
+    const userCode = '```latex\n\\section{Example}\n```';
+    const codeReply = { id: 'assistant-2', taskId, type: 'assistant', text: userCode, createdAt: 3 };
+    f.store.saveItem(user);
+    f.store.saveItem(assistant);
+    f.store.saveItem(codeReply);
+    const read = async (since?: string) => {
+      const reply = await f.local.inject({ url: `/api/tasks/${taskId}/items${since ? '?since=' + since : ''}`, headers: f.as });
+      assert.equal(reply.statusCode, 200);
+      return reply.json();
+    };
+    const first = await read();
+    assert.deepEqual(first.items, [user, { id: assistant.id, taskId, type: 'assistant', text: 'Revised.', createdAt: 2 }, codeReply]);
+    assert.equal(f.store.item(taskId, assistant.id)?.text, assistant.text, 'the original stored reply remains available to publication');
+    f.store.saveItem({ ...assistant, text: 'Checked.\n\n' + payload });
+    const update = await read(first.revision);
+    assert.equal(update.partial, true);
+    assert.deepEqual(update.items, [{ id: assistant.id, taskId, type: 'assistant', text: 'Checked.', createdAt: 2 }]);
+  } finally { await f.close(); }
+});
+
 test('task restart forwards destination permissions and model settings', async () => {
   const f = await fixture(), choices: any[] = [];
   f.workspace.restartTask = async (_task, choice) => { choices.push(choice); return f.store.task('thesis-task'); };
