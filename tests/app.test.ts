@@ -14,6 +14,7 @@ import { buildApp, gitQueue, type AppOptions } from '../src/server/app.ts';
 import { Updates } from '../src/server/updates.ts';
 import { Diagnostics } from '../src/server/diagnostics.ts';
 import { OverleafService } from '../src/server/overleaf/service.ts';
+import { annotationRevision, PaperTools } from '../src/server/paper-tools.ts';
 import type { SystemRequirements } from '../src/shared.ts';
 import { PassThrough } from 'node:stream';
 import type { Codex } from '../src/server/codex.ts';
@@ -1166,6 +1167,20 @@ test('clear and undo only the confirmed manuscript annotation batch', async () =
     assert.equal(reread.statusCode, 200, reread.body);
     assert.equal(reread.json().document, 'main.tex');
     assert.deepEqual(reread.json().annotations.map((note: Annotation) => note.id), [...snapshot, 'newly-created']);
+
+    const agentNote = 'agent-retained';
+    const agentTask = { ...f.store.task('thesis-task'), document };
+    f.store.saveTask(agentTask);
+    const tools = new PaperTools(f.store, f.manuscripts, () => false);
+    const agentAction = (tool: string) => tools.call(agentTask, tool, {
+      id: agentNote, revision: annotationRevision(f.store.annotation('thesis', agentNote)),
+    }, () => true);
+    assert.deepEqual((await post('clear', [agentNote], 'second')).json().changed, [agentNote]);
+    await agentAction('annotation_restore');
+    assert.equal(f.store.annotation('thesis', agentNote).deletedBatch, undefined);
+    await agentAction('annotation_delete');
+    assert.deepEqual((await post('undo-clear', [agentNote], 'second')).json().changed, []);
+    assert.notEqual(f.store.annotation('thesis', agentNote).deletedAt, undefined, 'An old Undo cannot restore a later individual deletion');
   } finally {
     await f.close();
     fs.rmSync(root, { recursive: true, force: true });
