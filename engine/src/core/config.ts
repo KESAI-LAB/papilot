@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { Repo, STATE, cleanPath, gitDirOf, stateOf, within } from "./git.ts";
@@ -30,6 +31,15 @@ interface BuildOverrideRecord { project: string; defaults: string; settings: Bui
 
 const buildDefaults = (settings: Record<string, unknown>) => JSON.stringify([settings.main, settings.engine, settings.source_dir, settings.latexmkrc]);
 
+// Resolve existing ancestor symlinks even when the final directory is new.
+function directoryWithin(project: string, folder: string) {
+  let ancestor = folder;
+  while (!fs.existsSync(ancestor) && path.dirname(ancestor) !== ancestor) ancestor = path.dirname(ancestor);
+  const location = path.join(realPath(ancestor), path.relative(ancestor, folder));
+  const relative = path.relative(project, location);
+  return relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative);
+}
+
 // Agent repairs belong to this installation and compiler host, even when
 // the same checkout can be opened by both the Windows and WSL backends.
 export function buildOverridesFile(root: string) {
@@ -51,12 +61,8 @@ export function readBuildOverrides(root: string, defaults?: Record<string, unkno
 export function saveBuildOverrides(root: string, settings: BuildOverrides) {
   const file = buildOverridesFile(root);
   if (!file) throw new Error("The Papilot data directory is unavailable.");
-  const project = realPath(root), folder = path.resolve(path.dirname(file));
-  let ancestor = folder;
-  while (!fs.existsSync(ancestor) && path.dirname(ancestor) !== ancestor) ancestor = path.dirname(ancestor);
-  const location = path.join(realPath(ancestor), path.relative(ancestor, folder));
-  const relative = path.relative(project, location);
-  if (relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative))
+  const project = realPath(root);
+  if (directoryWithin(project, path.resolve(path.dirname(file))))
     throw new Error("The Papilot data directory for build settings must be outside the paper.");
   const defaults = buildDefaults(readSettings(root)), previous = readJson<BuildOverrideRecord | null>(file, null);
   const others = { ...previous?.others, ...(previous?.project === project && previous.defaults !== defaults ? { [previous.defaults]: previous.settings } : {}) };
@@ -435,11 +441,20 @@ export function loadProject(root: string, overrides?: BuildOverrides, document?:
           fs.existsSync(path.join(root, n)) &&
           fs.statSync(path.join(root, n)).isDirectory(),
       );
-  const worktrees = settings.worktrees
+  // Leave room for the suffix even when the checkout name uses four-byte characters.
+  const name = [...path.basename(root)].slice(0, 58).join("") || "project";
+  const suffix = createHash("sha256").update(root).digest("hex").slice(0, 16);
+  const worktreeRoot = process.env.PAPILOT_WORKTREES;
+  let worktrees = settings.worktrees
     ? path.resolve(root, settings.worktrees)
-    : path.join(path.dirname(root), path.basename(root) + "-tasks");
-  if (worktrees === root || worktrees.startsWith(root + path.sep))
-    throw new Error('"worktrees" must be outside the repository.');
+    : path.resolve(worktreeRoot || path.join(os.homedir(), ".papilot", "worktrees"), `${name}-${suffix}`);
+  if (directoryWithin(root, worktrees)) {
+    if (settings.worktrees || worktreeRoot)
+      throw new Error('"worktrees" must be outside the repository.');
+    worktrees = path.join(path.dirname(root), `${name}-${suffix}-tasks`);
+    if (directoryWithin(root, worktrees))
+      throw new Error('"worktrees" must be outside the repository.');
+  }
   const build_workers = settings.build_workers ?? 1;
   if (
     !Number.isInteger(build_workers) ||

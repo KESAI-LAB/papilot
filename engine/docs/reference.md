@@ -41,8 +41,13 @@ Usually none. The root document comes from `@default_files` in a `latexmkrc`, or
 | `preload` | For partial builds: `\include` target → file to `\input` when that chapter is left out (e.g. macros it defines) |
 | `dependencies` | For partial builds: `\include` target → targets that must be compiled with it |
 | `figures` | Folders whose files are reviewed as whole figures (default: `figures/` or `figs/` beside the root document) |
-| `worktrees` | Where task worktrees go (default: `../<repository>-tasks/`) |
+| `worktrees` | Directory for new task worktrees (default: `~/.papilot/worktrees/<repository>-<suffix>/`). Set an absolute path or a path relative to the repository. |
 | `build_workers` | Number of independent tasks compiled and rendered concurrently, from 1 to 8 (default: 1). Restart Papilot after changing it. |
+
+The suffix is derived from the repository's canonical path. If the default
+directory would be inside the repository, Papilot uses a sibling directory.
+Existing tasks keep their recorded paths. Set `PAPILOT_WORKTREES` to choose a
+different absolute default root for an installation.
 
 A repository may hold several root documents, such as a thesis and its slides. The
 settings above apply to the one the paper compiles now, except `partial_builds`,
