@@ -9,6 +9,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 - Generate initial task-review commit drafts in the selected commit-message language instead of copying the task title. Manual edits and preserved reconciliation messages remain intact. ([#255](https://github.com/PapilotAI/papilot/issues/255))
 - Keep the manuscript PDF marking toolbar in place when selecting the Note tool or opening a note. ([#256](https://github.com/PapilotAI/papilot/issues/256))
 - Keep PDF reference previews aligned with their links as the PDF scrolls, zooms or resizes. Previews stay inside the visible viewport and close when the reference leaves view. ([#260](https://github.com/PapilotAI/papilot/issues/260))
+- Open Settings from the macOS Papilot menu or with Command–Comma. Repeating the shortcut keeps the current settings page and edits. ([#262](https://github.com/PapilotAI/papilot/issues/262))
 
 ### Changed
 

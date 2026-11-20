@@ -206,7 +206,15 @@ else {
     };
     session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     Menu.setApplicationMenu(Menu.buildFromTemplate([
-      { label: 'Papilot', submenu: [{ role: 'about' }, { label: nix ? 'Updates managed by Nix' : 'Download Updates…', enabled: !nix, click: () => external(releases) }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] },
+      { label: 'Papilot', submenu: [
+        { role: 'about' },
+        ...(process.platform === 'darwin' ? [{
+          id: 'open-settings', label: 'Settings…', accelerator: 'Cmd+,',
+          click: () => { showWindow(); window?.webContents.send('papilot:open-settings'); },
+        }] : []),
+        { label: nix ? 'Updates managed by Nix' : 'Download Updates…', enabled: !nix, click: () => external(releases) },
+        { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' },
+      ] },
       { label: 'File', submenu: [{ id: 'open-folder', label: 'Open Paper…', accelerator: 'CmdOrCtrl+O', click: () => void openFolder() }, { type: 'separator' }, process.platform === 'darwin' ? { role: 'close' } : { role: 'quit' }] },
       ...(process.platform === 'win32' ? [{ label: 'Environment', submenu: [{ label: environment.kind === 'wsl' ? `WSL · ${environment.distribution}…` : 'Windows…', click: () => openEnvironment() }] }] : []),
       { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
