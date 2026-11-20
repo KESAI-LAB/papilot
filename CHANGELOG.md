@@ -10,6 +10,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 - Keep the manuscript PDF marking toolbar in place when selecting the Note tool or opening a note. ([#256](https://github.com/PapilotAI/papilot/issues/256))
 - Keep PDF reference previews aligned with their links as the PDF scrolls, zooms or resizes. Previews stay inside the visible viewport and close when the reference leaves view. ([#260](https://github.com/PapilotAI/papilot/issues/260))
 - Open Settings from the macOS Papilot menu or with Command–Comma. Repeating the shortcut keeps the current settings page and edits. ([#262](https://github.com/PapilotAI/papilot/issues/262))
+- Keep PDF review crops near the edit in single- and two-column ACM papers with review line numbers. The full PDF retains the original rulers. ([#266](https://github.com/PapilotAI/papilot/issues/266), [#272](https://github.com/PapilotAI/papilot/issues/272))
 
 ### Changed
 

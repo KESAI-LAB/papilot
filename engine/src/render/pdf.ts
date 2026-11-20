@@ -104,6 +104,7 @@ export class PdfPage {
   private columns?: boolean;
   private bands?: Span[];
   private inkRects?: Rect[];
+  private rulerLines?: Set<Line>;
   raw: mupdf.Page;
   bounds: Rect;
   blocks: TextBlock[] = [];
@@ -182,6 +183,64 @@ export class PdfPage {
   }
   get width() {
     return this.bounds[2] - this.bounds[0];
+  }
+  /** Regularly spaced line numbers in the outer margin. */
+  get lineRulers(): ReadonlySet<Line> {
+    if (this.rulerLines) return this.rulerLines;
+    const rulers = (this.rulerLines = new Set());
+    const prose = this.lines.filter(
+      (line) => line.rect[2] - line.rect[0] > this.width * 0.25 &&
+        line.text.trim().split(/\s+/).length >= 5,
+    );
+    if (!prose.length) return rulers;
+    const left = Math.min(...prose.map(line => line.rect[0]));
+    const right = Math.max(...prose.map(line => line.rect[2]));
+    const heights = prose.map(line => line.rect[3] - line.rect[1]).sort((a, b) => a - b);
+    const proseHeight = heights[Math.floor(heights.length / 2)];
+    const numbers = this.lines.filter(
+      (line) => /^\d+$/.test(line.text.trim()) &&
+        line.rect[2] - line.rect[0] <= 18 &&
+        line.rect[3] - line.rect[1] < proseHeight * 0.85,
+    );
+    const outer = this.width * 0.15;
+    const margins = [
+      numbers.filter((line) => line.rect[2] <= Math.min(left - 8, this.bounds[0] + outer)),
+      numbers.filter((line) => line.rect[0] >= Math.max(right + 8, this.bounds[2] - outer)),
+    ];
+    // A numeric label alone says little. A line ruler increments regularly
+    // down the side of the page and uses a fixed left or right alignment.
+    for (const margin of margins) {
+      margin.sort((a, b) => a.rect[1] - b.rect[1]);
+      let run: Line[] = [];
+      let spacing = 0;
+      function finish() {
+        if (run.length >= 6) run.forEach((line) => rulers.add(line));
+      }
+      for (const line of margin) {
+        const last = run.at(-1);
+        if (!last) {
+          run.push(line);
+          continue;
+        }
+        const first = run[0];
+        const aligned =
+          Math.abs(line.rect[0] - first.rect[0]) < 1.5 ||
+          Math.abs(line.rect[2] - first.rect[2]) < 1.5;
+        const step = line.rect[1] - last.rect[1];
+        if (
+          Number(line.text) === Number(last.text) + 1 && aligned && step > 0 &&
+          (run.length === 1 || Math.abs(step - spacing) < 0.75)
+        ) {
+          if (run.length === 1) spacing = step;
+          run.push(line);
+        } else {
+          finish();
+          run = [line];
+        }
+      }
+      finish();
+    }
+    return rulers;
   }
   // Font metrics describe text layout, but may miss much of a math glyph.
   // Cropping text needs its painted outline instead. Read it only on pages that
