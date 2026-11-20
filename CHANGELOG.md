@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- Pin several tasks at the top of a paper's current task list. Pins keep their order across replies, reloads and connected clients, and return when an archived task is restored. ([#265](https://github.com/PapilotAI/papilot/issues/265))
+
 ## [0.12.0] - 2026-11-20
 
 Turn feedback into PDF notes, keep track of passages being revised, and preview references without leaving the page. See the [release notes](docs/releases/0.12.0/release-notes.md) for setup and update instructions.

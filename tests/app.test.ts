@@ -49,6 +49,32 @@ async function fixture(latexInstallation: AppOptions['latexInstallation'] = asyn
 
 }
 
+test('changing task pins updates shared state without changing task activity', async () => {
+  const f = await fixture();
+  try {
+    const first = f.store.task('thesis-task'), another = { ...first, id: 'second-thesis-task' };
+    f.store.saveTask(another);
+    const state = () => f.local.inject({ url: '/api/state', headers: LOCAL });
+    const pin = (id: string, pinned: unknown) => f.local.inject({ method: 'POST', url: `/api/tasks/${id}/pin`, headers: f.as, payload: { pinned } });
+    const initial = await state();
+    assert.deepEqual(initial.json().pinnedTaskIds, []);
+    assert.equal((await pin(first.id, 'true')).statusCode, 400);
+    assert.equal((await pin(first.id, true)).statusCode, 200);
+    assert.equal((await pin('grant-task', true)).statusCode, 200);
+    assert.equal((await pin(another.id, true)).statusCode, 200);
+    const pinned = await state();
+    assert.notEqual(pinned.headers.etag, initial.headers.etag);
+    assert.deepEqual(pinned.json().pinnedTaskIds, [first.id, 'grant-task', another.id]);
+    assert.deepEqual(f.store.task(first.id), first);
+    assert.deepEqual(f.store.task(another.id), another);
+    assert.equal((await pin(first.id, true)).statusCode, 200);
+    assert.equal((await state()).headers.etag, pinned.headers.etag, 'An identical request preserves pin order and activity');
+    assert.equal((await pin(first.id, false)).statusCode, 200);
+    assert.equal((await pin(first.id, true)).statusCode, 200);
+    assert.deepEqual((await state()).json().pinnedTaskIds, ['grant-task', another.id, first.id]);
+  } finally { await f.close(); }
+});
+
 test('task restart forwards destination permissions and model settings', async () => {
   const f = await fixture(), choices: any[] = [];
   f.workspace.restartTask = async (_task, choice) => { choices.push(choice); return f.store.task('thesis-task'); };

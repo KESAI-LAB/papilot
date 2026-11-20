@@ -29,6 +29,31 @@ test('restart preserves queued instructions and marks in-flight work interrupted
   } finally { fs.rmSync(folder, { recursive: true }); }
 });
 
+test('task pins survive restart, archive and restore and clear with task or paper deletion', () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-pins-'));
+  const file = path.join(folder, 'state.sqlite');
+  let store = new Store(file);
+  try {
+    const first: Task = { id: 'a', projectId: 'paper', name: 'a', title: 'A', instructions: 'Edit', worktree: '/tmp/example', threadId: null, turnId: null, model: null, status: 'idle', createdAt: 1, updatedAt: 1, feedbackCursor: 0, error: null, review: null };
+    store.saveProject({ id: 'other', path: '/tmp/other', name: 'Other', createdAt: 1 });
+    store.saveTask(first);
+    store.saveTask({ ...first, id: 'b' });
+    store.saveTask({ ...first, id: 'other-task', projectId: 'other' });
+    store.setTaskPinned('b', true); store.setTaskPinned('a', true); store.setTaskPinned('other-task', true);
+    store.updateTask('b', { archivedAt: Date.now() });
+    store.close();
+    store = new Store(file);
+    assert.deepEqual(store.pinnedTaskIds(), ['b', 'a', 'other-task']);
+    store.updateTask('b', { archivedAt: undefined });
+    assert.deepEqual(store.pinnedTaskIds(), ['b', 'a', 'other-task']);
+    store.deleteTask('a');
+    assert.deepEqual(store.pinnedTaskIds(), ['b', 'other-task']);
+    store.removeProject('other');
+    assert.deepEqual(store.pinnedTaskIds(), ['b']);
+    assert.throws(() => store.setTaskPinned('a', true), /Task not found/);
+  } finally { store.close(); fs.rmSync(folder, { recursive: true }); }
+});
+
 test('remote access requires the configured Tailscale identity and matching browser origin', () => {
   const origin = 'https://mini.example.ts.net:8443';
   const check = (headers: any, address = '127.0.0.1') => authorize(headers, address, 7274, origin, 'owner@example');

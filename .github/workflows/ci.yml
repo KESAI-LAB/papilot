@@ -314,6 +314,9 @@ jobs:
       - name: system-requirements
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-system-requirements.mjs
+      - name: task-recency-and-pins
+        if: ${{ !cancelled() }}
+        run: node scripts/check-task-recency.mjs
       - name: bulk-tasks
         if: ${{ !cancelled() }}
         run: node scripts/check-bulk-tasks.mjs
@@ -363,6 +366,7 @@ jobs:
             test-results/section-comments-*.png
             test-results/anchors-*.png
             test-results/bulk-tasks-*.png
+            test-results/task-pins-*.png
             test-results/typeless-*.png
             test-results/in-flight-marks/*.png
           if-no-files-found: ignore

@@ -138,6 +138,7 @@
   "Invalid task ID.": "ID attività non valido.",
   "Invalid task permissions for this agent.": "Permessi dell’attività non validi per questo agente.",
   "Invalid task permissions.": "Permessi dell’attività non validi.",
+  "Invalid task pin state.": "Stato di fissaggio dell’attività non valido.",
   "Invalid update activation.": "Attivazione dell'aggiornamento non valida.",
   "Invalid upload data.": "Dati di caricamento non validi.",
   "Manage this suggestion in its AI review task, or copy it to the manuscript first.": "Gestisci questo suggerimento nella relativa attività di revisione IA oppure copialo prima nel manoscritto.",

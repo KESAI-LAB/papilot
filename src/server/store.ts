@@ -18,6 +18,7 @@ export class Store extends EventEmitter {
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, path TEXT UNIQUE NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, project_id TEXT NOT NULL, data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS task_pins(task_id TEXT PRIMARY KEY);
       CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY, task_id TEXT NOT NULL, request_key TEXT UNIQUE NOT NULL, status TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY, task_id TEXT NOT NULL, created INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS deleted_tasks(id TEXT PRIMARY KEY, deleted INTEGER NOT NULL);
@@ -43,6 +44,17 @@ export class Store extends EventEmitter {
   private rows<T>(table: string): T[] { return (this.db.prepare(`SELECT data FROM ${table} ORDER BY rowid`).all() as { data: string }[]).map(r => JSON.parse(r.data)); }
   projects() { return this.rows<Project>('projects'); }
   tasks() { return this.rows<Task>('tasks'); }
+  pinnedTaskIds() {
+    return (this.db.prepare('SELECT task_id FROM task_pins ORDER BY rowid').all() as { task_id: string }[]).map(row => row.task_id);
+  }
+  setTaskPinned(id: string, pinned: boolean) {
+    this.task(id);
+    // Pin order follows insertion. Task updates leave this record alone.
+    const result = pinned
+      ? this.db.prepare('INSERT OR IGNORE INTO task_pins VALUES(?)').run(id)
+      : this.db.prepare('DELETE FROM task_pins WHERE task_id=?').run(id);
+    if (result.changes) this.emit('change');
+  }
   runs() { return this.rows<Run>('runs'); }
   project(id: string) { const v = this.projects().find(p => p.id === id); if (!v) throw new Error('Paper project not found.'); return v; }
   task(id: string) { const task = this.findTask(id); if (!task) throw new Error('Task not found.'); return task; }
@@ -63,7 +75,7 @@ export class Store extends EventEmitter {
     this.transaction(() => {
       // Only Papilot records are removed. Never finish review tasks or touch their files.
       this.db.prepare('INSERT OR IGNORE INTO deleted_tasks SELECT id, ? FROM tasks WHERE project_id=?').run(Date.now(), id);
-      for (const table of ['items', 'runs', 'ai_review_inputs']) this.db.prepare(`DELETE FROM ${table} WHERE task_id IN (SELECT id FROM tasks WHERE project_id=?)`).run(id);
+      for (const table of ['items', 'runs', 'ai_review_inputs', 'task_pins']) this.db.prepare(`DELETE FROM ${table} WHERE task_id IN (SELECT id FROM tasks WHERE project_id=?)`).run(id);
       for (const task of tasks) { const prefix = `note-options:${task}:`; this.db.prepare('DELETE FROM settings WHERE substr(key,1,?)=?').run(prefix.length, prefix); }
       for (const table of ['tasks', 'annotations', 'anchor_sources']) this.db.prepare(`DELETE FROM ${table} WHERE project_id=?`).run(id);
       this.db.prepare('DELETE FROM projects WHERE id=?').run(id);
@@ -137,6 +149,7 @@ export class Store extends EventEmitter {
       this.db.prepare('DELETE FROM items WHERE task_id=?').run(id);
       this.db.prepare('DELETE FROM runs WHERE task_id=?').run(id);
       this.db.prepare('DELETE FROM ai_review_inputs WHERE task_id=?').run(id);
+      this.db.prepare('DELETE FROM task_pins WHERE task_id=?').run(id);
       this.db.prepare('DELETE FROM tasks WHERE id=?').run(id);
       const prefix = `note-options:${id}:`; this.db.prepare('DELETE FROM settings WHERE substr(key,1,?)=?').run(prefix.length, prefix);
     });

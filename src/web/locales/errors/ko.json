@@ -138,6 +138,7 @@
   "Invalid task ID.": "유효하지 않은 작업 ID입니다.",
   "Invalid task permissions for this agent.": "이 에이전트는 선택한 권한을 지원하지 않습니다.",
   "Invalid task permissions.": "잘못된 작업 권한입니다.",
+  "Invalid task pin state.": "작업 고정 상태가 올바르지 않습니다.",
   "Invalid update activation.": "유효하지 않은 업데이트 활성화입니다.",
   "Invalid upload data.": "유효하지 않은 업로드 데이터입니다.",
   "Manage this suggestion in its AI review task, or copy it to the manuscript first.": "해당 AI 검토 작업에서 이 제안을 관리하거나 먼저 원고에 복사하세요.",
