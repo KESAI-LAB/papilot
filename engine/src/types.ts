@@ -79,6 +79,11 @@ export interface Unit {
   new_end: number;
   old_text: string;
   old_context?: { text: string; start: number; source_hash?: string };
+  new_context?: { text: string; start: number; source_hash?: string };
+  /** Unchanged original source ranges translated to a requested later baseline. */
+  continued_ranges?: [number, number][];
+  /** Unchanged proposed source ranges translated to the same baseline. */
+  accepted_ranges?: [number, number][];
   new_text: string;
   truncated: boolean;
   /** Identifies this version of the change across rounds: its file and

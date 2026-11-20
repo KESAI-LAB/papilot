@@ -107,6 +107,32 @@ test('formatted PDF quotes select only their exact source edits, and unresolved 
   }
 });
 
+test('a literal citation elsewhere cannot override an anchored generated citation', () => {
+  const rendered = 'The method is fast according to [1].';
+  const latex = String.raw`The method is fast according to \cite{ref}.`;
+  const check = (separator: string) => {
+    const before = latex + separator + rendered;
+    const after = before.replace('fast', 'efficient').replace('fast', 'robust');
+    const repo = { changedFiles: () => ['main.tex'], blobs: (rev: string) => ({ 'main.tex': Buffer.from(rev === 'old' ? before : after) }) } as unknown as Parameters<typeof diffUnits>[0];
+    const units = diffUnits(repo, 'old', 'new').map(unit => ({ ...unit, old_context: { text: before, start: 0 } }));
+    const round: NoteRound = { round: 1, units, sections: [], loose: units.map(unit => ({ kind: 'change', units: [unit.id], before: [{ text: [{ text: rendered }] }] })) };
+    const annotation = { where: 'main.tex line 1', quote: rendered, comment: 'Clarify.' };
+    return matchNoteChanges(annotation, round, {}).flatMap(change => change.units);
+  };
+  assert.deepEqual(check('\n'), ['c001']);
+  assert.deepEqual(check(' '), [], 'identical printed passages on the same line are ambiguous');
+});
+
+test('a literal score cannot choose between identical rendered passages with different generated spans', () => {
+  const before = 'The value is $fast$ and stable. The value is fast and $stable$.';
+  const after = before.replace('and stable.', 'and robust.').replace('is fast and', 'is efficient and');
+  const repo = { changedFiles: () => ['main.tex'], blobs: (rev: string) => ({ 'main.tex': Buffer.from(rev === 'old' ? before : after) }) } as unknown as Parameters<typeof diffUnits>[0];
+  const units = diffUnits(repo, 'old', 'new').map(unit => ({ ...unit, old_context: { text: before, start: 0 } }));
+  const quote = 'The value is fast and stable.';
+  const round: NoteRound = { round: 1, units, sections: [], loose: [{ kind: 'change', units: units.map(unit => unit.id), before: [{ text: [{ text: quote }, { text: quote }] }] }] };
+  assert.deepEqual(matchNoteChanges({ where: 'main.tex line 1', quote, comment: 'Clarify.' }, round, {}), []);
+});
+
 test('repeated short quotes use original source lines, including clipped context excerpts', () => {
   const before = 'Header.\nA small example.\nUnchanged.\nAnother small example.\n';
   const after = before.replaceAll('small', 'short');

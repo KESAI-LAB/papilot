@@ -7,20 +7,32 @@ export interface NoteRound {
   round: number;
   before?: string;
   after?: string;
-  units: { id: string; file: string; old_start: number; old_end: number; old_text: string; new_text: string; truncated?: boolean; whole_file?: boolean; kind?: string; formattingFor?: string; text_ops?: [string, number, number, number, number][]; old_context?: { text: string; start: number; source_hash?: string } }[];
+  units: { id: string; file: string; old_start: number; old_end: number; new_start?: number; old_text: string; new_text: string; truncated?: boolean; whole_file?: boolean; kind?: string; formattingFor?: string; text_ops?: [string, number, number, number, number][]; old_context?: NoteContext; new_context?: NoteContext; continued_ranges?: [number, number][]; accepted_ranges?: [number, number][] }[];
   sections: { blocks: NoteBlock[] }[];
   loose: NoteBlock[];
 }
-interface NoteBlock { kind: string; units?: string[]; before?: { text?: { text: string }[] }[]; identical?: boolean }
+type NoteStrip = { text?: { text: string }[] };
+type NoteContext = { text: string; start: number; source_hash?: string };
+interface NoteBlock { kind: string; units?: string[]; before?: NoteStrip[]; after?: NoteStrip[]; identical?: boolean }
+type NoteUnit = NoteRound['units'][number];
+const changeBlocks = (detail: NoteRound) => [...detail.sections.flatMap(section => section.blocks.filter(block => block.kind === 'change')), ...detail.loose];
+const renderedQuote = (strips: NoteStrip[] | undefined, quote: string) => normalize((strips || []).flatMap(strip => (strip.text || []).map(line => line.text)).join(' ')).includes(quote);
+const GENERATED = '\x01';
 const normalize = (text: string) => text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
-// These commands print their argument without adding text. Unknown commands
-// and their arguments stay opaque: a PDF quote must not match a citation key,
-// label, or generated macro text by treating it as ordinary prose.
+// Project printable arguments to source offsets. Unknown commands and their
+// arguments remain boundaries. Citations and inline math can only stand for
+// generated text when the actual PDF and a source location corroborate it.
 function quoteSource(text: string, start: number) {
   const letters: number[] = [];
+  const ends: number[] = [];
   let normalized = '';
-  const opaque = (offset: number) => { normalized += '\0'; letters.push(start + offset); };
+  const marker = (value: string, offset: number) => {
+    normalized += value;
+    letters.push(start + offset);
+    ends.push(start + offset);
+  };
+  const nextGroup = (offset: number) => offset + (text.slice(offset).match(/^\s*/)?.[0].length || 0);
   const groupEnd = (offset: number) => {
     const open = text[offset], close = open === '{' ? '}' : ']';
     let depth = 1, i = offset + 1;
@@ -32,72 +44,148 @@ function quoteSource(text: string, start: number) {
     return text.length;
   };
   for (let i = 0; i < text.length;) {
-    if (text[i] === '%') { opaque(i); const end = text.indexOf('\n', i); i = end < 0 ? text.length : end + 1; continue; }
+    if (text[i] === '%') { marker('\0', i); const end = text.indexOf('\n', i); i = end < 0 ? text.length : end + 1; continue; }
+    const math = text[i] === '$' && text[i - 1] !== '$' ? text.slice(i).match(/^\$(?!\$)(?:\\[^\n]|[^$\\\n])+\$/)?.[0]
+      : text.startsWith('\\(', i) ? text.slice(i).match(/^\\\((?:\\(?!\))[^\n]|[^\\\n])*\\\)/)?.[0] : undefined;
+    if (math) {
+      marker(GENERATED, i);
+      i += math.length;
+      ends[ends.length - 1] = start + i;
+      continue;
+    }
     if (text[i] === '\\') {
-      const command = text.slice(i).match(/^\\(?:[a-zA-Z@]+\*?|[^])/u)?.[0] || '\\';
-      if (/^\\(?:emph|textbf|textit|textrm|textsf|texttt|textsc|textsl|textup|textnormal|underline|mbox)$/.test(command) && /^\s*\{/.test(text.slice(i + command.length))) { i += command.length; continue; }
-      opaque(i); i += command.length;
+      const offset = i, command = text.slice(i).match(/^\\(?:[a-zA-Z@]+\*?|[^])/u)?.[0] || '\\';
+      i += command.length;
+      if (/^\\[%&#_$^~{}]$/.test(command)) continue;
+      if (/^\\(?:emph|textbf|textit|textrm|textsf|texttt|textsc|textsl|textup|textnormal|underline|mbox)$/.test(command) && text[nextGroup(i)] === '{') continue;
+      if (/^\\(?:part|chapter|section|subsection|subsubsection|paragraph|subparagraph|title|caption|href)\*?$/.test(command)) {
+        let arg = nextGroup(i);
+        if (text[arg] === '[') arg = nextGroup(groupEnd(arg));
+        if (command === '\\href' && text[arg] === '{') arg = nextGroup(groupEnd(arg));
+        if (text[arg] === '{') { i = arg + 1; continue; }
+      }
+      const generated = /^\\(?:cite|citep|citet|parencite|textcite|autocite)\*?$/.test(command);
+      marker(generated ? GENERATED : '\0', offset);
       for (;;) {
-        const next = i + (text.slice(i).match(/^\s*/)?.[0].length || 0);
+        const next = nextGroup(i);
         if (text[next] !== '{' && text[next] !== '[') break;
         i = groupEnd(next);
+        if (generated && text[next] === '{') break;
       }
+      ends[ends.length - 1] = start + i;
       continue;
     }
     const char = String.fromCodePoint(text.codePointAt(i)!), part = normalize(char);
     normalized += part;
-    for (let j = 0; j < part.length; j++) letters.push(start + i);
+    for (let j = 0; j < part.length; j++) {
+      letters.push(start + i);
+      ends.push(start + i + char.length);
+    }
     i += char.length;
   }
-  return { normalized, letters };
+  return { normalized, letters, ends };
+}
+
+type QuoteRange = { low: number; high: number };
+
+// Track reachable quote positions so generated spans can vary in length, and
+// retain all possible source ranges for the same-line ambiguity check.
+function generatedRanges(source: ReturnType<typeof quoteSource>, quote: string, onLine: (range: QuoteRange) => boolean) {
+  const { normalized, letters, ends } = source;
+  const candidates: (QuoteRange & { literal: number })[] = [];
+  for (let start = 0; start < normalized.length; start++) {
+    if (normalized[start] !== quote[0] && normalized[start] !== GENERATED) continue;
+    let positions = [0], hasGenerated = false, literal = 0, best: typeof candidates = [];
+    for (let end = start; end < normalized.length && positions.length; end++) {
+      const token = normalized[end];
+      if (token === '\0') break;
+      if (token === GENERATED) {
+        if (!onLine({ low: letters[start], high: ends[end] })) break;
+        const first = positions[0] + Number(start === end);
+        if (first >= quote.length) break;
+        hasGenerated = true;
+        // positions are sorted; this span can consume any suffix after the
+        // earliest position, including a symbol with no normalized letters.
+        positions = Array.from({ length: quote.length - first + 1 }, (_, i) => first + i);
+      } else {
+        literal++;
+        positions = positions.filter(position => quote[position] === token).map(position => position + 1);
+      }
+      if (hasGenerated && literal >= 4 && positions.at(-1) === quote.length) {
+        const range = { low: letters[start], high: ends[end], literal };
+        if (!onLine(range)) continue;
+        // Prefer a match that accounts for more of the PDF quote literally.
+        // A citation in mid-sentence cannot swallow the remaining prose.
+        if (literal > (best[0]?.literal ?? 0)) best = [];
+        if (best.length < 2) best.push(range);
+      }
+    }
+    candidates.push(...best);
+  }
+  const first = candidates.sort((a, b) => b.literal - a.literal)[0];
+  if (!first) return [];
+  const contains = (a: QuoteRange, b: QuoteRange) => a.low <= b.low && a.high >= b.high;
+  // Extra literal text disambiguates alternatives at the same passage only.
+  // It cannot choose between two different occurrences of the same quote.
+  const other = candidates.find(range => (range.low !== first.low || range.high !== first.high)
+    && (range.literal === first.literal || !(contains(first, range) || contains(range, first))));
+  return other ? [first, other] : [first];
 }
 
 // Exact source offsets distinguish edits sharing one line and one PDF crop.
 // Legacy rounds without these offsets retain their existing source association.
-function quotedUnit(note: NoteSummary, unit: NoteRound['units'][number]): boolean | null {
-  if (!unit.text_ops || !unit.old_context || !note.quote.trim()) return null;
-  const { text, start } = unit.old_context, { normalized, letters } = quoteSource(text, start);
+function quotedUnit(note: NoteSummary, unit: NoteUnit, proposed: boolean, inPdf: boolean, requireLocation = proposed): boolean | null {
+  const context = proposed ? unit.new_context : unit.old_context;
+  if (!unit.text_ops?.length || !context || !note.quote.trim()) return null;
   const quote = normalize(note.quote);
-  // Exact units must fail closed when a quote cannot be resolved. Falling back
-  // to its source line would silently accept unrelated edits on that line.
   if (!quote) return false;
-  let occurrences: { low: number; high: number }[] = [];
+  const { text, start } = context, source = quoteSource(text, start), { normalized, letters, ends } = source;
+  let occurrences: QuoteRange[] = [];
   for (let at = normalized.indexOf(quote); at >= 0; at = normalized.indexOf(quote, at + 1)) {
-    const last = letters[at + quote.length - 1];
-    occurrences.push({ low: letters[at], high: last + String.fromCodePoint(text.codePointAt(last - start)!).length });
+    occurrences.push({ low: letters[at], high: ends[at + quote.length - 1] });
   }
-  if (occurrences.length > 1) {
-    // A short selection can occur elsewhere in the context excerpt. Original
-    // manuscript lines disambiguate it, but an older review's lines cannot.
-    const anchor = noteAnchor(note), origin = unit.text_ops[0]?.[1];
-    if (anchor.round !== undefined || origin === undefined || origin < start || origin > start + text.length) return false;
-    const newlines = (a: number, b: number) => (text.slice(a - start, b - start).match(/\n/g) || []).length;
-    const lineAt = (offset: number) => unit.old_start + (offset < origin ? -newlines(offset, origin) : newlines(origin, offset));
-    occurrences = occurrences.filter(({ low, high }) => anchor.sources.some(place => place.file === unit.file && Math.max(place.lines[0], lineAt(low)) <= Math.min(place.lines[1], lineAt(high - 1))));
+  const anchor = noteAnchor(note), from = proposed ? 3 : 1, to = proposed ? 4 : 2;
+  const origin = unit.text_ops[0][from], line = proposed ? unit.new_start : unit.old_start;
+  const places = (proposed || anchor.round === undefined) && line !== undefined && origin >= start && origin <= start + text.length
+    ? anchor.sources.filter(place => place.file === unit.file) : [];
+  const newlines = (a: number, b: number) => (text.slice(a - start, b - start).match(/\n/g) || []).length;
+  const lineAt = (offset: number) => line! + (offset < origin ? -newlines(offset, origin) : newlines(origin, offset));
+  if (occurrences.length > 1 || requireLocation) {
+    // An earlier review's source lines only apply to its own revision.
+    occurrences = occurrences.filter(({ low, high }) => places.some(place => Math.max(place.lines[0], lineAt(low)) <= Math.min(place.lines[1], lineAt(high - 1))));
   }
+  if (inPdf && places.length && normalized.includes(GENERATED)) {
+    const generated = generatedRanges(source, quote, ({ low, high }) => places.some(place => place.lines[0] <= lineAt(low) && lineAt(high - 1) <= place.lines[1]));
+    occurrences.push(...generated);
+  }
+  // An unresolved or ambiguous quote must never widen to all edits on a line.
   if (occurrences.length !== 1) return false;
   const { low, high } = occurrences[0];
-  return unit.text_ops.some(([, a, b]) => a === b ? low <= a && a <= high : a < high && b > low);
+  return unit.text_ops.some(op => {
+    const a = op[from], b = op[to];
+    return a === b ? low <= a && a <= high : a < high && b > low;
+  });
 }
 
-export function matchNoteChanges(note: NoteSummary, detail: NoteRound, decisions: Record<string, string>): NoteChange[] {
+export function matchNoteChanges(note: NoteSummary, detail: NoteRound, decisions: Record<string, string>, continued?: Set<string>): NoteChange[] {
   const anchor = noteAnchor(note), quote = normalize(note.quote);
   const units = new Map(detail.units.map(unit => [unit.id, unit]));
-  const blocks = [...detail.sections.flatMap(section => section.blocks.filter(block => block.kind === 'change')), ...detail.loose];
+  const blocks = changeBlocks(detail);
+  let hasSourceCandidate = false;
   const matches = blocks.flatMap<NoteChange>((block, stop) => {
     const known = (block.units || []).map(id => units.get(id)).filter(unit => Boolean(unit) && unit!.old_text !== unit!.new_text) as NoteRound['units'];
     // Manuscript positions refer to the source before this revision. Review
     // selections refer to an older proposal, so prefer their actual PDF text.
     const source = anchor.round === undefined ? known.filter(unit => anchor.sources.some(place => place.file === unit.file && Math.max(place.lines[0], unit.old_start) <= Math.min(place.lines[1], unit.old_end))) : [];
+    hasSourceCandidate ||= source.length > 0;
     const sameFiles = anchor.sources.length ? known.filter(unit => anchor.sources.some(place => place.file === unit.file)) : known;
-    const textMatches = quote.length >= 4 && sameFiles.length && (
-      normalize((block.before || []).flatMap(strip => (strip.text || []).map(line => line.text)).join(' ')).includes(quote)
-      || sameFiles.some(unit => normalize(unit.old_text).includes(quote))
-    );
+    const inPdf = Boolean(quote) && renderedQuote(block.before, quote);
+    const textMatches = quote.length >= 4 && sameFiles.length && (inPdf || sameFiles.some(unit => normalize(unit.old_text).includes(quote)));
     // Region notes can lack text; their location is the remaining evidence.
     const region = !quote && anchor.round !== undefined ? sameFiles.filter(unit => anchor.sources.some(place => place.file === unit.file && Math.max(place.lines[0], unit.old_start) <= Math.min(place.lines[1], unit.old_end))) : [];
     const candidates = source.length ? source : textMatches ? sameFiles : region;
-    const matched = candidates.filter(unit => quotedUnit(note, unit) !== false);
+    const matched = continued ? known.filter(unit => continued.has(unit.id))
+      : candidates.filter(unit => quotedUnit(note, unit, false, inPdf, Boolean(source.length)) !== false);
     // The engine verifies these as invisible wrapping of the same paragraph.
     // A note decision includes its formatting so no empty pending card remains.
     const matchedIds = new Set(matched.map(unit => unit.id));
@@ -105,11 +193,12 @@ export function matchNoteChanges(note: NoteSummary, detail: NoteRound, decisions
     if (!matched.length) return [];
     const states = new Set(matched.map(unit => decisions[unit.id] || 'pending'));
     const state = states.size === 1 ? [...states][0] : 'mixed';
-    return [{ round: detail.round, stop, units: matched.map(unit => unit.id), state: (['accepted', 'rejected', 'commented', 'mixed'].includes(state) ? state : 'pending') as NoteChange['state'], match: source.length || region.length ? 'source' : 'quote' }];
+    return [{ round: detail.round, stop, units: matched.map(unit => unit.id), state: (['accepted', 'rejected', 'commented', 'mixed'].includes(state) ? state : 'pending') as NoteChange['state'], match: continued || source.length || region.length ? 'source' : 'quote' }];
   });
   // A short word needs a unique location. This also covers titles and macros:
   // SyncTeX may point at their use while the changed definition lives elsewhere.
-  return quote.length < 8 && matches.filter(match => match.match === 'quote').length > 1 ? matches.filter(match => match.match === 'source') : matches;
+  return hasSourceCandidate || (quote.length < 8 && matches.filter(match => match.match === 'quote').length > 1)
+    ? matches.filter(match => match.match === 'source') : matches;
 }
 
 export function sameFragment(previous: NoteRound['units'][number], next: NoteRound['units'][number], sameBase = false) {
@@ -132,16 +221,39 @@ export function sameFragment(previous: NoteRound['units'][number], next: NoteRou
 // always read afresh.
 const ROUND_REUSE = 30000;
 const rounds = new Map<string, { at: number; detail: Promise<NoteRound> }>();
-export function readRound(client: ReviewClient, task: Pick<Task, 'name'>, round: number): Promise<NoteRound> {
-  const key = `${client.url} ${task.name} ${round}`, now = Date.now(), kept = rounds.get(key);
+export function readRound(client: ReviewClient, task: Pick<Task, 'name'>, round: number, proposedFor?: number): Promise<NoteRound> {
+  const route = `${taskRoute(task.name)}/rounds/${round}${proposedFor ? '?proposedFor=' + proposedFor : ''}`;
+  const key = client.url + route, now = Date.now(), kept = rounds.get(key);
   if (kept && now - kept.at < ROUND_REUSE) return kept.detail;
   for (const [old, entry] of rounds) if (now - entry.at >= ROUND_REUSE) rounds.delete(old);
-  const detail = client.get<NoteRound>(`${taskRoute(task.name)}/rounds/${round}`);
+  const detail = client.get<NoteRound>(route);
   rounds.set(key, { at: now, detail });
   // Only a finished rendering is shared; a failed read is never kept.
   detail.then(value => { if ((value as { rendering?: string }).rendering) rounds.delete(key); }, () => rounds.delete(key));
   return detail;
 }
+
+function continuedProposal(note: NoteSummary, previous: NoteRound, detail: NoteRound): Set<string> | undefined {
+  const quote = normalize(note.quote), previousBlocks = changeBlocks(previous);
+  const selected = previous.units.filter(unit => quotedUnit(note, unit, true,
+    previousBlocks.some(block => block.units?.includes(unit.id) && renderedQuote(block.after, quote))) === true);
+  if (!selected.length) return undefined;
+  // A resolved proposal is the reference. The same words elsewhere in the
+  // latest baseline cannot substitute for that location.
+  const continued = new Set<string>();
+  for (const unit of selected) {
+    const matches = detail.units.filter(next => {
+      if (unit.file !== next.file || !next.text_ops?.length) return false;
+      const atRanges = (ranges?: [number, number][]) => ranges?.length === next.text_ops!.length
+        && ranges.every(([a, b], i) => next.text_ops![i][1] === a && next.text_ops![i][2] === b);
+      return (next.old_text === unit.new_text && atRanges(unit.accepted_ranges))
+        || (next.old_text === unit.old_text && next.new_text !== unit.new_text && atRanges(unit.continued_ranges));
+    });
+    if (matches.length === 1) continued.add(matches[0].id);
+  }
+  return continued;
+}
+
 export async function taskNoteResults(task: Task, items: TimelineItem[], runs: Run[], client: ReviewClient): Promise<NoteResult[]> {
   const byId = new Map(runs.map(run => [run.id, run]));
   const results: NoteResult[] = items.filter(item => item.type === 'user').flatMap(item => (item.meta?.notes || readNotesInstructions(item.text) || []).map((note, index) => {
@@ -166,7 +278,14 @@ export async function taskNoteResults(task: Task, items: TimelineItem[], runs: R
   await Promise.all(results.map(async result => {
     if (!result.round) return;
     const origin = result.round, { detail, decisions } = await read(origin);
-    result.changes = matchNoteChanges(result.note, detail, decisions);
+    const anchor = noteAnchor(result.note);
+    let continued: Set<string> | undefined;
+    if (anchor.round && anchor.round < origin && anchor.sources.length && result.note.quote.trim()
+      && !result.note.where.split(' · ').some(part => part === 'Before' || part === 'Paper as decided' || part === 'Unchanged text')) {
+      const previous = await readRound(client, task, anchor.round, origin);
+      continued = continuedProposal(result.note, previous, detail);
+    }
+    result.changes = matchNoteChanges(result.note, detail, decisions, continued);
     const run = byId.get(result.itemId), latest = run?.reviewRound || origin;
     if (run?.noteRounds?.[result.index] && latest > origin) {
       // Options revise the proposal, while accepted/rejected fragments keep
@@ -187,7 +306,7 @@ export async function taskNoteResults(task: Task, items: TimelineItem[], runs: R
       }
       result.changes = [];
       for (const number of [...new Set(tracked.map(item => item.round))].sort((a, b) => b - a)) {
-        const shown = await read(number), blocks = [...shown.detail.sections.flatMap(section => section.blocks.filter(block => block.kind === 'change')), ...shown.detail.loose];
+        const shown = await read(number), blocks = changeBlocks(shown.detail);
         blocks.forEach((block, stop) => {
           const members = tracked.filter(item => item.round === number && block.units?.includes(item.unit.id));
           if (!members.length) return;
