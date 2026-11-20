@@ -77,6 +77,8 @@ export class Store extends EventEmitter {
       this.db.prepare('INSERT OR IGNORE INTO deleted_tasks SELECT id, ? FROM tasks WHERE project_id=?').run(Date.now(), id);
       for (const table of ['items', 'runs', 'ai_review_inputs', 'task_pins']) this.db.prepare(`DELETE FROM ${table} WHERE task_id IN (SELECT id FROM tasks WHERE project_id=?)`).run(id);
       for (const task of tasks) { const prefix = `note-options:${task}:`; this.db.prepare('DELETE FROM settings WHERE substr(key,1,?)=?').run(prefix.length, prefix); }
+      const clearPrefix = `annotation-clear:${id}:`;
+      this.db.prepare('DELETE FROM settings WHERE substr(key,1,?)=?').run(clearPrefix.length, clearPrefix);
       for (const table of ['tasks', 'annotations', 'anchor_sources']) this.db.prepare(`DELETE FROM ${table} WHERE project_id=?`).run(id);
       this.db.prepare('DELETE FROM projects WHERE id=?').run(id);
     });
@@ -131,10 +133,14 @@ export class Store extends EventEmitter {
     return JSON.parse(row.data);
   }
   annotations(projectId: string, deleted = false) { return (this.db.prepare('SELECT data FROM annotations WHERE project_id=? ORDER BY rowid').all(projectId) as { data: string }[]).map(r => JSON.parse(r.data) as Annotation).filter(note => deleted || note.deletedAt === undefined); }
-  annotation(projectId: string, id: string) {
+  findAnnotation(projectId: string, id: string) {
     const row = this.db.prepare('SELECT data FROM annotations WHERE id=? AND project_id=?').get(id, projectId) as { data: string } | undefined;
-    if (!row) throw new Error('Note not found.');
-    return JSON.parse(row.data) as Annotation;
+    return row ? JSON.parse(row.data) as Annotation : undefined;
+  }
+  annotation(projectId: string, id: string) {
+    const note = this.findAnnotation(projectId, id);
+    if (!note) throw new Error('Note not found.');
+    return note;
   }
   saveAnnotation(a: Annotation) { this.db.prepare('INSERT INTO annotations VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(a.id, a.projectId, JSON.stringify(a)); this.emit('change'); return a; }
   deleteAnnotation(projectId: string, id: string) {

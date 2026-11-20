@@ -4,8 +4,21 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Fixed
+
+- Generate initial task-review commit drafts in the selected commit-message language instead of copying the task title. Manual edits and preserved reconciliation messages remain intact. ([#255](https://github.com/PapilotAI/papilot/issues/255))
+- Keep the manuscript PDF marking toolbar in place when selecting the Note tool or opening a note. ([#256](https://github.com/PapilotAI/papilot/issues/256))
+- Keep PDF reference previews aligned with their links as the PDF scrolls, zooms or resizes. Previews stay inside the visible viewport and close when the reference leaves view. ([#260](https://github.com/PapilotAI/papilot/issues/260))
+- Open Settings from the macOS Papilot menu or with Command–Comma. Repeating the shortcut keeps the current settings page and edits. ([#262](https://github.com/PapilotAI/papilot/issues/262))
+
+### Changed
+
+- Refresh the website's GitHub star count with a 15-minute edge cache. Keep the last successful count during GitHub failures and show the deployment-time count without JavaScript. ([#257](https://github.com/PapilotAI/papilot/issues/257))
+
 ### Added
 
+- Clear a document’s annotations from **My notes** with a confirmation and batch undo. The confirmation fixes which annotations will be cleared, including retained positions and agent-authored notes. ([#261](https://github.com/PapilotAI/papilot/issues/261))
+- Return an original task annotation to **My notes** from Chat or the PDF note drawer. The returned copy retains its mark and instructions for another task, while the original conversation and review decisions stay in place. ([#264](https://github.com/PapilotAI/papilot/issues/264))
 - Pin several tasks at the top of a paper's current task list. Pins keep their order across replies, reloads and connected clients, and return when an archived task is restored. ([#265](https://github.com/PapilotAI/papilot/issues/265))
 
 ## [0.12.0] - 2026-11-20
