@@ -153,6 +153,7 @@
   "None of the synced files are in the paper folder. Syncing resumes when they are back.": "Nenhum dos arquivos sincronizados está na pasta do artigo. A sincronização será retomada quando eles voltarem.",
   "Not found": "Não encontrado",
   "Note not found.": "Anotação não encontrada.",
+  "Only submitted manuscript annotations can be returned.": "Somente anotações do manuscrito enviadas com uma tarefa podem ser devolvidas.",
   "Only the model and its settings can be changed.": "Apenas o modelo e suas configurações podem ser alterados.",
   "Overleaf answered unexpectedly. Papilot keeps trying.": "O Overleaf respondeu de forma inesperada. O Papilot continuará tentando.",
   "Overleaf asked Papilot to reconnect.": "O Overleaf pediu para o Papilot reconectar.",

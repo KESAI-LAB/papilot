@@ -119,10 +119,14 @@ export class Store extends EventEmitter {
     return JSON.parse(row.data);
   }
   annotations(projectId: string, deleted = false) { return (this.db.prepare('SELECT data FROM annotations WHERE project_id=? ORDER BY rowid').all(projectId) as { data: string }[]).map(r => JSON.parse(r.data) as Annotation).filter(note => deleted || note.deletedAt === undefined); }
-  annotation(projectId: string, id: string) {
+  findAnnotation(projectId: string, id: string) {
     const row = this.db.prepare('SELECT data FROM annotations WHERE id=? AND project_id=?').get(id, projectId) as { data: string } | undefined;
-    if (!row) throw new Error('Note not found.');
-    return JSON.parse(row.data) as Annotation;
+    return row ? JSON.parse(row.data) as Annotation : undefined;
+  }
+  annotation(projectId: string, id: string) {
+    const note = this.findAnnotation(projectId, id);
+    if (!note) throw new Error('Note not found.');
+    return note;
   }
   saveAnnotation(a: Annotation) { this.db.prepare('INSERT INTO annotations VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(a.id, a.projectId, JSON.stringify(a)); this.emit('change'); return a; }
   deleteAnnotation(projectId: string, id: string) {

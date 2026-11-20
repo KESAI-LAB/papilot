@@ -153,6 +153,7 @@
   "None of the synced files are in the paper folder. Syncing resumes when they are back.": "Inga av de synkroniserade filerna finns i artikelmappen. Synkroniseringen återupptas när de är tillbaka.",
   "Not found": "Hittades inte",
   "Note not found.": "Anteckningen hittades inte.",
+  "Only submitted manuscript annotations can be returned.": "Endast manuskriptanteckningar som skickats med en uppgift kan läggas tillbaka.",
   "Only the model and its settings can be changed.": "Endast modellen och dess inställningar kan ändras.",
   "Overleaf answered unexpectedly. Papilot keeps trying.": "Overleaf svarade oväntat. Papilot fortsätter att försöka.",
   "Overleaf asked Papilot to reconnect.": "Overleaf bad Papilot att ansluta igen.",

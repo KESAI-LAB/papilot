@@ -153,6 +153,7 @@
   "None of the synced files are in the paper folder. Syncing resumes when they are back.": "論文資料夾中沒有任何已同步的檔案。檔案放回後將恢復同步。",
   "Not found": "找不到內容",
   "Note not found.": "找不到註解。",
+  "Only submitted manuscript annotations can be returned.": "只能退回已隨任務送出的原稿註解。",
   "Only the model and its settings can be changed.": "僅可變更模型及其設定。",
   "Overleaf answered unexpectedly. Papilot keeps trying.": "Overleaf 回應異常。Papilot 會持續重試。",
   "Overleaf asked Papilot to reconnect.": "Overleaf 要求 Papilot 重新連線。",
