@@ -80,7 +80,7 @@ test('rendered LaTeX annotations and follow-ups link to the exact review changes
 `;
   // Change only the visible hyperlink label. The target contains the same word.
   const revise = (source: string) => source.replaceAll('fast', 'efficient').replace('example.org/efficient', 'example.org/fast');
-  const after = revise(before).replace('stable', 'robust');
+  const after = revise(before).replace('The cited method is efficient', 'The cited method is very efficient').replace('stable', 'robust');
   fixture.write(file, before);
   fixture.repo.run(['add', file]);
   fixture.repo.run(['commit', '-qm', 'Rendered notes fixture']);
@@ -115,7 +115,7 @@ test('rendered LaTeX annotations and follow-ups link to the exact review changes
       const [changed] = detail.units.filter(unit => linked.includes(unit.id));
       assert.equal(linked.length, 1, prefix);
       assert.match(changed.old_text, /fast/, prefix);
-      assert.equal(changed.new_text, revise(changed.old_text), prefix);
+      assert.equal(changed.new_text.trim(), prefix === 'The cited' ? 'very efficient' : revise(changed.old_text).trim(), prefix);
     }
 
     const proposed = pdf(first.summary.builds!.at(-1)!);
@@ -129,7 +129,7 @@ test('rendered LaTeX annotations and follow-ups link to the exact review changes
     await app.review.decide(work.name, { round: 1, action: 'accept', changes: [sibling.id, ...cited] });
     const next = after.replace('The baseline method is efficient', 'The baseline method is scalable')
       .replace('The baseline method is efficient', 'The baseline method is robust')
-      .replace('The cited method is efficient', 'The cited method is precise');
+      .replace('The cited method is very efficient', 'The cited method is very precise');
     await publish(next, 2);
     const task = { id: work.name, name: work.name, status: 'reviewing', review: { round: 2 } } as Task;
     const item = { id: 'follow-up', type: 'user', meta: { notes: [followUp, sameProposal, acceptedFollowUp] } } as TimelineItem;

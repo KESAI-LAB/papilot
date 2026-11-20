@@ -37,7 +37,7 @@ const unit = (id, line, old, revised) => ({ id, file: 'main.tex', kind: 'text', 
 const units = { 1: [unit('c1', 10, 'The original technical sentence.', 'A shorter technical sentence.'), unit('c2', 20, 'A second original sentence.', 'Our contribution is now explicit.'), unit('c3', 12, 'The original technical sentence.', 'A clearer technical sentence.')], 2: [unit('c1', 11, 'A shorter technical sentence.', 'A shorter sentence preserving the technical term.')] };
 const rounds = Object.fromEntries([1, 2].map(round => [round, { round, units: units[round], sections: [], loose: units[round].map(unit => ({ kind: 'change', units: [unit.id], before: [{ text: [{ text: unit.old_text }] }] })) }]));
 const decisions = { 1: { c1: 'pending', c2: 'rejected', c3: 'accepted' }, 2: { c1: 'pending' } };
-const client = { get: async route => route.includes('/rounds/') ? rounds[Number(route.split('/').at(-1))] : { decisions: decisions[Number(new URL(route, origin).searchParams.get('round'))] } };
+const client = { get: async route => route.includes('/rounds/') ? rounds[Number(new URL(route, origin).pathname.split('/').at(-1))] : { decisions: decisions[Number(new URL(route, origin).searchParams.get('round'))] } };
 let failResults = true, enableReturns = false, failReturn = false;
 const returned = new Map(), returnWrites = [], taskWrites = [];
 let releaseMissed;
