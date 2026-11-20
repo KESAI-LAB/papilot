@@ -13,6 +13,7 @@ export interface SelectOption { value: string; label: string; detail?: string; s
 export function ChipSelect({ label, value, options, onChange, disabled, icon, className = '', display }: { label: string; value: string; options: SelectOption[]; onChange: (value: string) => void; disabled?: boolean; icon?: string; className?: string; display?: string }) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null), list = useRef<HTMLDivElement>(null);
+  const anchorPosition = useRef<{ left: number; top: number }>(null);
   const [open, setOpen] = useState(false), [active, setActive] = useState(-1);
   const typed = useRef({ text: '', at: 0 });
   const selected = options.findIndex(option => option.value === value), current = options[selected];
@@ -22,8 +23,13 @@ export function ChipSelect({ label, value, options, onChange, disabled, icon, cl
   useEffect(() => {
     if (!open) return;
     const dismiss = () => list.current?.hidePopover();
-    // Close when a scrolling ancestor moves the chip, but not when the list scrolls.
-    const scroll = (event: Event) => { if (event.target instanceof Node && event.target.contains(trigger.current) && !list.current?.contains(event.target)) dismiss(); };
+    // A scroll event may arrive after the chip already opened at its new position.
+    const scroll = (event: Event) => {
+      const chip = trigger.current, anchor = anchorPosition.current;
+      if (!chip || !anchor || !(event.target instanceof Node) || !event.target.contains(chip)) return;
+      const { left, top } = chip.getBoundingClientRect();
+      if (left !== anchor.left || top !== anchor.top) dismiss();
+    };
     window.addEventListener('resize', dismiss); document.addEventListener('scroll', scroll, true);
     return () => { window.removeEventListener('resize', dismiss); document.removeEventListener('scroll', scroll, true); };
   }, [open]);
@@ -40,6 +46,7 @@ export function ChipSelect({ label, value, options, onChange, disabled, icon, cl
   // A chip on the right of the window lines the list up with its right edge.
   function position() {
     const panel = list.current!, rect = trigger.current!.getBoundingClientRect();
+    anchorPosition.current = { left: rect.left, top: rect.top };
     panel.style.minWidth = `${rect.width}px`;
     const below = window.innerHeight - rect.bottom - 14, above = rect.top - 14, up = below < Math.min(panel.scrollHeight, 240) && above > below;
     panel.style.maxHeight = `${Math.max(120, Math.min(360, up ? above : below))}px`;
