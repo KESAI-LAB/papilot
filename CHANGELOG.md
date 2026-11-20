@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Changed
+
+- Keep the Typeless microphone at the mouse's release point when creating a PDF note. Once the draft has text, its quote arrow uses the same position, so stopping dictation and confirming the note need no mouse movement. Transcription still requires explicit confirmation; touch and keyboard entry retain the regular controls. See [Typeless voice notes](docs/typeless.md).
+
 ## [0.12.0] - 2026-11-20
 
 Turn feedback into PDF notes, keep track of passages being revised, and preview references without leaving the page. See the [release notes](docs/releases/0.12.0/release-notes.md) for setup and update instructions.

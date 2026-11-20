@@ -9,10 +9,15 @@ on Windows, or on Linux. A remote server never sends keys on the editor's behalf
 2. Allow Papilot under **System Settings → Privacy & Security → Accessibility**,
    then select **Refresh** in the experiment card. Development builds may appear
    as Electron. Typeless needs its own microphone permissions and account setup.
-3. Enable the experiment, then create a PDF note. Papilot focuses the note and
-   sends the configured shortcut once.
-4. Use the note's microphone button to send the shortcut again. Keep the note
-   open and wait for Typeless to paste the transcript. Edit or submit it normally.
+3. Enable the experiment and choose the PDF's **Note** tool. Select a passage;
+   Papilot focuses the note and sends the configured shortcut once.
+4. Keep the mouse where you released the selection. The microphone appears
+   under it, so you can click in place to send the shortcut again. Wait for
+   Typeless to paste the transcript. Once the draft has text, the arrow occupies
+   the same position; review the text and click again to quote it in the task.
+   Insertion never submits automatically. The editor keeps a microphone for
+   further dictation. Region and sticky notes, and clicking **Add note**, use
+   the same stationary action; touch and keyboard entry keep the regular controls.
 
 The microphone button shows a spinner during delivery, briefly shows a checkmark
 on success, then returns to the microphone. Only errors add a visible message;
@@ -92,6 +97,11 @@ precedence, unsupported bindings, focus loss, repeated requests and helper failu
 The built-UI test covers opt-in, focus, retained drafts, repeated clicks, delayed
 insertion, failure/recovery and keyboard actions while delivery is pending.
 
+The stationary action is positioned from the actual mouse release or click,
+relative to the PDF page. Resizing the draft does not move it. Its arrow means
+only that the draft has text, not that recording has stopped or transcription
+is complete. The existing recording-state limitations still apply.
+
 ## Local verification
 
 The 11 targeted unit tests, built-interface Typeless test, existing note-selection
@@ -111,9 +121,19 @@ Captured UI evidence: [settings](assets/typeless/settings.png),
 [sent](assets/typeless/sent.png), [dark error](assets/typeless/error-dark.png),
 and [narrow settings](assets/typeless/settings-narrow.png).
 
+Stationary-action evidence: [empty draft](assets/typeless/pointer-empty.png),
+[transcribed draft](assets/typeless/pointer-transcript.png), and
+[narrow editor in dark mode](assets/typeless/pointer-narrow-dark.png).
+
 The `switch`, `spinner` and `accessibility` Modern Web Guidance guides informed the
 labeled native checkbox, keyboard-operable button, busy state, focus handling and
 status announcements. The existing spinner respects reduced-motion preferences;
 the checkmark is distinguishable by shape, with a screen-reader announcement.
 The existing checkbox/ARIA styling supports browsers without a native switch
 attribute, and the microphone button does not announce an invented recording state.
+
+The stationary action follows `viewport-aware-dropdowns` and `accessibility`:
+the editor fits beside the action or scrolls above/below it without covering the
+button, and the existing labeled, keyboard-operable controls retain input focus.
+Positioning uses the viewer's existing measured page coordinates, including its
+cropped-page portal, without requiring CSS anchor-positioning support.
