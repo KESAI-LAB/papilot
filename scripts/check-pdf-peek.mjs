@@ -66,17 +66,25 @@ Beta & 96.1 & 18 \\\hline
   const origin = await server.listen({ host: '127.0.0.1', port: 0 });
   browser = process.env.PAPILOT_PEEK_BROWSER === 'webkit' ? await webkit.launch({ headless: true }) : await chromium.launch({ channel: process.env.PAPILOT_BROWSER_CHANNEL || 'chrome', headless: true });
   const errors = [];
-  async function open({ broken = false, fallback = false, crop = false, theme = 'light', delayWordsPage = null, ...options } = {}) {
+  async function open({ broken = false, fallback = false, crop = false, theme = 'light', delayExcerptPage = null, ...options } = {}) {
     const page = await browser.newPage({ locale: 'en-US', viewport: { width: 1440, height: 900 }, ...options });
-    await page.addInitScript(({ fallback, crop, theme }) => {
+    await page.addInitScript(({ fallback, crop, theme, delayExcerptPage }) => {
       localStorage.setItem('papilot:language', 'en'); localStorage.setItem('papilot:theme', theme);
       if (fallback) Object.defineProperty(HTMLElement.prototype, 'showPopover', { value: undefined });
       if (crop) localStorage.setItem('papilot:pdf-crop:pdf:paper', JSON.stringify([0.12, 0.08, 0.88, 0.92]));
-    }, { fallback, crop, theme });
+      if (delayExcerptPage !== null) {
+        const post = Worker.prototype.postMessage;
+        const pending = window.pendingPdfExcerpts = [];
+        Worker.prototype.postMessage = function(message, ...options) {
+          if (message.action === 'GetTextContent' && message.data.pageIndex === delayExcerptPage - 1) {
+            pending.push(() => post.call(this, message, ...options));
+          } else post.call(this, message, ...options);
+        };
+      }
+    }, { fallback, crop, theme, delayExcerptPage });
     page.on('pageerror', error => errors.push(error.message));
     const manuscript = { git: { branch: 'main', files: [] }, build: { status: 'ready', key: 'pdf', pages: Array.from({ length: 5 }, () => [612, 792]) }, annotations: [] };
     const state = { version: 'test', projects: [{ id: 'paper', name: 'Paper', path: fixture }], tasks: [], requests: [], runtime: { connected: true, authenticated: true, models: [] } };
-    let releaseWords; const wordsGate = new Promise(resolve => { releaseWords = resolve; });
     const git = { branch: 'main', files: [] }, notes = [], sourceRequests = [];
     await page.route('**/api/**', async route => {
       const url = new URL(route.request().url()), json = value => route.fulfill({ json: value });
@@ -89,10 +97,7 @@ Beta & 96.1 & 18 \\\hline
       if (url.pathname.endsWith('/git')) return json(git);
       if (url.pathname.endsWith('/manuscript')) return json(manuscript);
       if (url.pathname.endsWith('/manuscript.pdf')) return route.fulfill({ contentType: 'application/pdf', body: broken ? brokenPdf : pdf });
-      if (url.pathname.endsWith('/manuscript/words')) {
-        if (delayWordsPage !== null && Number(url.searchParams.get('page')) === delayWordsPage) await wordsGate;
-        return route.fulfill({ status: 404, json: { error: 'Use PDF text' } });
-      }
+      if (url.pathname.endsWith('/manuscript/words')) return route.fulfill({ status: 404, json: { error: 'Use PDF text' } });
       if (url.pathname.endsWith('/manuscript/source/locate')) { sourceRequests.push(route.request().postDataJSON()); return json({ source: null }); }
       if (url.pathname === '/api/quick-notes') return json({ quickNotes: null });
       if (url.pathname === '/api/note-alternatives') return json({ noteAlternatives: true, noteAlternativeRange: 'few' });
@@ -108,7 +113,7 @@ Beta & 96.1 & 18 \\\hline
     const link = page.locator('.page[data-page-number="1"] .linkAnnotation a').first();
     await text.waitFor(); await link.waitFor();
     const links = page.locator('.page[data-page-number="1"] .linkAnnotation[data-internal-link] a');
-    return { page, links, manuscript, notes, sourceRequests, releaseWords, pageNumber: page.getByRole('textbox', { name: 'Page number', exact: true }), peek: page.locator('.pdf-peek'), text };
+    return { page, links, manuscript, notes, sourceRequests, pageNumber: page.getByRole('textbox', { name: 'Page number', exact: true }), peek: page.locator('.pdf-peek'), text };
   }
 
   const f = await open();
@@ -203,25 +208,128 @@ Beta & 96.1 & 18 \\\hline
       if (options.hasTouch) {
         await links.nth(0).tap(); await expect(pageNumber).toHaveValue('2');
         await expect(peek).toBeHidden();
+        await pageNumber.fill('1'); await pageNumber.press('Enter');
+        await links.nth(0).click({ modifiers: ['Alt'] });
+        await expect(peek.locator('canvas')).toBeVisible();
+        await page.setViewportSize({ width: 450, height: 844 });
+        await expect(peek).toHaveCSS('width', '434px');
+        await expect(peek.locator('canvas')).toBeVisible();
+        await expect.poll(() => peek.locator('canvas').evaluate(el => el.clientWidth)).toBe(432);
+        await page.keyboard.press('Escape');
+        await expect(peek).toBeHidden();
       } else {
         await links.nth(0).hover(); await expect(peek.locator('canvas')).toBeVisible();
-        await page.locator('.pdf-container').evaluate(el => { el.scrollTop += 50; });
+        await page.locator('.pdf-container').evaluate(el => { el.scrollTop += 500; });
         await expect(peek).toBeHidden();
       }
     } finally { await f.page.close(); }
   }
-  const delayed = await open({ delayWordsPage: 4 });
+  for (const fallback of [false, true]) {
+    const f = await open({ fallback });
+    try {
+      const { page, links, peek } = f;
+      const link = links.nth(0), box = page.locator('.pdf-container'), canvas = peek.locator('canvas');
+      const assertPlacement = async (side = 'below') => {
+        await expect.poll(async () => {
+          const anchor = await link.boundingBox(), popup = await peek.boundingBox();
+          if (!anchor || !popup) return null;
+          return side === 'below' ? popup.y - anchor.y - anchor.height : anchor.y - popup.y - popup.height;
+        }).toBeCloseTo(8, 0);
+      };
+      await page.keyboard.press('Tab'); await link.focus();
+      await expect(canvas).toBeVisible();
+      await assertPlacement();
+      const beforeBox = await box.boundingBox(), beforeMove = await peek.boundingBox();
+      const initialCanvas = await canvas.elementHandle();
+      // A stylesheet change can move one link without changing the PDF box
+      // or mutating the link. Keep the rendered excerpt through the move.
+      const anchorId = await link.getAttribute('data-element-id');
+      const movedLink = await page.addStyleTag({ content: `.pdfViewer [data-element-id="${anchorId}"] { transform: translateY(36px); }` });
+      await expect.poll(async () => (await peek.boundingBox())?.y).toBeCloseTo(beforeMove.y + 36, 0);
+      await assertPlacement();
+      assert.deepEqual(await box.boundingBox(), beforeBox);
+      assert.equal(await initialCanvas.evaluate(el => el.isConnected && !el.hidden), true);
+      await movedLink.evaluate(style => style.remove());
+      await assertPlacement();
+      // The canvas stays attached while the author scrolls a visible link.
+      await box.evaluate(el => { el.scrollTop += 40; });
+      await assertPlacement();
+      assert.equal(await initialCanvas.evaluate(el => el.isConnected && !el.hidden), true);
+      await initialCanvas.dispose();
+
+      // Apply the real pane resize action and PDF zoom without moving keyboard
+      // focus away or sending an outside pointer click, which dismisses Peek.
+      const beforePane = await link.boundingBox();
+      await page.getByRole('separator', { name: 'Resize manuscript panel' }).dispatchEvent('keydown', { key: 'ArrowLeft' });
+      await expect.poll(async () => (await box.boundingBox())?.width).toBeLessThan(beforeBox.width);
+      await expect.poll(async () => (await link.boundingBox())?.width).toBeLessThan(beforePane.width);
+      await assertPlacement();
+      await expect(canvas).toBeVisible();
+      await expect(link).toBeFocused();
+      const beforeZoom = await link.boundingBox();
+      await box.dispatchEvent('wheel', { ctrlKey: true, deltaY: -12, clientX: beforeZoom.x - 100, clientY: beforeZoom.y, cancelable: true });
+      await expect.poll(async () => (await link.boundingBox())?.width).toBeGreaterThan(beforeZoom.width);
+      await assertPlacement();
+      await expect(canvas).toBeVisible();
+      await expect(link).toBeFocused();
+
+      // Park a still-visible link near the lower right after a viewport resize.
+      // Placement must flip vertically and clamp horizontally.
+      await page.setViewportSize({ width: 820, height: 640 });
+      await box.evaluate(el => { el.scrollTop += 16; });
+      const view = await box.boundingBox();
+      await link.evaluate((el, view) => {
+        const rect = el.getBoundingClientRect();
+        el.style.transform = `translate(${view.x + view.width - rect.right - 24}px, ${view.y + view.height - rect.bottom - 12}px)`;
+      }, view);
+      await assertPlacement('above');
+      const beforeResize = await peek.boundingBox();
+      assert.ok(beforeResize.x + beforeResize.width <= 820 - 7 && beforeResize.y >= 7);
+      await expect(canvas).toBeVisible();
+      await page.screenshot({ path: `test-results/pdf-peek-aligned-${fallback ? 'fallback' : 'popover'}.png` });
+      await expect.poll(() => canvas.evaluate(el => el.clientHeight)).toBe(beforeResize.height - 30);
+      const shortCanvas = await canvas.elementHandle();
+      await box.evaluate(el => { el.scrollTop -= 4; });
+      await expect.poll(async () => (await peek.boundingBox())?.y).toBeCloseTo(beforeResize.y + 4, 0);
+      await assertPlacement('above');
+      assert.equal(await shortCanvas.evaluate(el => el.isConnected), true);
+      await shortCanvas.dispose();
+      await link.evaluate(el => el.remove());
+      await expect(peek).toBeHidden();
+    } finally { await f.page.close(); }
+  }
+  const hovered = await open();
+  try {
+    const { page, links, peek } = hovered;
+    const link = links.nth(0);
+    await link.hover();
+    await expect(peek.locator('canvas')).toBeVisible();
+    const top = (await peek.boundingBox()).y;
+    await page.mouse.wheel(0, 36);
+    await expect.poll(async () => (await peek.boundingBox())?.y).toBeCloseTo(top - 36, 0);
+    await page.waitForTimeout(150);
+    await expect(peek.locator('canvas')).toBeVisible();
+    await page.mouse.move(20, 20);
+    await expect(peek).toBeHidden();
+    await link.hover();
+    await expect(peek.locator('canvas')).toBeVisible();
+    await link.evaluate(el => { el.hash = '#another-destination'; });
+    await expect(peek).toBeHidden();
+    await expect(link).not.toHaveAttribute('aria-describedby');
+  } finally { await hovered.page.close(); }
+  const delayed = await open({ delayExcerptPage: 5 });
   try {
     await delayed.links.nth(3).click({ modifiers: ['Alt'] });
     await expect(delayed.peek).toContainText('Loading…');
+    await expect.poll(() => delayed.page.evaluate(() => window.pendingPdfExcerpts.length)).toBeGreaterThan(0);
     await delayed.page.screenshot({ path: 'test-results/pdf-peek-loading.png' });
     await delayed.page.mouse.move(20, 20); await expect(delayed.peek).toBeHidden();
-    delayed.releaseWords();
     await delayed.links.nth(0).click({ modifiers: ['Alt'] });
     await expect(delayed.peek.locator('canvas')).toHaveAttribute('aria-label', /Energy identity/);
+    await delayed.page.evaluate(() => { window.pendingPdfExcerpts.splice(0).forEach(release => release()); });
     await expect(delayed.peek.locator('.pdf-peek-label')).toHaveText('Page 2');
     await expect(delayed.pageNumber).toHaveValue('1');
-  } finally { delayed.releaseWords(); await delayed.page.close(); }
+  } finally { await delayed.page.close(); }
   const broken = await open({ broken: true });
   try {
     await broken.links.nth(0).click({ modifiers: ['Alt'] });
@@ -239,7 +347,7 @@ Beta & 96.1 & 18 \\\hline
     await expect(broken.peek.locator('canvas')).toHaveAttribute('aria-label', /Ada Reader/);
   } finally { await broken.page.close(); }
   assert.deepEqual(errors, []);
-  console.log('PASS: reference Peek renders equations, tables, figures and citations in place; hover, Alt-click, focus, dismissal and ordinary navigation work.');
+  console.log('PASS: reference Peek follows movement, zoom, pane resize and scrolling; native, fallback, focus, dismissal and ordinary navigation work.');
 } finally {
   await browser?.close(); await server.close(); fs.rmSync(fixture, { recursive: true, force: true });
 }

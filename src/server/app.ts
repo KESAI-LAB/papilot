@@ -30,7 +30,7 @@ import { gitOverview } from './git-overview.ts';
 import { findSkill, listedSkill, loadSkills } from './skills.ts';
 import { registerSkillRoutes } from './skill-routes.ts';
 import { type Listener, equals, guard } from './access.ts';
-import { isTaskReviewNote, isAgentId, isMarkKind, PRESET_QUICK_NOTES, QUICK_NOTE_LIMIT, type AgentId, type Annotation, type NoteSummary, type QuickNote, type SourceFile, type Task } from '../shared.ts';
+import { isTaskReviewNote, isAgentId, isMarkKind, PRESET_QUICK_NOTES, QUICK_NOTE_LIMIT, type AgentId, type Annotation, type AnnotationBatch, type AnnotationBatchResult, type NoteSummary, type QuickNote, type SourceFile, type Task } from '../shared.ts';
 import type { SourceFileRead } from '../../engine/src/types.ts';
 import { parseGroupInstructions } from '../note-groups.ts';
 import { noteOptionContext, noteOptionsKey } from './note-options.ts';
@@ -260,15 +260,21 @@ export async function buildApp(options: AppOptions) {
   // again, as the file menu offers it: a root document, or one compiled
   // before, even while it lacks \documentclass of its own. One on a main file
   // since renamed or removed moves to the current document.
-  async function paperNoteFilter(id: string, includeSent = false) {
-    const root = store.project(id).path, inDocument = await noteDocumentFilter(root, await manuscripts.document(id, root));
-    return (note: Annotation) => (includeSent || !note.taskId) && !isTaskReviewNote(note) && inDocument(note);
+  async function paperNoteScope(id: string) {
+    const root = store.project(id).path, document = await manuscripts.document(id, root);
+    const inDocument = await noteDocumentFilter(root, document);
+    return { document, includes: (note: Annotation) => !isTaskReviewNote(note) && inDocument(note) };
   }
-  async function paperNotes(id: string) { return store.annotations(id).filter(await paperNoteFilter(id)); }
+  async function paperNotes(id: string) {
+    const scope = await paperNoteScope(id);
+    return store.annotations(id).filter(note => !note.taskId && scope.includes(note));
+  }
   async function manuscript(id: string, rebuild = false) {
     await options.prepareDemo?.();
     const root = store.project(id).path, state = await manuscripts.state(id, root, rebuild);
-    const paperNote = await paperNoteFilter(id), notes = store.annotations(id).filter(paperNote);
+    const { document, includes } = await paperNoteScope(id);
+    const paperNote = (note: Annotation) => !note.taskId && includes(note);
+    const notes = store.annotations(id).filter(paperNote);
     const placed = await manuscripts.reanchor(id, root, notes).catch(() => notes);
     for (let index = 0; index < notes.length; index++) {
       const next = placed[index], previous = notes[index];
@@ -287,12 +293,11 @@ export async function buildApp(options: AppOptions) {
       manuscripts.noteSections(id, state.build.key, annotations).catch(() => null),
       new Promise<null>(resolve => setImmediate(resolve, null)),
     ]) : null;
-    const onPaper = await paperNoteFilter(id, true);
     const inFlightTask = (note: Annotation) => {
       const task = note.taskId ? store.findTask(note.taskId) : undefined;
       return task?.projectId === id && task.status !== 'deleting' && !taskFinished(task) ? task : undefined;
     };
-    const sent = store.annotations(id).filter(note => onPaper(note) && inFlightTask(note));
+    const sent = store.annotations(id).filter(note => includes(note) && inFlightTask(note));
     // Reuse confirmed placements, without rewriting the task's source snapshot.
     // Recheck after the lookup: delivery or deletion may have finished meanwhile.
     const positions = await manuscripts.reanchor(id, root, sent).catch(() => sent);
@@ -301,7 +306,7 @@ export async function buildApp(options: AppOptions) {
       return current.deletedAt === undefined && task && current.taskId === note.taskId
         ? [{ note, taskId: task.id, title: task.title, status: task.status, ...(task.status === 'building' && task.review?.ready ? { ready: true as const } : {}) }] : [];
     });
-    return { ...state, annotations, inFlightMarks, ...(scope ? { noteSections: scope.sections, unplacedSectionNotes: scope.unplaced } : {}) };
+    return { ...state, document, annotations, inFlightMarks, ...(scope ? { noteSections: scope.sections, unplacedSectionNotes: scope.unplaced } : {}) };
   }
 
   app.get('/api/health', () => ({ ok: true, name: 'Papilot', version: options.version, ...(options.desktopInstance ? { desktopInstance: options.desktopInstance } : {}), ...(options.updateInstance ? { updateInstance: options.updateInstance } : {}) }));
@@ -733,7 +738,8 @@ export async function buildApp(options: AppOptions) {
   app.post<{ Params: { id: string } }>('/api/tasks/:id/apply', task, async request => {
     const task = store.task(request.params.id), b = (request.body || {}) as any;
     if (b.mode !== undefined && b.mode !== 'workspace' && b.mode !== 'commit') throw new Error('Invalid save action.');
-    const result = await serialGit(task.projectId, () => workspace.applyTask(task.id, b.keepCurrent === true, b.mode === 'commit' ? { message: string(b.message, 'Commit message', 5000), ...(b.confirmation ? { confirmation: string(b.confirmation, 'Commit confirmation', 100) } : {}) } : undefined));
+    const retryCommit = b.message === undefined && task.delivery?.mode === 'commit' && task.delivery.pending;
+    const result = await serialGit(task.projectId, () => workspace.applyTask(task.id, b.keepCurrent === true, b.mode === 'commit' ? { message: retryCommit ? undefined : string(b.message, 'Commit message', 5000), ...(b.confirmation ? { confirmation: string(b.confirmation, 'Commit confirmation', 100) } : {}) } : undefined));
     if (delivered(result.delivery)) refreshManuscript(task.projectId);
     return result;
   });
@@ -974,11 +980,75 @@ export async function buildApp(options: AppOptions) {
     if (isTaskReviewNote(note)) throw new Error('Manage this suggestion in its AI review task, or copy it to the manuscript first.');
     if (workspace.annotationSending(note.id)) throw new Error('This note is being sent. Wait for the task to finish creating.');
     if (note.taskId) throw new Error('This note has already been sent.');
-    const { deletedAt: _, ...restored } = note;
+    const { deletedAt: _, deletedBatch: _batch, ...restored } = note;
     store.saveAnnotation(restored);
     // Return the original order, including any notes added since the deletion.
     return { annotations: await paperNotes(request.params.id) };
   });
+  for (const operation of ['clear', 'undo-clear'] as const) {
+    app.post<{ Params: { id: string }; Body: AnnotationBatch }>(`/api/projects/:id/annotations/${operation}`, project(), async request => {
+      const id = request.params.id, root = store.project(id).path;
+      const { document, batch, ids } = request.body || {};
+      if (!Array.isArray(ids) || ids.some(note => typeof note !== 'string' || !note) || !ids.length)
+        throw new Error('Select at least one note.');
+      if (typeof batch !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(batch) || (document !== null && typeof document !== 'string'))
+        throw new Error('Invalid annotation batch.');
+      const scope = await paperNoteScope(id);
+      if ((scope.document ?? null) !== document || (await manuscripts.document(id, root) ?? null) !== document)
+        throw new Error('The manuscript document changed. Open My notes again.');
+
+      const result: AnnotationBatchResult = { changed: [], failed: [], annotations: [] };
+      const restoredIds: string[] = [];
+      const receiptKey = `annotation-clear:${id}:${batch}`;
+      const requested = new Set(ids);
+      store.transaction(() => {
+        // A retry can arrive after another client restored a note. Record
+        // which notes this batch cleared and which its own Undo restored.
+        const receipt = store.preference<{ document: string | null; ids: string[]; cleared: string[]; restored?: string[] }>(receiptKey);
+        const confirmed = new Set(receipt?.ids);
+        if (receipt && (receipt.document !== document || [...requested].some(note => !confirmed.has(note))))
+          throw new Error('Invalid annotation batch.');
+        const cleared = new Set(receipt?.cleared);
+        const restored = new Set(receipt?.restored);
+        for (const noteId of requested) {
+          try {
+            const note = store.annotation(id, noteId);
+            if (!scope.includes(note)) throw new Error('Note not found.');
+            if (operation === 'clear' && cleared.has(noteId)) {
+              if (note.deletedBatch === batch && note.deletedAt !== undefined) result.changed.push(noteId);
+              continue;
+            }
+            if (note.taskId) {
+              if (workspace.annotationSending(noteId)) throw new Error('This note is being sent. Wait for the task to finish creating.');
+              throw new Error('This note has already been sent.');
+            }
+            if (operation === 'clear') {
+              if (note.deletedAt !== undefined) throw new Error('This note has been deleted. Undo the deletion first.');
+              store.saveAnnotation({ ...note, deletedAt: Date.now(), deletedBatch: batch });
+              cleared.add(noteId);
+            } else {
+              if (note.deletedAt !== undefined) {
+                if (note.deletedBatch !== batch) throw new Error('Note not found.');
+                const { deletedAt: _, deletedBatch: _batch, ...active } = note;
+                store.saveAnnotation(active);
+                restored.add(noteId);
+              }
+              if (restored.has(noteId)) restoredIds.push(noteId);
+            }
+            result.changed.push(noteId);
+          } catch (error) {
+            result.failed.push({ id: noteId, error: error instanceof Error ? error.message : String(error) });
+          }
+        }
+        if ((operation === 'clear' && (!receipt || cleared.size !== receipt.cleared.length)) ||
+            restored.size !== (receipt?.restored?.length ?? 0))
+          store.savePreference(receiptKey, { document, ids: receipt?.ids || [...requested], cleared: [...cleared], restored: [...restored] });
+      });
+      if (operation === 'undo-clear') result.restoredIds = restoredIds;
+      result.annotations = store.annotations(id).filter(note => !note.taskId && scope.includes(note));
+      return result;
+    });
+  }
   // What the last build reported, placed on its PDF, and the TeX log itself.
   app.get<{ Params: { id: string } }>('/api/projects/:id/manuscript/problems', project(), request => manuscripts.problems(store.project(request.params.id).id));
   app.get<{ Params: { id: string } }>('/api/projects/:id/manuscript/log', project(), (request, reply) => reply.type('text/plain; charset=utf-8').header('Cache-Control', 'no-store').send(manuscripts.log(store.project(request.params.id).id)));

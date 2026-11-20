@@ -1,4 +1,4 @@
-import type { Annotation, GitStatus, Manuscript, Snapshot, Task, TimelineItem, AgentId, Skill, NoteSummary, NoteResult, NoteOptions } from '../../shared.ts';
+import type { Annotation, AnnotationBatch, AnnotationBatchResult, GitStatus, Manuscript, Snapshot, Task, TimelineItem, AgentId, Skill, NoteSummary, NoteResult, NoteOptions } from '../../shared.ts';
 import type { ActionKind, Decision, PageState, RoundDetail } from '../../../engine/src/types.ts';
 import plans from '../../../examples/playground-paper/edits.json';
 import seededNotes from '../../../examples/playground-paper/preview/notes.json';
@@ -212,12 +212,30 @@ export function createPlaygroundData(storage: Store, version: string, pdfKey: st
       const note: Annotation = { id: uuid(), projectId, key: pdfKey, page: input.page, rect: input.rect, ...(input.rects ? { rects: input.rects } : {}), comment: input.comment || '', quote: input.quote || '', source: null, createdAt: Date.now(), ...(input.group ? { group: input.group } : {}), ...(input.kind ? { kind: input.kind } : {}), ...(input.stamp ? { stamp: input.stamp } : {}) };
       local.annotations.push(note); persist(); return note;
     }
+    if (path === `${base}/annotations/clear` || path === `${base}/annotations/undo-clear`) {
+      const { ids, batch } = body as AnnotationBatch, clearing = path.endsWith('/clear');
+      const changed: string[] = [], restoredIds: string[] = [], failed: AnnotationBatchResult['failed'] = [];
+      for (const id of ids) {
+        const note = local.annotations.find(note => note.id === id);
+        if (!note || (note.deletedAt !== undefined && note.deletedBatch !== batch)) {
+          failed.push({ id, error: 'Note not found.' });
+          continue;
+        }
+        if (clearing) { note.deletedAt ??= Date.now(); note.deletedBatch = batch; }
+        else if (note.deletedAt !== undefined) {
+          delete note.deletedAt; delete note.deletedBatch; restoredIds.push(id);
+        }
+        changed.push(id);
+      }
+      persist();
+      return { changed, restoredIds, failed, annotations: local.annotations.filter(note => !note.deletedAt) } satisfies AnnotationBatchResult;
+    }
     if (path.startsWith(`${base}/annotations/`) && body !== undefined) {
       const [id, action] = path.slice(`${base}/annotations/`.length).split('/');
       const note = local.annotations.find(note => note.id === id);
       if (!note) throw new Error('Note not found.');
       if (action === 'delete') { note.deletedAt = Date.now(); persist(); return { ok: true }; }
-      if (action === 'restore') { delete note.deletedAt; persist(); return { annotations: local.annotations.filter(note => !note.deletedAt) }; }
+      if (action === 'restore') { delete note.deletedAt; delete note.deletedBatch; persist(); return { annotations: local.annotations.filter(note => !note.deletedAt) }; }
       if (!action && typeof (body as Annotation).comment === 'string') { note.comment = (body as Annotation).comment; persist(); return note; }
     }
     const copy = path.match(/^\/tasks\/example-review\/ai-review\/([^/]+)\/(copy|delete|restore)$/);
