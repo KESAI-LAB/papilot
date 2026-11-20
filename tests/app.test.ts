@@ -1155,6 +1155,9 @@ test('clear and undo only the confirmed manuscript annotation batch', async () =
     const undone = await post('undo-clear', snapshot);
     assert.deepEqual(undone.json().changed, snapshot);
     assert.deepEqual(undone.json().restoredIds, snapshot.slice(1), 'Do not reselect notes restored elsewhere');
+    const replayedUndo = await post('undo-clear', snapshot);
+    assert.deepEqual(replayedUndo.json().changed, snapshot);
+    assert.deepEqual(replayedUndo.json().restoredIds, snapshot.slice(1), 'A lost Undo response retains the original selection scope');
     assert.deepEqual(undone.json().annotations.map((note: Annotation) => note.id), [...snapshot, 'newly-created']);
     assert.equal(f.store.annotation('thesis', 'agent-retained').key, 'earlier-pdf');
     assert.equal(f.store.annotation('thesis', 'agent-retained').deletedBatch, undefined);

@@ -1001,13 +1001,14 @@ export async function buildApp(options: AppOptions) {
       const receiptKey = `annotation-clear:${id}:${batch}`;
       const requested = new Set(ids);
       store.transaction(() => {
-        // A repeated request can arrive after another client restored a note.
-        // The receipt preserves which IDs were confirmed and already cleared.
-        const receipt = store.preference<{ document: string | null; ids: string[]; cleared: string[] }>(receiptKey);
+        // A retry can arrive after another client restored a note. Record
+        // which notes this batch cleared and which its own Undo restored.
+        const receipt = store.preference<{ document: string | null; ids: string[]; cleared: string[]; restored?: string[] }>(receiptKey);
         const confirmed = new Set(receipt?.ids);
         if (receipt && (receipt.document !== document || [...requested].some(note => !confirmed.has(note))))
           throw new Error('Invalid annotation batch.');
         const cleared = new Set(receipt?.cleared);
+        const restored = new Set(receipt?.restored);
         for (const noteId of requested) {
           try {
             const note = store.annotation(id, noteId);
@@ -1024,19 +1025,23 @@ export async function buildApp(options: AppOptions) {
               if (note.deletedAt !== undefined) throw new Error('This note has been deleted. Undo the deletion first.');
               store.saveAnnotation({ ...note, deletedAt: Date.now(), deletedBatch: batch });
               cleared.add(noteId);
-            } else if (note.deletedAt !== undefined) {
-              if (note.deletedBatch !== batch) throw new Error('Note not found.');
-              const { deletedAt: _, deletedBatch: _batch, ...restored } = note;
-              store.saveAnnotation(restored);
-              restoredIds.push(noteId);
+            } else {
+              if (note.deletedAt !== undefined) {
+                if (note.deletedBatch !== batch) throw new Error('Note not found.');
+                const { deletedAt: _, deletedBatch: _batch, ...active } = note;
+                store.saveAnnotation(active);
+                restored.add(noteId);
+              }
+              if (restored.has(noteId)) restoredIds.push(noteId);
             }
             result.changed.push(noteId);
           } catch (error) {
             result.failed.push({ id: noteId, error: error instanceof Error ? error.message : String(error) });
           }
         }
-        if (operation === 'clear' && (!receipt || cleared.size !== receipt.cleared.length))
-          store.savePreference(receiptKey, { document, ids: receipt?.ids || [...requested], cleared: [...cleared] });
+        if ((operation === 'clear' && (!receipt || cleared.size !== receipt.cleared.length)) ||
+            restored.size !== (receipt?.restored?.length ?? 0))
+          store.savePreference(receiptKey, { document, ids: receipt?.ids || [...requested], cleared: [...cleared], restored: [...restored] });
       });
       if (operation === 'undo-clear') result.restoredIds = restoredIds;
       result.annotations = store.annotations(id).filter(note => !note.taskId && scope.includes(note));

@@ -23,7 +23,7 @@ try {
       localStorage.setItem('papilot:language', 'en');
       localStorage.setItem('papilot:theme', dark ? 'dark' : 'light');
     }, mobile);
-    const errors = [], calls = [], notes = [];
+    const errors = [], calls = [], notes = [], batchRestorations = new Set();
     const project = { id: 'paper', name: 'Paper', path: '/fixture/paper' };
     const state = { version: 'test', projects: [project], tasks: [], requests: [], runtime: { connected: true, authenticated: true, models: [] } };
     const git = { branch: 'main', files: [] };
@@ -71,14 +71,15 @@ try {
             failed.push({ id, error: 'This note is being sent. Wait for the task to finish creating.' });
             continue;
           }
-          if (undo) {
+          if (undo && note.deletedBatch !== undefined) {
             assert.equal(note.deletedBatch, input.batch);
             delete note.deletedBatch;
-          } else note.deletedBatch = input.batch;
+            batchRestorations.add(id);
+          } else if (!undo) note.deletedBatch = input.batch;
           changed.push(id);
         }
-        if (mobile && calls.length === 1) return route.abort();
-        return json({ changed, ...(undo ? { restoredIds: changed } : {}), failed, annotations: visible() });
+        if ((mobile && calls.length === 1) || (!mobile && undo && calls.filter(call => call.undo).length === 1)) return route.abort();
+        return json({ changed, ...(undo ? { restoredIds: changed.filter(id => batchRestorations.has(id)) } : {}), failed, annotations: visible() });
       }
       throw Error(`Unexpected fixture request ${url.pathname}`);
     });
@@ -157,6 +158,15 @@ try {
         await expect(library.getByText('Added while the confirmation was open.')).toBeVisible();
       }
       await library.getByRole('button', { name: 'Undo', exact: true }).click();
+      if (!mobile) {
+        await expect.poll(() => calls.filter(call => call.undo).length).toBe(1);
+        await expect(library.getByRole('button', { name: 'Undo', exact: true })).toBeEnabled();
+        await reload();
+        await expect(firstMark).toHaveCount(1);
+        await library.getByRole('button', { name: 'Undo', exact: true }).click();
+        await expect.poll(() => calls.filter(call => call.undo).length).toBe(2);
+        assert.deepEqual(calls.at(-1), calls.at(-2));
+      }
       await expect(firstMark).toHaveCount(1);
       await expect(library.locator('[data-note="retained"]')).toHaveCount(1);
       assert.equal(calls.at(-1).batch, calls[0].batch);
