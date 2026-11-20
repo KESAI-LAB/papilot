@@ -10,6 +10,9 @@ import { overleafSignIn } from './overleaf-sign-in.js';
 import { typelessControl } from './typeless-control.js';
 
 const nix = process.env.PAPILOT_INSTALL_METHOD === 'nix';
+const packageUpdates = process.env.PAPILOT_DESKTOP_PACKAGE_UPDATES === '1' ||
+  (process.platform === 'linux' && app.isPackaged && fs.existsSync(path.join(process.resourcesPath, 'package-managed')));
+
 const releases = 'https://github.com/PapilotAI/papilot/releases';
 app.setName('Papilot');
 if (process.platform === 'win32') app.setAppUserModelId('ai.papilot.desktop');
@@ -178,7 +181,7 @@ else {
     const read = (file: string) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
     // Only packaged apps know their shell and install update layers.
     const bundle: Bundle = { root, version: read(path.join(root, 'package.json'))?.version || '',
-      fingerprint: !nix && app.isPackaged ? String(read(path.join(app.getAppPath(), 'package.json'))?.desktopFingerprint || '') : '' };
+      fingerprint: !nix && !packageUpdates && app.isPackaged ? String(read(path.join(app.getAppPath(), 'package.json'))?.desktopFingerprint || '') : '' };
     // A stable localhost origin preserves renderer drafts and preferences.
     const portFile = path.join(data, environment.kind === 'wsl' ? `desktop-port-wsl-${Buffer.from(environment.distribution).toString('hex')}.json` : 'desktop-port.json');
     let port = 0;
@@ -197,6 +200,7 @@ else {
     const backendEnv = (server: string) => {
       const env: NodeJS.ProcessEnv = backendEnvironment(node, server, data, inheritedEnv);
       if (port) env.PAPILOT_PORT = String(port);
+      if (packageUpdates) env.PAPILOT_DESKTOP_PACKAGE_UPDATES = '1';
       if (proxy) env.HTTPS_PROXY = env.HTTP_PROXY = proxy;
       env.NO_PROXY = [env.NO_PROXY || env.no_proxy, 'localhost', '127.0.0.1', '::1'].filter(Boolean).join(',');
       // Node's fetch and SDK HTTP clients can use the system proxy as well.
@@ -212,7 +216,7 @@ else {
           id: 'open-settings', label: 'Settings…', accelerator: 'Cmd+,',
           click: () => { showWindow(); window?.webContents.send('papilot:open-settings'); },
         }] : []),
-        { label: nix ? 'Updates managed by Nix' : 'Download Updates…', enabled: !nix, click: () => external(releases) },
+        { label: nix ? 'Updates managed by Nix' : packageUpdates ? 'Updates managed outside Papilot' : 'Download Updates…', enabled: !nix && !packageUpdates, click: () => external(releases) },
         { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' },
       ] },
       { label: 'File', submenu: [{ id: 'open-folder', label: 'Open Paper…', accelerator: 'CmdOrCtrl+O', click: () => void openFolder() }, { type: 'separator' }, process.platform === 'darwin' ? { role: 'close' } : { role: 'quit' }] },
@@ -240,7 +244,7 @@ else {
           port = Number(url.port); fs.writeFileSync(portFile, JSON.stringify(port));
           if (origin && url.origin !== origin) { origin = url.origin; void window?.loadURL(origin); }
         }
-        if (environment.kind === 'wsl' || nix || backend !== next || switching || quitting || (message as { type?: unknown } | null)?.type !== 'papilot:activate') return;
+        if (environment.kind === 'wsl' || nix || packageUpdates || backend !== next || switching || quitting || (message as { type?: unknown } | null)?.type !== 'papilot:activate') return;
         switching = true;
         void switchServer(data, bundle, message, server, () => next.stop(), launch).then(running => { server = running; })
           .catch(error => fatal(`Papilot could not restart after the update: ${error instanceof Error ? error.message : error}`))

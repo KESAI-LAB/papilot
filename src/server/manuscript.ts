@@ -91,8 +91,9 @@ export async function gitStatus(root: string): Promise<GitStatus> {
     }
   }
   // A merge in progress names the files whose conflict markers remain.
-  const merging = dir && fs.existsSync(path.join(dir, 'MERGE_HEAD'))
-    ? { message: readText(path.join(dir, 'MERGE_MSG')).split('\n')[0] || 'Merge', conflicts: parsed.files.filter(file => file.status === 'U' && conflictMarkers(root, file.path)).map(file => file.path) }
+  const mergeHead = dir && readText(path.join(dir, 'MERGE_HEAD')).trim();
+  const merging = mergeHead && dir
+    ? { head: mergeHead, message: readText(path.join(dir, 'MERGE_MSG')).split('\n')[0] || 'Merge', conflicts: parsed.files.filter(file => file.status === 'U' && conflictMarkers(root, file.path)).map(file => file.path) }
     : null;
   return { ...parsed, head: hash ? { hash, subject, date: Number(time) * 1000 } : null, remote: Boolean(remotes.trim()), merging };
 }

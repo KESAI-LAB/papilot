@@ -1,0 +1,105 @@
+name: Arch packaging
+
+on:
+  pull_request:
+    paths:
+      - 'packaging/aur/**'
+      - 'scripts/*aur*'
+      - '.github/workflows/aur.yml'
+      - '.github/workflows/release.yml'
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+    secrets:
+      AUR_SSH_PRIVATE_KEY:
+        required: false
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published stable tag to retry
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+      options: --shm-size=1g --security-opt seccomp=unconfined
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install build and desktop test tools
+        run: pacman -Syu --needed --noconfirm git github-cli nodejs jq desktop-file-utils scrot xdotool xorg-server-xvfb xorg-xauth
+      - uses: actions/checkout@v5
+      - name: Test publication against disposable Git repository
+        run: bash scripts/check-aur-publish.sh
+      - name: Prepare and validate the versioned recipe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          IS_PR: ${{ github.event_name == 'pull_request' }}
+        run: |
+          if [[ "$IS_PR" == true ]]; then
+            bash scripts/build-aur.sh "$PWD/packaging/aur" "$PWD/aur-output"
+          else
+            [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --json tagName,isDraft,isPrerelease,publishedAt,assets > "$RUNNER_TEMP/aur-release.json"
+            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern desktop.json --dir "$RUNNER_TEMP"
+            node scripts/prepare-aur.mts "$RELEASE_TAG" "$RUNNER_TEMP/aur-release.json" "$RUNNER_TEMP/desktop.json" "$PWD/aur-recipe"
+            bash scripts/build-aur.sh "$PWD/aur-recipe" "$PWD/aur-output" true "$PWD/packaging/aur"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: papilot-aur-recipe
+          path: aur-output/
+          if-no-files-found: error
+          include-hidden-files: true
+
+  publish:
+    if: github.event_name != 'pull_request' && github.repository == 'PapilotAI/papilot'
+    needs: validate
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    concurrency:
+      group: papilot-aur-stable
+      queue: max
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install publishing tools
+        run: pacman -Syu --needed --noconfirm git openssh
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: papilot-aur-recipe
+          path: aur-output
+      - name: Publish the verified recipe
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          AUR_KNOWN_HOSTS: ${{ vars.AUR_KNOWN_HOSTS }}
+        run: |
+          for file in PKGBUILD .SRCINFO papilot LICENSE; do
+            test -s "aur-output/$file"
+          done
+          if [[ -z "$AUR_SSH_PRIVATE_KEY" ]]; then
+            echo 'AUR recipe validated. Set the AUR SSH credential to enable publication.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          test -n "$AUR_KNOWN_HOSTS"
+          keys=$(mktemp -d)
+          trap 'rm -rf "$keys"' EXIT
+          umask 077
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > "$keys/key"
+          printf '%s\n' "$AUR_KNOWN_HOSTS" > "$keys/known_hosts"
+          unset AUR_SSH_PRIVATE_KEY
+          export GIT_SSH_COMMAND="ssh -i $keys/key -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$keys/known_hosts"
+          bash scripts/publish-aur.sh 'ssh://aur@aur.archlinux.org/papilot-bin.git' "$PWD/aur-output" | tee -a "$GITHUB_STEP_SUMMARY"

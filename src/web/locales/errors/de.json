@@ -475,5 +475,7 @@
   "Enable collaboration mode in Settings → Experiments first.": "Aktivieren Sie zuerst den Kooperationsmodus unter Einstellungen → Experimentelle Funktionen.",
   "The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.": "Der gewählte Agent für Commit-Nachrichten unterstützt keine schreibgeschützten Aufgaben. Wählen Sie unter Einstellungen → Git einen anderen.",
   "The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "Der gewählte Agent für Commit-Nachrichten ist nicht verfügbar. Verbinden Sie ihn unter Einstellungen → Agenten oder wählen Sie unter Einstellungen → Git einen anderen.",
-  "Invalid agent.": "Ungültiger Agent."
+  "Invalid agent.": "Ungültiger Agent.",
+  "The selected conflict-resolution agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "Der ausgewählte Agent zur Konfliktlösung ist nicht verfügbar. Verbinde ihn unter Einstellungen → Agenten oder wähle unter Einstellungen → Git einen anderen.",
+  "Choose a supported agent.": "Wähle einen unterstützten Agenten."
 }

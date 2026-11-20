@@ -1709,10 +1709,14 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   // The agent that writes a commit message or resolves a merge: the one the
   // author chose, or else the first that is signed in, with the chosen model
   // or the default one; light asks for the agent's small model when it has one.
-  private helper(choice: { agent?: AgentId; model?: string }, task: string, options: { light?: boolean; readOnly?: boolean; strict?: boolean } = {}) {
+  private helper(choice: { agent?: AgentId; model?: string }, task: string, options: { light?: boolean; readOnly?: boolean; strict?: 'commit-message' | 'conflict-resolution' } = {}) {
     const usable = (id: AgentId) => this.agents[id].ready && this.runtimes[id].authenticated && (!options.readOnly || this.agents[id].supportsReadOnlyTasks !== false);
     if (options.strict && choice.agent) {
-      if (!this.agents[choice.agent].ready || !this.runtimes[choice.agent].authenticated) throw new Error('The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.');
+      if (!this.agents[choice.agent].ready || !this.runtimes[choice.agent].authenticated) {
+        throw new Error(options.strict === 'commit-message'
+          ? 'The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.'
+          : 'The selected conflict-resolution agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.');
+      }
       if (options.readOnly && this.agents[choice.agent].supportsReadOnlyTasks === false) throw new Error('The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.');
     }
     const id = choice.agent && usable(choice.agent) ? choice.agent : AGENTS.find(usable);
@@ -1823,7 +1827,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
   // effort. The same changes get the message already
   // written, or being written, for them unless the author asks for a fresh one.
   async commitMessage(projectId: string, paths: string[], choice: { agent?: AgentId; model?: string; effort?: string; serviceTier?: string; fresh?: boolean; staged?: boolean; taskId?: string; language?: CommitMessageLanguage } = {}) {
-    const project = this.store.project(projectId), { id, model } = this.helper(choice, 'write a commit message', { readOnly: true, strict: true });
+    const project = this.store.project(projectId), { id, model } = this.helper(choice, 'write a commit message', { readOnly: true, strict: 'commit-message' });
     if (choice.model && model?.id !== choice.model) throw new Error('Choose an available model for this agent.');
     if (choice.effort && model && !model.efforts.includes(choice.effort)) throw new Error('This model does not support that reasoning effort.');
     if (choice.serviceTier && choice.serviceTier !== 'default' && (id !== 'codex' || choice.serviceTier !== model?.fastMode?.serviceTier)) throw new Error('Fast mode is not available for this model.');
@@ -1904,10 +1908,14 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     return this.enqueue(taskId, 'The manuscript has changed in overlapping passages. Prepare a merge suggestion for me to review; keep the manuscript unchanged.', 'merge-review-' + merge.id, false, { merge });
   }
   // Resolves a merge's conflicts in the manuscript checkout itself: the agent
-  // edits only the conflicted files, at the model's default reasoning, and
-  // leaves committing the merge to the author once they have read the diffs.
-  async resolveConflicts(projectId: string, choice: { agent?: AgentId; model?: string } = {}) {
-    const project = this.store.project(projectId), { id, model } = this.helper(choice, 'resolve conflicts');
+  // edits only the conflicted files and leaves committing the merge to the
+  // author once they have read the diffs.
+  async resolveConflicts(projectId: string, choice: { agent?: AgentId; model?: string; effort?: string; serviceTier?: string } = {}) {
+    const project = this.store.project(projectId), { id, model } = this.helper(choice, 'resolve conflicts', { strict: 'conflict-resolution' });
+    if (choice.model && model?.id !== choice.model) throw new Error('Choose an available model for this agent.');
+    if (choice.effort && !model?.efforts.includes(choice.effort)) throw new Error('This model does not support that reasoning effort.');
+    if (choice.serviceTier && choice.serviceTier !== 'default' && (id !== 'codex' || choice.serviceTier !== model?.fastMode?.serviceTier)) throw new Error('Fast mode is not available for this model.');
+    const effort = choice.effort || model?.defaultEffort, serviceTier = id === 'codex' ? choice.serviceTier : undefined;
     const { files, branch, upstream, ours, theirs } = await mergeConflicts(project.path);
     if (!files.length) throw new Error('No file has conflict markers left. Commit the merge.');
     const list = (items: string[]) => items.length ? items.map(item => `- ${item}`).join('\n') : '- (none listed)';
@@ -1917,7 +1925,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       `Commits from ${upstream} being merged in:\n${list(theirs)}`,
       'Resolve every conflict in those files, then reply with a short summary for the author: how you resolved each conflict, and any place where you had to choose one side.',
     ].join('\n\n');
-    const summary = await this.oneOff(id, { cwd: project.path, sandbox: 'workspace-write', instructions: mergeInstructions, prompt, model, effort: model?.defaultEffort, timeout: 600000, what: 'resolve the conflicts' });
+    const summary = await this.oneOff(id, { cwd: project.path, sandbox: 'workspace-write', instructions: mergeInstructions, prompt, model, effort, serviceTier, timeout: 600000, what: 'resolve the conflicts' });
     return { summary: summary.trim(), remaining: files.filter(file => conflictMarkers(project.path, file)), agent: id, git: await gitStatus(project.path) };
   }
   // A commit reads the working tree that accepting, rejecting and undoing

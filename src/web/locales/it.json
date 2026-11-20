@@ -1631,5 +1631,9 @@
   "Check your Typeless shortcut.": "Controlla la scorciatoia Typeless.",
   "Shortcut: {shortcut}": "Scorciatoia: {shortcut}",
   "Typeless voice notes": "Note vocali Typeless",
-  "Saved page {page}": "Pagina salvata {page}"
+  "Saved page {page}": "Pagina salvata {page}",
+  "Conflict-resolution agent": "Agente per risolvere i conflitti",
+  "Follow current conversation for conflicts": "Segui la conversazione corrente per i conflitti",
+  "Uses the current conversation or new-task settings. Your choice only applies to Git conflicts.": "Usa le impostazioni della conversazione corrente o della nuova attività. La scelta si applica solo ai conflitti Git.",
+  "Change conflict agent": "Cambia agente per i conflitti"
 }

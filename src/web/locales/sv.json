@@ -1631,5 +1631,9 @@
   "Check your Typeless shortcut.": "Kontrollera ditt Typeless-kortkommando.",
   "Shortcut: {shortcut}": "Kortkommando: {shortcut}",
   "Typeless voice notes": "Typeless-röstanteckningar",
-  "Saved page {page}": "Sparad sida {page}"
+  "Saved page {page}": "Sparad sida {page}",
+  "Conflict-resolution agent": "Agent för konfliktlösning",
+  "Follow current conversation for conflicts": "Följ den aktuella konversationen vid konflikter",
+  "Uses the current conversation or new-task settings. Your choice only applies to Git conflicts.": "Använder inställningarna för den aktuella konversationen eller den nya uppgiften. Valet gäller bara Git-konflikter.",
+  "Change conflict agent": "Byt konfliktagent"
 }

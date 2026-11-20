@@ -27,7 +27,8 @@ const runtime = { connected: true, authenticated: true, models: [{ id: 'model', 
 const snapshot = { version: 'test', csrf: 'fixture', projects: [project], tasks: [task], requests: [], runtime, runtimes: { codex: runtime, claude: { ...runtime } }, gitAvailable: true };
 const initialFiles = [{ path: 'main.tex', status: 'M', staged: false, unstaged: true, lines: [2, 4] }, { path: 'references.bib', status: '?', staged: false, unstaged: true }];
 const git = { branch: 'main', remote: true, upstream: 'origin/main', ahead: 1, behind: 0, head: { hash: 'abc1234', subject: 'Clarify the introduction', date: 1 }, files: structuredClone(initialFiles) };
-const actions = [], messageRequests = [];
+const actions = [], messageRequests = [], resolveRequests = [];
+let resolveGate, releaseResolution, resolveError;
 let messageError = null, messageGate = null;
 const note = { id: 'note-1', projectId: project.id, key: 'fixture', page: 0, rect: [72, 72, 200, 90], rects: [[72, 72, 200, 90]], source: null, quote: 'Fixture', comment: 'Original note', createdAt: 1 };
 let failNoteSave = false, gitRequests = 0;
@@ -58,6 +59,13 @@ const handleApi = async route => {
     note.comment = route.request().postDataJSON().comment; return json(note);
   }
   if (url.pathname.endsWith('/git')) return json(git);
+  if (url.pathname.endsWith('/git/resolve')) {
+    const choice = route.request().postDataJSON(); resolveRequests.push(choice);
+    if (resolveGate) await resolveGate;
+    if (resolveError) return route.fulfill({ status: 400, json: { error: resolveError } });
+    git.merging = { ...git.merging, conflicts: [] };
+    return json({ agent: choice.agent, summary: 'Merged the opening.', remaining: [], git });
+  }
   if (url.pathname.endsWith('/git/fetch')) return json({ git });
   if (url.pathname.endsWith('/git/history')) return json({ versions: [], next: null });
   if (url.pathname.endsWith('/git/overview')) return json({ worktrees: [{ path: project.path, current: true, branch: git.branch, head: git.head.hash, status: git }], commits: [{ ...git.head, parents: [], author: 'Author', refs: ['main'] }], truncated: false });
@@ -425,7 +433,7 @@ try {
   await otherTab.close();
   await message.fill('Keep my manual message');
   let picker = await settings();
-  await expect(page.getByRole('switch', { name: 'Follow current conversation' })).toBeChecked();
+  await expect(page.getByRole('switch', { name: 'Follow current conversation', exact: true })).toBeChecked();
   await expect(picker).toContainText('Model');
   await expect(picker).toContainText('High');
   const field = await picker.boundingBox(), advancedSwitch = await page.getByRole('switch', { name: 'Show advanced Git features', exact: true }).boundingBox();
@@ -437,7 +445,7 @@ try {
   await page.screenshot({ path: 'test-results/commit-agent-menu-desktop.png', animations: 'disabled' });
   await page.keyboard.press('Escape');
   await selectCommit(picker, 'codex', 'Other model', 'low');
-  await expect(page.getByRole('switch', { name: 'Follow current conversation' })).not.toBeChecked();
+  await expect(page.getByRole('switch', { name: 'Follow current conversation', exact: true })).not.toBeChecked();
   await page.screenshot({ path: 'test-results/commit-agent-settings-light.png' });
   await closeSettings();
   await expect(message).toHaveValue('Keep my manual message');
@@ -555,10 +563,80 @@ try {
   await expect(page.locator('.git-install-hint')).toHaveCount(0);
   await openGit();
   await expect(workspace).toBeVisible();
+  // The independent resolver follows the active paper's conversation by default.
+  git.merging = { conflicts: ['main.tex'], message: 'Merge origin/main' };
+  await openTask(); await openGit();
+  const merge = workspace.getByRole('group', { name: 'Merge in progress' });
+  await expect(merge.getByRole('button', { name: 'Resolve with Claude' })).toBeVisible();
+  await page.reload();
+  await expect(merge.getByRole('button', { name: 'Resolve with Claude' })).toBeVisible();
+  const changeResolver = merge.getByRole('button', { name: 'Change conflict agent', exact: true });
+  const followResolver = page.getByRole('switch', { name: 'Follow current conversation for conflicts', exact: true });
+  await changeResolver.click();
+  await expect(page.getByRole('region', { name: 'Conflict-resolution agent', exact: true })).toBeFocused();
+  await expect(followResolver).toBeChecked();
+  const resolver = page.getByRole('button', { name: 'Conflict-resolution agent', exact: true });
+  await resolver.click();
+  const resolverMenu = page.getByRole('dialog', { name: 'Conflict-resolution agent', exact: true });
+  await resolverMenu.getByRole('option', { name: 'Model · Codex', exact: true }).first().click();
+  await resolverMenu.getByRole('slider', { name: 'Reasoning effort' }).fill('1');
+  await resolverMenu.getByRole('switch', { name: 'Fast mode' }).setChecked(true);
+  await page.keyboard.press('Escape');
+  await expect(followResolver).not.toBeChecked();
+  await page.screenshot({ path: 'test-results/git-conflict-agent-settings.png', animations: 'disabled' });
+  await closeSettings();
+  await page.reload();
+  const resolveWithCodex = merge.getByRole('button', { name: 'Resolve with Codex', exact: true });
+  await expect(resolveWithCodex).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(changeResolver).toBeVisible();
+  await page.screenshot({ path: 'test-results/git-conflict-agent-mobile.png', animations: 'disabled' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  resolveError = 'The selected conflict-resolution agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.';
+  await resolveWithCodex.click();
+  await expect(workspace.getByRole('alert')).toContainText('conflict-resolution agent is unavailable');
+  resolveError = null;
+  resolveGate = new Promise(resolve => { releaseResolution = resolve; });
+  await resolveWithCodex.click();
+  await expect(merge.getByRole('button', { name: 'Codex is resolving…', exact: true })).toBeDisabled();
+  await changeResolver.click();
+  await followResolver.check();
+  await closeSettings();
+  await openTask(); await openGit();
+  await expect(merge.getByRole('button', { name: 'Codex is resolving…', exact: true })).toBeDisabled();
+  assert.equal(resolveRequests.length, 2, 'Returning to Git must not offer a second resolve action');
+  git.merging = { ...git.merging, conflicts: [] };
+  await page.clock.runFor(6000);
+  await expect(merge.getByText('Merging: no conflicts left')).toBeVisible();
+  await expect(merge.getByRole('button', { name: 'Codex is resolving…', exact: true })).toBeVisible();
+  resolveGate = null; releaseResolution();
+  await expect(merge.getByRole('button', { name: 'Commit merge', exact: true })).toBeVisible();
+  await expect(merge.getByLabel('Codex on the merge')).toContainText('Merged the opening.');
+  assert.deepEqual(resolveRequests, [
+    { agent: 'codex', model: 'model', effort: 'high', serviceTier: 'priority' },
+    { agent: 'codex', model: 'model', effort: 'high', serviceTier: 'priority' },
+  ]);
+  git.merging = null;
+  await page.clock.runFor(6000);
+  await expect(merge.getByRole('button', { name: 'Commit merge', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Conflicts resolved. Read the diffs, then commit the merge.')).toHaveCount(0);
+  git.merging = { conflicts: ['main.tex'], head: 'next-merge', message: 'Merge origin/main' };
+  await page.clock.runFor(6000);
+  await expect(merge.getByLabel('Codex on the merge')).toHaveCount(0);
+  await expect(merge.getByRole('button', { name: 'Resolve with Claude', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(merge.getByRole('button', { name: 'Resolve with Claude', exact: true })).toBeVisible();
+  snapshot.projects.push({ id: 'without-conversation', name: 'Another paper', path: '/tmp/another-paper', createdAt: 2 });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.getByRole('button', { name: 'Paper: Example paper' }).click();
+  await page.getByRole('menuitemradio', { name: 'Another paper', exact: true }).click();
+  await openGit();
+  await expect(merge.getByRole('button', { name: 'Resolve with Codex', exact: true })).toBeVisible();
   assert.deepEqual(errors, []);
   console.log('Git workspace passed: left-side controls, separate diff/history, navigation and draft restoration, live and slow diff refresh, long request and server-error recovery, pinned commit controls, staging/commit/push, responsive and short-window layouts, missing-Git gate and installation recovery.');
 } catch (error) {
   if (errors.length) console.error('Page errors:', errors);
   await page.screenshot({ path: 'test-results/git-workspace-failure.png' });
   throw error;
-} finally { await browser.close(); await server.close(); }
+} finally { releaseResolution?.(); await browser.close(); await server.close(); }

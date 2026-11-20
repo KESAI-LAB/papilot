@@ -11,7 +11,7 @@ import { loadIndirectChanges, saveIndirectChanges, useIndirectChanges } from './
 import { loadNoteAlternatives } from './note-option-preferences.ts';
 import { NoteOptionSettings } from './note-option-settings.tsx';
 import { agentLabel, offeredAgents } from './agent-choice.ts';
-import { CommitAgentSettings } from './commit-agent-settings.tsx';
+import { CommitAgentSettings, ConflictAgentSettings } from './commit-agent-settings.tsx';
 import type { CommitMessageChoice } from './commit-agent-preferences.ts';
 import type { RefreshUsage } from './usage.tsx';
 import { saveAdvancedGit, useAdvancedGit, saveCommitMessageLanguage, useCommitMessageLanguage } from './git-preferences.ts';
@@ -35,22 +35,24 @@ import { OverleafAccounts } from './overleaf.tsx';
 import type { OverleafState } from '../shared.ts';
 
 type SettingsPage = 'general' | 'appearance' | 'notifications' | 'review' | 'quickNotes' | 'shortcuts' | 'about' | 'licenses' | 'agents' | 'git' | 'latex' | 'skills' | 'updates' | 'overleaf' | 'experiments';
-export type SettingsInitialPage = 'general' | 'shortcuts' | 'quickNotes' | 'git' | 'latex' | 'agents';
+export type SettingsInitialPage = 'general' | 'shortcuts' | 'quickNotes' | 'git' | 'git-conflicts' | 'latex' | 'agents';
 type SettingsEntry = { page: SettingsPage; label: string; icon: string; keywords?: string };
 
 // Shared with the review page's bibliography checks.
 const REFERENCE_CHECKS = 'papilot:review:references';
 
-export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, diagnostics, requirements, skills, updates, modelDefaults, workflow, overleaf, commitWriter, refreshUsage, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; diagnostics?: DiagnosticsSettingsProps; requirements?: { state: RequirementsState; online: boolean }; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; commitWriter: CommitMessageChoice; refreshUsage?: RefreshUsage; workflow?: CollaborationSettingsProps; overleaf?: { api: UpdateApi; state: OverleafState | undefined }; initialPage?: SettingsInitialPage }) {
+export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppearance, onClose, diagnostics, requirements, skills, updates, modelDefaults, workflow, overleaf, commitWriter, conflictWriter, refreshUsage, initialPage = 'general' }: AppearanceSettingsProps & { onClose: () => void; diagnostics?: DiagnosticsSettingsProps; requirements?: { state: RequirementsState; online: boolean }; skills?: SkillLibraryOptions; updates?: UpdateApi; modelDefaults: ModelDefaultSettingsProps; commitWriter: CommitMessageChoice; conflictWriter: CommitMessageChoice; refreshUsage?: RefreshUsage; workflow?: CollaborationSettingsProps; overleaf?: { api: UpdateApi; state: OverleafState | undefined }; initialPage?: SettingsInitialPage }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const skillControls = useRef<SkillLibraryControls>(null);
+  const focusConflictAgent = useRef(initialPage === 'git-conflicts');
   const { choice } = useLanguage();
   const indirectChanges = useIndirectChanges(), reviewView = useDefaultReviewView();
   const advancedGit = useAdvancedGit();
+  const gitAgents = diagnostics ? offeredAgents(diagnostics.runtimes).map(value => ({ value, label: agentLabel(value), runtime: diagnostics.runtimes[value] })) : modelDefaults.agents;
   const commitLanguage = useCommitMessageLanguage();
   useEffect(loadIndirectChanges, []);
   useEffect(loadNoteAlternatives, []);
-  const [page, setPage] = useState<SettingsPage>(initialPage);
+  const [page, setPage] = useState<SettingsPage>(initialPage === 'git-conflicts' ? 'git' : initialPage);
   const [showCategories, setShowCategories] = useState(() => initialPage === 'general' && window.matchMedia('(max-width: 760px)').matches);
   const [query, setQuery] = useState('');
   const [environment, setEnvironment] = useState('');
@@ -65,6 +67,11 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
   useEffect(() => {
     const element = dialog.current!;
     element.querySelector('.settings-content')!.scrollTop = 0;
+    if (focusConflictAgent.current) {
+      focusConflictAgent.current = false;
+      const resolver = element.querySelector<HTMLElement>('#git-conflict-agent');
+      if (resolver) { resolver.focus(); return; }
+    }
     const target = showCategories ? element.querySelector<HTMLElement>('.settings-category[aria-current="page"]') || element.querySelector<HTMLInputElement>('.settings-search input') : element.querySelector<HTMLElement>('#settings-title');
     target?.focus();
   }, [page, showCategories]);
@@ -94,7 +101,7 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
       ...(overleaf ? [{ page: 'overleaf' as const, label: 'Overleaf', icon: 'overleaf', keywords: `${t('Sync with Overleaf…')} ${t('Sign in')} ${t('Sign out')}` }] : []),
     ] },
     { label: t('Runtime'), entries: [
-      { page: 'git', label: 'Git', icon: 'git', keywords: `${t('Version history')} ${t('Show advanced Git features')} ${t('Commit-message agent')} ${t('Commit message language')}` },
+      { page: 'git', label: 'Git', icon: 'git', keywords: `${t('Version history')} ${t('Show advanced Git features')} ${t('Commit-message agent')} ${t('Commit message language')} ${t('Conflict-resolution agent')}` },
       ...(diagnostics ? [
         { page: 'agents', label: t('Agents'), icon: 'terminal', keywords: `${t('Agent configuration')} ${t('Available models')} ${t('Usage & limits')}` },
         { page: 'latex', label: 'LaTeX', icon: 'paper', keywords: 'TeX Live MacTeX BasicTeX MiKTeX' },
@@ -177,8 +184,11 @@ export function SettingsDialog({ theme, onTheme, resolved, appearance, onAppeara
         {page === 'agents' && diagnostics && <DiagnosticsSettings {...diagnostics}/>}
         {page === 'git' && <div className="settings-page">
           {requirements && <section className="settings-card settings-card-body"><ToolRequirement tool="git" {...requirements}/></section>}
+          <section id="git-conflict-agent" className="settings-card" tabIndex={-1} aria-label={t('Conflict-resolution agent')}>
+            <ConflictAgentSettings refreshUsage={refreshUsage} current={conflictWriter} agents={gitAgents} reconnect={diagnostics?.reconnect}/>
+          </section>
           <section className="settings-card">
-            <CommitAgentSettings refreshUsage={refreshUsage} current={commitWriter} agents={diagnostics ? offeredAgents(diagnostics.runtimes).map(value => ({ value, label: agentLabel(value), runtime: diagnostics.runtimes[value] })) : modelDefaults.agents} reconnect={diagnostics?.reconnect}/>
+            <CommitAgentSettings refreshUsage={refreshUsage} current={commitWriter} agents={gitAgents} reconnect={diagnostics?.reconnect}/>
             <div className="settings-row settings-choice">
               <div className="settings-text"><span className="settings-name">{t('Commit message language')}</span><p>{t('For generated messages. Auto follows recent commits, or uses English when there are none.')}</p></div>
               <ChipSelect label={t('Commit message language')} value={commitLanguage} onChange={value => saveCommitMessageLanguage(value as CommitMessageLanguage)} options={[{ value: 'auto', label: t('Auto') }, ...LANGUAGES.map(item => ({ value: item.id, label: item.name }))]}/>
