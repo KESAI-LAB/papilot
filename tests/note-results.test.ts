@@ -133,6 +133,19 @@ test('a literal citation elsewhere cannot override an anchored generated citatio
   assert.deepEqual(check(' '), [], 'identical printed passages on the same line are ambiguous');
 });
 
+test('a selection wholly inside inline math links to its own source edit', () => {
+  for (const expression of ['$x = 1$', String.raw`\(x = 1\)`]) {
+    const before = `The solution is ${expression}. Another estimate is stable.`;
+    const after = before.replace('x = 1', 'x = 2').replace('stable', 'robust');
+    const repo = { changedFiles: () => ['main.tex'], blobs: (rev: string) => ({ 'main.tex': Buffer.from(rev === 'old' ? before : after) }) } as unknown as Parameters<typeof diffUnits>[0];
+    const units = diffUnits(repo, 'old', 'new').map(unit => ({ ...unit, old_context: { text: before, start: 0 } }));
+    const round: NoteRound = { round: 1, units, sections: [], loose: [{ kind: 'change', units: units.map(unit => unit.id), before: [{ text: [{ text: 'The solution is x = 1. Another estimate is stable.' }] }] }] };
+    const note = { where: 'main.tex line 1', quote: 'x = 1', comment: 'Correct the result.' };
+    assert.deepEqual(matchNoteChanges(note, round, {}).flatMap(change => change.units), [units[0].id]);
+    assert.deepEqual(matchNoteChanges({ ...note, quote: 'x = 3' }, round, {}), []);
+  }
+});
+
 test('a literal score cannot choose between identical rendered passages with different generated spans', () => {
   const before = 'The value is $fast$ and stable. The value is fast and $stable$.';
   const after = before.replace('and stable.', 'and robust.').replace('is fast and', 'is efficient and');

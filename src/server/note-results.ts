@@ -8,7 +8,7 @@ export interface NoteRound {
   round: number;
   before?: string;
   after?: string;
-  units: { id: string; file: string; old_start: number; old_end: number; new_start?: number; old_text: string; new_text: string; truncated?: boolean; whole_file?: boolean; kind?: string; formattingFor?: string; text_ops?: Op[]; old_context?: NoteContext; new_context?: NoteContext; continued_ranges?: [number, number][] }[];
+  units: NoteUnit[];
   proposal_edits?: Record<string, Op[]>;
   sections: { blocks: NoteBlock[] }[];
   loose: NoteBlock[];
@@ -16,7 +16,23 @@ export interface NoteRound {
 type NoteStrip = { text?: { text: string }[] };
 type NoteContext = { text: string; start: number; source_hash?: string };
 interface NoteBlock { kind: string; units?: string[]; before?: NoteStrip[]; after?: NoteStrip[]; identical?: boolean }
-type NoteUnit = NoteRound['units'][number];
+interface NoteUnit {
+  id: string;
+  file: string;
+  old_start: number;
+  old_end: number;
+  new_start?: number;
+  old_text: string;
+  new_text: string;
+  truncated?: boolean;
+  whole_file?: boolean;
+  kind?: string;
+  formattingFor?: string;
+  text_ops?: Op[];
+  old_context?: NoteContext;
+  new_context?: NoteContext;
+  continued_ranges?: [number, number][];
+}
 const changeBlocks = (detail: NoteRound) => [...detail.sections.flatMap(section => section.blocks.filter(block => block.kind === 'change')), ...detail.loose];
 const renderedQuote = (strips: NoteStrip[] | undefined, quote: string) => normalize((strips || []).flatMap(strip => (strip.text || []).map(line => line.text)).join(' ')).includes(quote);
 const GENERATED = '\x01';
@@ -25,10 +41,10 @@ const normalize = (text: string) => text.normalize('NFKC').toLowerCase().replace
 // Project printable arguments to source offsets. Unknown commands and their
 // arguments remain boundaries. Citations and inline math can only stand for
 // generated text when the actual PDF and a source location corroborate it.
-function quoteSource(text: string, start: number) {
+function quoteSource(text: string, start: number, literalMath = false): { normalized: string; letters: number[]; ends: number[]; hasMath: boolean } {
   const letters: number[] = [];
   const ends: number[] = [];
-  let normalized = '';
+  let normalized = '', hasMath = false;
   const marker = (value: string, offset: number) => {
     normalized += value;
     letters.push(start + offset);
@@ -50,9 +66,20 @@ function quoteSource(text: string, start: number) {
     const math = text[i] === '$' && text[i - 1] !== '$' ? text.slice(i).match(/^\$(?!\$)(?:\\[^\n]|[^$\\\n])+\$/)?.[0]
       : text.startsWith('\\(', i) ? text.slice(i).match(/^\\\((?:\\(?!\))[^\n]|[^\\\n])*\\\)/)?.[0] : undefined;
     if (math) {
-      marker(GENERATED, i);
+      hasMath = true;
+      if (literalMath) {
+        const delimiter = text[i] === '$' ? 1 : 2;
+        const expression = quoteSource(math.slice(delimiter, -delimiter), start + i + delimiter, true);
+        normalized += expression.normalized;
+        for (let offset = 0; offset < expression.letters.length; offset++) {
+          letters.push(expression.letters[offset]);
+          ends.push(expression.ends[offset]);
+        }
+      } else {
+        marker(GENERATED, i);
+        ends[ends.length - 1] = start + i + math.length;
+      }
       i += math.length;
-      ends[ends.length - 1] = start + i;
       continue;
     }
     if (text[i] === '\\') {
@@ -85,7 +112,7 @@ function quoteSource(text: string, start: number) {
     }
     i += char.length;
   }
-  return { normalized, letters, ends };
+  return { normalized, letters, ends, hasMath };
 }
 
 type QuoteRange = { low: number; high: number };
@@ -141,7 +168,10 @@ function sourceQuote(note: NoteSummary, unit: NoteUnit, proposed: boolean, inPdf
   if (!unit.text_ops?.length || !context || !note.quote.trim()) return undefined;
   const quote = normalize(note.quote);
   if (!quote) return null;
-  const { text, start } = context, source = quoteSource(text, start), { normalized, letters, ends } = source;
+  const { text, start } = context, source = quoteSource(text, start);
+  // Simple mathematics can reproduce the PDF selection literally, down to
+  // an individual operand. Opaque commands still cannot supply a match.
+  const { normalized, letters, ends } = inPdf && source.hasMath ? quoteSource(text, start, true) : source;
   let occurrences: QuoteRange[] = [];
   for (let at = normalized.indexOf(quote); at >= 0; at = normalized.indexOf(quote, at + 1)) {
     occurrences.push({ low: letters[at], high: ends[at + quote.length - 1] });
@@ -156,9 +186,9 @@ function sourceQuote(note: NoteSummary, unit: NoteUnit, proposed: boolean, inPdf
     // An earlier review's source lines only apply to its own revision.
     occurrences = occurrences.filter(({ low, high }) => places.some(place => Math.max(place.lines[0], lineAt(low)) <= Math.min(place.lines[1], lineAt(high - 1))));
   }
-  if (inPdf && places.length && normalized.includes(GENERATED)) {
+  if (inPdf && places.length && source.normalized.includes(GENERATED)) {
     const generated = generatedRanges(source, quote, ({ low, high }) => places.some(place => place.lines[0] <= lineAt(low) && lineAt(high - 1) <= place.lines[1]));
-    occurrences.push(...generated);
+    occurrences.push(...generated.filter(range => !occurrences.some(exact => range.low <= exact.low && exact.high <= range.high)));
   }
   return occurrences.length > 1 ? 'ambiguous' : occurrences[0] ?? null;
 }
@@ -252,8 +282,10 @@ function translatedQuote({ low, high }: QuoteRange, edits: Op[]) {
 
 function continuedProposal(note: NoteSummary, previous: NoteRound, detail: NoteRound): Set<string> | undefined {
   const quote = normalize(note.quote), previousBlocks = changeBlocks(previous);
+  const files = new Set(noteAnchor(note).sources.map(place => place.file));
   let ambiguous = false;
   const selected = previous.units.flatMap(unit => {
+    if (!files.has(unit.file) || !unit.new_context) return [];
     const range = sourceQuote(note, unit, true, previousBlocks.some(block => block.units?.includes(unit.id) && renderedQuote(block.after, quote)));
     if (range === 'ambiguous') { ambiguous = true; return []; }
     return range ? [{ unit, range }] : [];
