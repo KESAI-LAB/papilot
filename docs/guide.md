@@ -154,11 +154,11 @@ From a source checkout, use `npm run doctor -- --data .papilot` (or `node bin/pa
 
 Choose **Settings → Git → Commit message language → English** to generate English commit messages even when task titles and recent commits are in another language. You can also select any of the other listed languages. The choice is saved in this browser or desktop app and applies to Version Management, the staged-commit dialog and task commits, independently of the interface language.
 
-**Auto** (the default) follows recent commit subjects and uses English when none are supplied. Changing the setting affects the next generation; existing drafts and manually written messages stay as they are. Use **Generate commit message** to replace a draft in the selected language.
+**Auto** (the default) follows recent commit subjects and uses English when the repository has none. After you finish reviewing a task, Papilot prepares a suggestion in the selected language. You can enter your own message or apply the changes while the suggestion is being written. Changing the language affects the next generation. Use **Generate commit message** to replace an existing draft.
 
 ## Reading with anchors
 
-The PDF toolbar starts expanded each time you open the view. The arrow at the top of the desktop toolbar folds the tools away, and the floating down arrow in the same place opens them again. On phones, use the arrow at the end of the bottom toolbar or swipe it down to collapse it, then tap the up arrow to reopen it.
+The PDF toolbar starts expanded each time you open the view. On desktop, it stays in place as you choose a marking tool or open a note. The arrow at the top folds the tools away, and the floating down arrow in the same place opens them again. On phones, use the arrow at the end of the bottom toolbar or swipe it down to collapse it, then tap the up arrow to reopen it.
 
 On desktop, saved anchors appear as numbered buttons at the end of the PDF tool rail. Click a number to jump there, hover or focus to see its name, and use **+** to save the current passage. Each compact numbered anchor shows a **×** in its upper-right corner on hover or keyboard focus to delete it directly; touch input keeps the delete action visible. On phones, **+** also saves the current passage directly, and **Anchors** (the bookmark icon) opens the compact list. The bookmark button also opens naming and deletion controls on desktop: click a pencil to rename in place; Enter or leaving the row saves it, and Escape cancels. The trash button removes an anchor.
 
