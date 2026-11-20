@@ -56,6 +56,16 @@ test('a title word links to its definition even when SyncTeX points at maketitle
   assert.deepEqual(matchNoteChanges({ ...title, quote: 'LaTeX' }, ambiguous, {}), [], 'a short repeated word is not enough to select a change');
 });
 
+test('an unrelated maketitle edit cannot suppress a title quote matched at its definition', () => {
+  const before = String.raw`\title{Papilot for LaTeX Manuscripts}` + '\n\\maketitle\n';
+  const after = before.replace('Manuscripts', 'Papers').replace('\\maketitle', '\\newpage\\maketitle');
+  const repo = { changedFiles: () => ['main.tex'], blobs: (rev: string) => ({ 'main.tex': Buffer.from(rev === 'old' ? before : after) }) } as unknown as Parameters<typeof diffUnits>[0];
+  const units = diffUnits(repo, 'old', 'new').map(unit => ({ ...unit, old_context: { text: before, start: 0 } }));
+  const round: NoteRound = { round: 1, units, sections: [], loose: units.map(unit => ({ kind: 'change', units: [unit.id] })) };
+  const links = matchNoteChanges({ where: 'Page 1 · main.tex line 2', quote: 'Manuscripts', comment: 'Change this word.' }, round, {});
+  assert.deepEqual(links.map(change => [change.match, change.units]), [['quote', [units[0].id]]]);
+});
+
 test('note links stay with the published run, never the queued follow-up or latest unrelated round', async () => {
   const task = { id: 'task', name: 'p-task', status: 'reviewing', review: { round: 3 } } as Task;
   const run = { id: 'run1', taskId: task.id, reviewRound: 1, status: 'completed' } as Run;

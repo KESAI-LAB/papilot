@@ -134,17 +134,17 @@ function generatedRanges(source: ReturnType<typeof quoteSource>, quote: string, 
 
 // Exact source offsets distinguish edits sharing one line and one PDF crop.
 // Legacy rounds without these offsets retain their existing source association.
-function quotedUnit(note: NoteSummary, unit: NoteUnit, proposed: boolean, inPdf: boolean, requireLocation = proposed): boolean | null {
+function sourceQuote(note: NoteSummary, unit: NoteUnit, proposed: boolean, inPdf: boolean, requireLocation = proposed): QuoteRange | 'ambiguous' | null | undefined {
   const context = proposed ? unit.new_context : unit.old_context;
-  if (!unit.text_ops?.length || !context || !note.quote.trim()) return null;
+  if (!unit.text_ops?.length || !context || !note.quote.trim()) return undefined;
   const quote = normalize(note.quote);
-  if (!quote) return false;
+  if (!quote) return null;
   const { text, start } = context, source = quoteSource(text, start), { normalized, letters, ends } = source;
   let occurrences: QuoteRange[] = [];
   for (let at = normalized.indexOf(quote); at >= 0; at = normalized.indexOf(quote, at + 1)) {
     occurrences.push({ low: letters[at], high: ends[at + quote.length - 1] });
   }
-  const anchor = noteAnchor(note), from = proposed ? 3 : 1, to = proposed ? 4 : 2;
+  const anchor = noteAnchor(note), from = proposed ? 3 : 1;
   const origin = unit.text_ops[0][from], line = proposed ? unit.new_start : unit.old_start;
   const places = (proposed || anchor.round === undefined) && line !== undefined && origin >= start && origin <= start + text.length
     ? anchor.sources.filter(place => place.file === unit.file) : [];
@@ -158,34 +158,34 @@ function quotedUnit(note: NoteSummary, unit: NoteUnit, proposed: boolean, inPdf:
     const generated = generatedRanges(source, quote, ({ low, high }) => places.some(place => place.lines[0] <= lineAt(low) && lineAt(high - 1) <= place.lines[1]));
     occurrences.push(...generated);
   }
-  // An unresolved or ambiguous quote must never widen to all edits on a line.
-  if (occurrences.length !== 1) return false;
-  const { low, high } = occurrences[0];
-  return unit.text_ops.some(op => {
-    const a = op[from], b = op[to];
-    return a === b ? low <= a && a <= high : a < high && b > low;
-  });
+  return occurrences.length > 1 ? 'ambiguous' : occurrences[0] ?? null;
 }
+
+const touchesQuote = ({ low, high }: QuoteRange, a: number, b: number) =>
+  a === b ? low <= a && a <= high : a < high && b > low;
 
 export function matchNoteChanges(note: NoteSummary, detail: NoteRound, decisions: Record<string, string>, continued?: Set<string>): NoteChange[] {
   const anchor = noteAnchor(note), quote = normalize(note.quote);
   const units = new Map(detail.units.map(unit => [unit.id, unit]));
   const blocks = changeBlocks(detail);
-  let hasSourceCandidate = false;
+  let ambiguousSource = false;
   const matches = blocks.flatMap<NoteChange>((block, stop) => {
     const known = (block.units || []).map(id => units.get(id)).filter(unit => Boolean(unit) && unit!.old_text !== unit!.new_text) as NoteRound['units'];
     // Manuscript positions refer to the source before this revision. Review
     // selections refer to an older proposal, so prefer their actual PDF text.
     const source = anchor.round === undefined ? known.filter(unit => anchor.sources.some(place => place.file === unit.file && Math.max(place.lines[0], unit.old_start) <= Math.min(place.lines[1], unit.old_end))) : [];
-    hasSourceCandidate ||= source.length > 0;
     const sameFiles = anchor.sources.length ? known.filter(unit => anchor.sources.some(place => place.file === unit.file)) : known;
     const inPdf = Boolean(quote) && renderedQuote(block.before, quote);
     const textMatches = quote.length >= 4 && sameFiles.length && (inPdf || sameFiles.some(unit => normalize(unit.old_text).includes(quote)));
     // Region notes can lack text; their location is the remaining evidence.
     const region = !quote && anchor.round !== undefined ? sameFiles.filter(unit => anchor.sources.some(place => place.file === unit.file && Math.max(place.lines[0], unit.old_start) <= Math.min(place.lines[1], unit.old_end))) : [];
     const candidates = source.length ? source : textMatches ? sameFiles : region;
-    const matched = continued ? known.filter(unit => continued.has(unit.id))
-      : candidates.filter(unit => quotedUnit(note, unit, false, inPdf, Boolean(source.length)) !== false);
+    const matched = continued ? known.filter(unit => continued.has(unit.id)) : candidates.filter(unit => {
+      const range = sourceQuote(note, unit, false, inPdf, Boolean(source.length));
+      if (range === 'ambiguous') { ambiguousSource ||= source.length > 0; return false; }
+      // Older rounds lack exact offsets and retain their source association.
+      return range === undefined || Boolean(range && unit.text_ops!.some(([, a, b]) => touchesQuote(range, a, b)));
+    });
     // The engine verifies these as invisible wrapping of the same paragraph.
     // A note decision includes its formatting so no empty pending card remains.
     const matchedIds = new Set(matched.map(unit => unit.id));
@@ -197,7 +197,7 @@ export function matchNoteChanges(note: NoteSummary, detail: NoteRound, decisions
   });
   // A short word needs a unique location. This also covers titles and macros:
   // SyncTeX may point at their use while the changed definition lives elsewhere.
-  return hasSourceCandidate || (quote.length < 8 && matches.filter(match => match.match === 'quote').length > 1)
+  return ambiguousSource || matches.some(match => match.match === 'source') || (quote.length < 8 && matches.filter(match => match.match === 'quote').length > 1)
     ? matches.filter(match => match.match === 'source') : matches;
 }
 
@@ -229,27 +229,38 @@ export function readRound(client: ReviewClient, task: Pick<Task, 'name'>, round:
   const detail = client.get<NoteRound>(route);
   rounds.set(key, { at: now, detail });
   // Only a finished rendering is shared; a failed read is never kept.
-  detail.then(value => { if ((value as { rendering?: string }).rendering) rounds.delete(key); }, () => rounds.delete(key));
+  detail.then(value => { if (!value || (value as { rendering?: string }).rendering) rounds.delete(key); }, () => rounds.delete(key));
   return detail;
 }
 
 function continuedProposal(note: NoteSummary, previous: NoteRound, detail: NoteRound): Set<string> | undefined {
   const quote = normalize(note.quote), previousBlocks = changeBlocks(previous);
-  const selected = previous.units.filter(unit => quotedUnit(note, unit, true,
-    previousBlocks.some(block => block.units?.includes(unit.id) && renderedQuote(block.after, quote))) === true);
+  let ambiguous = false;
+  const selected = previous.units.flatMap(unit => {
+    const range = sourceQuote(note, unit, true, previousBlocks.some(block => block.units?.includes(unit.id) && renderedQuote(block.after, quote)));
+    if (range === 'ambiguous') { ambiguous = true; return []; }
+    return range && unit.text_ops!.some(([, , , a, b]) => touchesQuote(range, a, b)) ? [{ unit, range }] : [];
+  });
+  if (ambiguous) return new Set();
   if (!selected.length) return undefined;
   // A resolved proposal is the reference. The same words elsewhere in the
   // latest baseline cannot substitute for that location.
   const continued = new Set<string>();
-  for (const unit of selected) {
-    const matches = detail.units.filter(next => {
-      if (unit.file !== next.file || !next.text_ops?.length) return false;
-      const atRanges = (ranges?: [number, number][]) => ranges?.length === next.text_ops!.length
-        && ranges.every(([a, b], i) => next.text_ops![i][1] === a && next.text_ops![i][2] === b);
-      return (next.old_text === unit.new_text && atRanges(unit.accepted_ranges))
-        || (next.old_text === unit.old_text && next.new_text !== unit.new_text && atRanges(unit.continued_ranges));
+  for (const { unit, range } of selected) {
+    const accepted = unit.accepted_ranges?.flatMap(([start], i) => {
+      const [, , , a, b] = unit.text_ops![i];
+      return touchesQuote(range, a, b) ? [{ low: start + Math.max(range.low - a, 0), high: start + Math.min(range.high - a, b - a) }] : [];
+    }) ?? [];
+    const inFile = detail.units.filter(next => unit.file === next.file && next.text_ops?.length);
+    for (const next of inFile) {
+      if (next.text_ops!.some(([, a, b]) => accepted.some(range => touchesQuote(range, a, b)))) continued.add(next.id);
+    }
+    const pending = inFile.filter(next => {
+      const ranges = unit.continued_ranges;
+      return next.old_text === unit.old_text && next.new_text !== unit.new_text
+        && ranges?.length === next.text_ops!.length && ranges.every(([a, b], i) => next.text_ops![i][1] === a && next.text_ops![i][2] === b);
     });
-    if (matches.length === 1) continued.add(matches[0].id);
+    if (pending.length === 1) continued.add(pending[0].id);
   }
   return continued;
 }
