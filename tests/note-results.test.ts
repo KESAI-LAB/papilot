@@ -56,6 +56,16 @@ test('a title word links to its definition even when SyncTeX points at maketitle
   assert.deepEqual(matchNoteChanges({ ...title, quote: 'LaTeX' }, ambiguous, {}), [], 'a short repeated word is not enough to select a change');
 });
 
+test('an unrelated maketitle edit cannot suppress a title quote matched at its definition', () => {
+  const before = String.raw`\title{Papilot for LaTeX Manuscripts}` + '\n\\maketitle\n';
+  const after = before.replace('Manuscripts', 'Papers').replace('\\maketitle', '\\newpage\\maketitle');
+  const repo = { changedFiles: () => ['main.tex'], blobs: (rev: string) => ({ 'main.tex': Buffer.from(rev === 'old' ? before : after) }) } as unknown as Parameters<typeof diffUnits>[0];
+  const units = diffUnits(repo, 'old', 'new').map(unit => ({ ...unit, old_context: { text: before, start: 0 } }));
+  const round: NoteRound = { round: 1, units, sections: [], loose: units.map(unit => ({ kind: 'change', units: [unit.id] })) };
+  const links = matchNoteChanges({ where: 'Page 1 · main.tex line 2', quote: 'Manuscripts', comment: 'Change this word.' }, round, {});
+  assert.deepEqual(links.map(change => [change.match, change.units]), [['quote', [units[0].id]]]);
+});
+
 test('note links stay with the published run, never the queued follow-up or latest unrelated round', async () => {
   const task = { id: 'task', name: 'p-task', status: 'reviewing', review: { round: 3 } } as Task;
   const run = { id: 'run1', taskId: task.id, reviewRound: 1, status: 'completed' } as Run;
@@ -105,6 +115,45 @@ test('formatted PDF quotes select only their exact source edits, and unresolved 
     const hidden = { ...round, units: units.map(unit => ({ ...unit, old_context: { text: before + `${command}{hidden phrase}`, start: 0 } })) };
     assert.deepEqual(matchNoteChanges({ ...annotation, quote: 'hidden phrase' }, hidden, {}), [], 'macro arguments are not proof of printed text');
   }
+});
+
+test('a literal citation elsewhere cannot override an anchored generated citation', () => {
+  const rendered = 'The method is fast according to [1].';
+  const latex = String.raw`The method is fast according to \cite{ref}.`;
+  const check = (separator: string) => {
+    const before = latex + separator + rendered;
+    const after = before.replace('fast', 'efficient').replace('fast', 'robust');
+    const repo = { changedFiles: () => ['main.tex'], blobs: (rev: string) => ({ 'main.tex': Buffer.from(rev === 'old' ? before : after) }) } as unknown as Parameters<typeof diffUnits>[0];
+    const units = diffUnits(repo, 'old', 'new').map(unit => ({ ...unit, old_context: { text: before, start: 0 } }));
+    const round: NoteRound = { round: 1, units, sections: [], loose: units.map(unit => ({ kind: 'change', units: [unit.id], before: [{ text: [{ text: rendered }] }] })) };
+    const annotation = { where: 'main.tex line 1', quote: rendered, comment: 'Clarify.' };
+    return matchNoteChanges(annotation, round, {}).flatMap(change => change.units);
+  };
+  assert.deepEqual(check('\n'), ['c001']);
+  assert.deepEqual(check(' '), [], 'identical printed passages on the same line are ambiguous');
+});
+
+test('a selection wholly inside inline math links to its own source edit', () => {
+  for (const expression of ['$x = 1$', String.raw`\(x = 1\)`]) {
+    const before = `The solution is ${expression}. Another estimate is stable.`;
+    const after = before.replace('x = 1', 'x = 2').replace('stable', 'robust');
+    const repo = { changedFiles: () => ['main.tex'], blobs: (rev: string) => ({ 'main.tex': Buffer.from(rev === 'old' ? before : after) }) } as unknown as Parameters<typeof diffUnits>[0];
+    const units = diffUnits(repo, 'old', 'new').map(unit => ({ ...unit, old_context: { text: before, start: 0 } }));
+    const round: NoteRound = { round: 1, units, sections: [], loose: [{ kind: 'change', units: units.map(unit => unit.id), before: [{ text: [{ text: 'The solution is x = 1. Another estimate is stable.' }] }] }] };
+    const note = { where: 'main.tex line 1', quote: 'x = 1', comment: 'Correct the result.' };
+    assert.deepEqual(matchNoteChanges(note, round, {}).flatMap(change => change.units), [units[0].id]);
+    assert.deepEqual(matchNoteChanges({ ...note, quote: 'x = 3' }, round, {}), []);
+  }
+});
+
+test('a literal score cannot choose between identical rendered passages with different generated spans', () => {
+  const before = 'The value is $fast$ and stable. The value is fast and $stable$.';
+  const after = before.replace('and stable.', 'and robust.').replace('is fast and', 'is efficient and');
+  const repo = { changedFiles: () => ['main.tex'], blobs: (rev: string) => ({ 'main.tex': Buffer.from(rev === 'old' ? before : after) }) } as unknown as Parameters<typeof diffUnits>[0];
+  const units = diffUnits(repo, 'old', 'new').map(unit => ({ ...unit, old_context: { text: before, start: 0 } }));
+  const quote = 'The value is fast and stable.';
+  const round: NoteRound = { round: 1, units, sections: [], loose: [{ kind: 'change', units: units.map(unit => unit.id), before: [{ text: [{ text: quote }, { text: quote }] }] }] };
+  assert.deepEqual(matchNoteChanges({ where: 'main.tex line 1', quote, comment: 'Clarify.' }, round, {}), []);
 });
 
 test('repeated short quotes use original source lines, including clipped context excerpts', () => {

@@ -6,6 +6,7 @@ import { comparable, fingerprint, origin, rendered } from "./carry.ts";
 import { groupFormattingChanges } from "./formatting-changes.ts";
 import { now, readBytes, readJson, same, writeOrDelete } from "./files.ts";
 import { REFS, cleanPath, merge3Async } from "./git.ts";
+import { textEdits } from "./text-edits.ts";
 import type { App } from "../server.ts";
 import type {
   Action,
@@ -18,6 +19,7 @@ import type {
   History,
   Message,
   MessageData,
+  Op,
   PageState,
   RenderedRound,
   Round,
@@ -27,6 +29,19 @@ import type {
   Unit,
   Write,
 } from "../types.ts";
+// Carry an exact source range through edits outside it. A replacement or an
+// insertion through the range loses its identity in the later baseline.
+function unchangedRange(start: number, end: number, edits: Op[]): [number, number] | null {
+  let shift = 0;
+  for (const [, a, b, x, y] of edits) {
+    if (start === end && a === b && a === start) return null;
+    if (b <= start) shift += y - x - (b - a);
+    else if (a >= end) break;
+    else return null;
+  }
+  return [start + shift, end + shift];
+}
+
 const DECIDED: Record<ActionKind, Decision> = {
   accept: "accepted",
   reject: "rejected",
@@ -312,7 +327,7 @@ export class Review {
     }
     return detail;
   }
-  roundDetail(name: string, number: number): RoundDetail {
+  roundDetail(name: string, number: number, proposedFor?: number): RoundDetail {
     const round = this.round(name, number),
       render = readJson<RenderedRound>(
         path.join(
@@ -337,27 +352,54 @@ export class Review {
         block.after = block.after ? [block.after] : [];
       block.kind = "change";
     }
+    const next = proposedFor && proposedFor > number ? this.round(name, proposedFor) : undefined;
     const sources = new Map<string, { text: string; hash?: string }>();
-    const context = (unit: Unit) => {
-      if (!unit.text_ops?.length) return {};
-      if (!sources.has(unit.file)) {
-        const data = this.app.repo.blob(round.before, unit.file);
-        sources.set(unit.file, { text: data?.toString("utf8") || "", ...(data ? { hash: createHash("sha256").update(data).digest("hex") } : {}) });
+    const source = (revision: string, file: string) => {
+      const key = `${revision}:${file}`;
+      if (!sources.has(key)) {
+        const data = this.app.repo.blob(revision, file);
+        sources.set(key, { text: data?.toString("utf8") || "", ...(data ? { hash: createHash("sha256").update(data).digest("hex") } : {}) });
       }
+      return sources.get(key)!;
+    };
+    const context = (unit: Unit, proposed: boolean) => {
+      if (!unit.text_ops?.length) return undefined;
       // Identify the complete baseline file, not just this bounded excerpt.
       // Accepting another file changes the round's commit but not this source.
-      const { text, hash } = sources.get(unit.file)!, offset = unit.text_ops[0][1], start = Math.max(0, offset - 2000);
-      return { old_context: { text: text.slice(start, unit.text_ops.at(-1)![2] + 2000), start, ...(hash ? { source_hash: hash } : {}) } };
+      const { text, hash } = source(proposed ? round.after : round.before, unit.file),
+        offset = unit.text_ops[0][proposed ? 3 : 1], start = Math.max(0, offset - 2000);
+      return { text: text.slice(start, unit.text_ops.at(-1)![proposed ? 4 : 2] + 2000), start, ...(hash ? { source_hash: hash } : {}) };
     };
+    const baselineEdits = new Map<string, Op[]>();
+    const diffToBaseline = (revision: string, file: string) => {
+      if (!next) return undefined;
+      const old = source(revision, file), newer = source(next.before, file);
+      if (!old.hash || !newer.hash) return undefined;
+      const key = `${revision}:${file}`;
+      if (!baselineEdits.has(key)) baselineEdits.set(key, old.hash === newer.hash ? [] : textEdits(old.text, newer.text));
+      return baselineEdits.get(key);
+    };
+    const continued = (unit: Unit) => {
+      const edits = unit.text_ops?.length && diffToBaseline(round.before, unit.file);
+      if (!edits) return undefined;
+      const ranges = unit.text_ops!.map(([, a, b]) => unchangedRange(a, b, edits));
+      return ranges.every(range => range !== null) ? ranges : undefined;
+    };
+    const proposalEdits = next && Object.fromEntries([...new Set(round.units.filter(unit => unit.text_ops?.length).map(unit => unit.file))].flatMap(file => {
+      const edits = diffToBaseline(round.after, file);
+      return edits ? [[file, edits]] : [];
+    }));
     return groupFormattingChanges({
       task: name,
       round: number,
       before: round.before,
       after: round.after,
+      ...(proposalEdits ? { proposal_edits: proposalEdits } : {}),
       ...(round.summary.job ? { renderJob: round.summary.job } : {}),
       units: round.units.map((u) => ({
         ...u,
-        ...context(u),
+        old_context: context(u, false),
+        ...(next ? { new_context: context(u, true), continued_ranges: continued(u) } : {}),
         ...render.units[u.id],
         ...(rendering && !render.units[u.id] ? { waiting: true } : {}),
         ...(rendering && render.carried?.[u.id] ? { carried: render.carried[u.id].round } : {}),
