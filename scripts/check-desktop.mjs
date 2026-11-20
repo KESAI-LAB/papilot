@@ -118,6 +118,48 @@ try {
   await expect(page.locator('.pdf-viewer canvas, .pdfViewer canvas').first()).toBeVisible({ timeout: 30000 });
   fs.mkdirSync('test-results', { recursive: true });
   await page.screenshot({ path: `test-results/desktop-demo-${packaged ? 'packaged' : 'dev'}.png` });
+  if (process.platform === 'darwin') {
+    const menuSettings = await application.evaluate(({ Menu }) => {
+      const settings = Menu.getApplicationMenu().items[0].submenu.getMenuItemById('open-settings');
+      return settings && { label: settings.label, accelerator: settings.accelerator };
+    });
+    assert.deepEqual(menuSettings, { label: 'Settings…', accelerator: 'Cmd+,' });
+    const openSettings = () => application.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById('open-settings').click());
+    const settings = page.locator('dialog').filter({ has: page.locator('.settings-dialog') });
+    const close = () => settings.getByRole('button', { name: /^(Close|关闭)$/ }).click();
+    const draft = page.getByPlaceholder(/^(Describe the revision|描述修改)/);
+    await draft.fill('Keep this workspace draft.');
+    await expect(draft).toBeFocused();
+    await openSettings();
+    await expect(settings).toBeVisible();
+    await expect(settings.locator('#settings-title')).toHaveText(/^(General|常规)$/);
+
+    await settings.locator('[data-settings-page="git"]').click();
+    const search = settings.getByRole('searchbox');
+    await search.fill('Git');
+    const firstDialog = await settings.elementHandle();
+    await openSettings();
+    await expect(settings).toHaveCount(1);
+    await expect(settings.locator('#settings-title')).toHaveText('Git');
+    await expect(search).toHaveValue('Git');
+    await expect(search).toBeFocused();
+    assert.equal(await firstDialog.evaluate(dialog => dialog.open), true);
+    await firstDialog.dispose();
+    await close();
+    await expect(draft).toHaveValue('Keep this workspace draft.');
+    await expect(draft).toBeFocused();
+    await draft.fill('');
+
+    const pdfFocus = page.locator('.pdf-container');
+    await pdfFocus.focus();
+    await expect(pdfFocus).toBeFocused();
+    await openSettings();
+    await expect(settings).toBeVisible();
+    await expect(settings.locator('#settings-title')).toHaveText(/^(General|常规)$/);
+    await page.screenshot({ path: 'test-results/desktop-macos-settings.png', animations: 'disabled' });
+    await close();
+    await expect(pdfFocus).toBeFocused();
+  }
   if (process.platform === 'win32') {
     await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(900, 700));
     await expect.poll(() => page.evaluate(() => innerWidth)).toBe(900);
