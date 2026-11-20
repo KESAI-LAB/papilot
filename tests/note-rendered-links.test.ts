@@ -122,25 +122,31 @@ test('rendered LaTeX annotations and follow-ups link to the exact review changes
     const followUp = await select(proposed, work.worktree, 'The baseline', 1);
     const sameProposal = await select(proposed, work.worktree, 'The linked', 1);
     const acceptedFollowUp = await select(proposed, work.worktree, 'The cited', 1);
+    const followUpOutsidePreviousEdit = await select(proposed, work.worktree, 'The joint', 1);
     const sibling = detail.units.find(unit => unit.old_text === 'stable');
     const cited = matchNoteChanges(await select(baseline, fixture.root, 'The cited'), detail, {}).flatMap(change => change.units);
+    const joint = matchNoteChanges(await select(baseline, fixture.root, 'The joint'), detail, {}).flatMap(change => change.units);
     assert.ok(sibling);
     assert.equal(cited.length, 1);
-    await app.review.decide(work.name, { round: 1, action: 'accept', changes: [sibling.id, ...cited] });
+    assert.equal(joint.length, 1);
+    await app.review.decide(work.name, { round: 1, action: 'accept', changes: [sibling.id, ...cited, ...joint] });
     const next = after.replace('The baseline method is efficient', 'The baseline method is scalable')
       .replace('The baseline method is efficient', 'The baseline method is robust')
-      .replace('The cited method is very efficient', 'The cited method is very precise');
+      .replace('The cited method is very efficient', 'The cited method is very precise')
+      .replace('The joint method', 'The combined method');
     await publish(next, 2);
     const task = { id: work.name, name: work.name, status: 'reviewing', review: { round: 2 } } as Task;
-    const item = { id: 'follow-up', type: 'user', meta: { notes: [followUp, sameProposal, acceptedFollowUp] } } as TimelineItem;
+    const item = { id: 'follow-up', type: 'user', meta: { notes: [followUp, sameProposal, acceptedFollowUp, followUpOutsidePreviousEdit] } } as TimelineItem;
     const run = { id: item.id, status: 'completed', reviewRound: 2 } as Run;
-    const [result, unchanged, acceptedResult] = await taskNoteResults(task, [item], [run], client as ReviewClient);
+    const [result, unchanged, acceptedResult, outsideResult] = await taskNoteResults(task, [item], [run], client as ReviewClient);
     const latest = await client.get<NoteRound>(route + '2');
     assert.notEqual(latest.before, detail.before, 'accepting another change in the same file moved the baseline');
     const linked = result.changes.flatMap(change => change.units);
     assert.deepEqual(latest.units.filter(unit => linked.includes(unit.id)).map(unit => [unit.old_text, unit.new_text]), [['fast', 'scalable']]);
     const acceptedLinks = acceptedResult.changes.flatMap(change => change.units);
     assert.deepEqual(latest.units.filter(unit => acceptedLinks.includes(unit.id)).map(unit => [unit.old_text, unit.new_text]), [['efficient', 'precise']]);
+    const outsideLinks = outsideResult.changes.flatMap(change => change.units);
+    assert.deepEqual(latest.units.filter(unit => outsideLinks.includes(unit.id)).map(unit => [unit.old_text, unit.new_text]), [['joint', 'combined']]);
     assert.equal(unchanged.state, 'unmatched', 'an unchanged pending proposal is not a response to a new note');
   } finally {
     await server.close();

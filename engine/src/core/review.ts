@@ -371,26 +371,35 @@ export class Review {
       return { text: text.slice(start, unit.text_ops.at(-1)![proposed ? 4 : 2] + 2000), start, ...(hash ? { source_hash: hash } : {}) };
     };
     const baselineEdits = new Map<string, Op[]>();
-    const continued = (unit: Unit, proposed: boolean) => {
-      if (!next || !unit.text_ops?.length) return undefined;
-      const revision = proposed ? round.after : round.before;
-      const old = source(revision, unit.file), newer = source(next.before, unit.file);
+    const diffToBaseline = (revision: string, file: string) => {
+      if (!next) return undefined;
+      const old = source(revision, file), newer = source(next.before, file);
       if (!old.hash || !newer.hash) return undefined;
-      const key = `${revision}:${unit.file}`;
+      const key = `${revision}:${file}`;
       if (!baselineEdits.has(key)) baselineEdits.set(key, old.hash === newer.hash ? [] : textEdits(old.text, newer.text));
-      const ranges = unit.text_ops.map(op => unchangedRange(op[proposed ? 3 : 1], op[proposed ? 4 : 2], baselineEdits.get(key)!));
+      return baselineEdits.get(key);
+    };
+    const continued = (unit: Unit) => {
+      const edits = unit.text_ops?.length && diffToBaseline(round.before, unit.file);
+      if (!edits) return undefined;
+      const ranges = unit.text_ops!.map(([, a, b]) => unchangedRange(a, b, edits));
       return ranges.every(range => range !== null) ? ranges : undefined;
     };
+    const proposalEdits = next && Object.fromEntries([...new Set(round.units.filter(unit => unit.text_ops?.length).map(unit => unit.file))].flatMap(file => {
+      const edits = diffToBaseline(round.after, file);
+      return edits ? [[file, edits]] : [];
+    }));
     return groupFormattingChanges({
       task: name,
       round: number,
       before: round.before,
       after: round.after,
+      ...(proposalEdits ? { proposal_edits: proposalEdits } : {}),
       ...(round.summary.job ? { renderJob: round.summary.job } : {}),
       units: round.units.map((u) => ({
         ...u,
         old_context: context(u, false),
-        ...(next ? { new_context: context(u, true), continued_ranges: continued(u, false), accepted_ranges: continued(u, true) } : {}),
+        ...(next ? { new_context: context(u, true), continued_ranges: continued(u) } : {}),
         ...render.units[u.id],
         ...(rendering && !render.units[u.id] ? { waiting: true } : {}),
         ...(rendering && render.carried?.[u.id] ? { carried: render.carried[u.id].round } : {}),

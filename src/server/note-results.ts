@@ -1,13 +1,15 @@
 import type { NoteChange, NoteResult, NoteSummary, Run, Task, TimelineItem } from '../shared.ts';
 import { noteAnchor, readNotesInstructions } from '../notes.ts';
 import { taskRoute, type ReviewClient } from './review.ts';
+import type { Op } from '../../engine/src/types.ts';
 
 // Only the fields needed to trace notes; the review engine owns the full format.
 export interface NoteRound {
   round: number;
   before?: string;
   after?: string;
-  units: { id: string; file: string; old_start: number; old_end: number; new_start?: number; old_text: string; new_text: string; truncated?: boolean; whole_file?: boolean; kind?: string; formattingFor?: string; text_ops?: [string, number, number, number, number][]; old_context?: NoteContext; new_context?: NoteContext; continued_ranges?: [number, number][]; accepted_ranges?: [number, number][] }[];
+  units: { id: string; file: string; old_start: number; old_end: number; new_start?: number; old_text: string; new_text: string; truncated?: boolean; whole_file?: boolean; kind?: string; formattingFor?: string; text_ops?: Op[]; old_context?: NoteContext; new_context?: NoteContext; continued_ranges?: [number, number][] }[];
+  proposal_edits?: Record<string, Op[]>;
   sections: { blocks: NoteBlock[] }[];
   loose: NoteBlock[];
 }
@@ -233,13 +235,28 @@ export function readRound(client: ReviewClient, task: Pick<Task, 'name'>, round:
   return detail;
 }
 
+// Translate selected text that still exists in the new baseline. Ranges that
+// were replaced in the meantime need the separate pending-proposal match.
+function translatedQuote({ low, high }: QuoteRange, edits: Op[]) {
+  const ranges: QuoteRange[] = [];
+  let start = low, shift = 0;
+  for (const [, a, b, , end] of edits) {
+    if (a >= high) break;
+    if (start < a) ranges.push({ low: start + shift, high: a + shift });
+    start = Math.max(start, b);
+    shift = end - b;
+  }
+  if (start < high) ranges.push({ low: start + shift, high: high + shift });
+  return ranges;
+}
+
 function continuedProposal(note: NoteSummary, previous: NoteRound, detail: NoteRound): Set<string> | undefined {
   const quote = normalize(note.quote), previousBlocks = changeBlocks(previous);
   let ambiguous = false;
   const selected = previous.units.flatMap(unit => {
     const range = sourceQuote(note, unit, true, previousBlocks.some(block => block.units?.includes(unit.id) && renderedQuote(block.after, quote)));
     if (range === 'ambiguous') { ambiguous = true; return []; }
-    return range && unit.text_ops!.some(([, , , a, b]) => touchesQuote(range, a, b)) ? [{ unit, range }] : [];
+    return range ? [{ unit, range }] : [];
   });
   if (ambiguous) return new Set();
   if (!selected.length) return undefined;
@@ -247,14 +264,13 @@ function continuedProposal(note: NoteSummary, previous: NoteRound, detail: NoteR
   // latest baseline cannot substitute for that location.
   const continued = new Set<string>();
   for (const { unit, range } of selected) {
-    const accepted = unit.accepted_ranges?.flatMap(([start], i) => {
-      const [, , , a, b] = unit.text_ops![i];
-      return touchesQuote(range, a, b) ? [{ low: start + Math.max(range.low - a, 0), high: start + Math.min(range.high - a, b - a) }] : [];
-    }) ?? [];
+    const edits = previous.proposal_edits?.[unit.file];
+    const accepted = edits ? translatedQuote(range, edits) : [];
     const inFile = detail.units.filter(next => unit.file === next.file && next.text_ops?.length);
     for (const next of inFile) {
       if (next.text_ops!.some(([, a, b]) => accepted.some(range => touchesQuote(range, a, b)))) continued.add(next.id);
     }
+    if (!unit.text_ops!.some(([, , , a, b]) => touchesQuote(range, a, b))) continue;
     const pending = inFile.filter(next => {
       const ranges = unit.continued_ranges;
       return next.old_text === unit.old_text && next.new_text !== unit.new_text
