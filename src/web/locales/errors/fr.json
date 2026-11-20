@@ -139,6 +139,7 @@
   "Invalid task ID.": "Identifiant de tâche invalide.",
   "Invalid task permissions for this agent.": "Autorisations de tâche non valides pour cet agent.",
   "Invalid task permissions.": "Autorisations de tâche non valides.",
+  "Invalid task pin state.": "État d’épinglage de la tâche non valide.",
   "Invalid update activation.": "Activation de la mise à jour non valide.",
   "Invalid upload data.": "Données de téléversement non valides.",
   "Manage this suggestion in its AI review task, or copy it to the manuscript first.": "Gérez cette suggestion dans sa tâche de révision par IA, ou copiez-la d’abord dans le manuscrit.",

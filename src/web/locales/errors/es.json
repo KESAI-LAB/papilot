@@ -139,6 +139,7 @@
   "Invalid task ID.": "ID de tarea no válido.",
   "Invalid task permissions for this agent.": "Permisos de tarea no válidos para este agente.",
   "Invalid task permissions.": "Permisos de tarea no válidos.",
+  "Invalid task pin state.": "Estado de fijación de la tarea no válido.",
   "Invalid update activation.": "Activación de actualización no válida.",
   "Invalid upload data.": "Datos de subida no válidos.",
   "Manage this suggestion in its AI review task, or copy it to the manuscript first.": "Gestiona esta sugerencia en su tarea de revisión de IA o cópiala primero al manuscrito.",

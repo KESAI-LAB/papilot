@@ -139,6 +139,7 @@
   "Invalid task ID.": "無効なタスク ID です。",
   "Invalid task permissions for this agent.": "このエージェントは選択した権限に対応していません。",
   "Invalid task permissions.": "タスクの権限が無効です。",
+  "Invalid task pin state.": "タスクの固定状態が無効です。",
   "Invalid update activation.": "アップデートの有効化が無効です。",
   "Invalid upload data.": "アップロードデータが無効です。",
   "Manage this suggestion in its AI review task, or copy it to the manuscript first.": "この提案は AI レビュータスク内で管理するか、先に原稿へコピーしてください。",

@@ -143,6 +143,8 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 [data-notes-home].notes-received{z-index:1;color:var(--accent);background:var(--accent-soft);animation:notes-received .45s cubic-bezier(.3,1.5,.5,1)}
 .notes-received::after{content:attr(data-received);position:absolute;top:-4px;right:-5px;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:999px;background:var(--primary);color:#fff;box-shadow:0 0 0 2px var(--bg);font:600 10px/16px var(--sans);font-variant-numeric:tabular-nums;text-align:center;pointer-events:none;animation:notes-received-count 1.6s ease-out both}
 .task-link{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;text-align:left;padding:7px 4px 7px 8px;border-radius:var(--r)}
+.task-title-line{display:flex;align-items:center;gap:5px;max-width:100%}
+.task-pin{display:flex;flex:none;color:var(--text-2)}
 .task-title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;font-size:12px;line-height:1.4;color:var(--text);overflow:hidden;overflow-wrap:anywhere;white-space:normal}
 .task-row.active .task-title{font-weight:500}
 .task-meta{display:flex;align-items:center;gap:5px;min-width:0;font-size:11px}

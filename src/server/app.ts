@@ -786,6 +786,12 @@ export async function buildApp(options: AppOptions) {
   });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/rename', task, request => workspace.renameTask(request.params.id, string((request.body as any).title, 'Task title', 120)));
   app.post<{ Params: { id: string } }>('/api/tasks/:id/title', task, request => workspace.requestTaskTitle(request.params.id));
+  app.post<{ Params: { id: string }; Body: { pinned?: unknown } }>('/api/tasks/:id/pin', task, request => {
+    const pinned = request.body?.pinned;
+    if (typeof pinned !== 'boolean') throw new Error('Invalid task pin state.');
+    store.setTaskPinned(request.params.id, pinned);
+    return { pinned };
+  });
   app.post<{ Params: { id: string } }>('/api/tasks/:id/archive', task, request => workspace.archiveTask(request.params.id, (request.body as any)?.archived, (request.body as any)?.finished === true));
   app.post<{ Params: { id: string } }>('/api/tasks/:id/interrupt', task, request => workspace.interrupt(request.params.id).then(() => ({ ok: true })));
   app.post<{ Params: { id: string } }>('/api/tasks/:id/workers/stop', task, request => { workspace.stopWorker(request.params.id, string((request.body as any)?.item, 'Worker')); return { ok: true }; });
