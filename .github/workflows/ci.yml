@@ -223,6 +223,9 @@ jobs:
       - name: note-groups
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-note-groups.mjs
+      - name: clear-annotations
+        if: ${{ !cancelled() }}
+        run: node scripts/check-clear-annotations.mjs
       - name: note-new-pass
         if: ${{ !cancelled() }}
         run: node --import tsx scripts/check-note-new-pass.mjs
@@ -261,6 +264,7 @@ jobs:
           path: |
             test-results/pdf-floating-*.png
             test-results/pdf-peek-*.png
+            test-results/clear-annotations-*.png
           if-no-files-found: ignore
           retention-days: 7
       - name: pdf-words

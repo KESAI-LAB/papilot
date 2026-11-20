@@ -7,6 +7,7 @@ import { canonicalGroup, groupsWithoutInstructions, noteGroups, type NoteGroup }
 import { GroupCard, GroupInstruction } from './note-groups.tsx';
 import { SectionNotePicker } from './section-note-picker.tsx';
 import { useNoteSelection } from './note-selection.tsx';
+import { ClearAnnotationsDialog } from './clear-annotations-dialog.tsx';
 import { useGroupInstructions } from './group-instructions.ts';
 import { markText, NoteQuote } from './note-content.tsx';
 import { NoteAttachButton, PdfNoteCard, TaskRemoveButton } from './pdf-suggestion.tsx';
@@ -16,8 +17,8 @@ import { createPortal, flushSync } from 'react-dom';
 import { readNotesInstructions, type NoteSummary } from '../notes.ts';
 import { aiReviewSummary, isFeedbackPrompt } from '../conversation.ts';
 import { ignorePattern } from '../commit.ts';
-import { AGENT_IDS, isAgentId, taskFinished } from '../shared.ts';
-import type { TaskCommitReview, CompilerChoice, LatexInstallation, AgentId, Annotation, NoteSection, BuildRepairResult, MarkKind, Author, FeedbackSummary, GitDiff, GitFile, GitOverview, GitStatus, Manuscript, ManuscriptProblems, PendingRequest, Project, RuntimeStatus, Skill, Snapshot, Task, TimelineItem } from '../shared.ts';
+import { AGENT_IDS, isAgentId, isTaskReviewNote, taskFinished } from '../shared.ts';
+import type { TaskCommitReview, CompilerChoice, LatexInstallation, AgentId, Annotation, AnnotationBatch, AnnotationBatchResult, NoteSection, BuildRepairResult, MarkKind, Author, FeedbackSummary, GitDiff, GitFile, GitOverview, GitStatus, Manuscript, ManuscriptProblems, PendingRequest, Project, RuntimeStatus, Skill, Snapshot, Task, TimelineItem } from '../shared.ts';
 import { SkillChip, SkillMenu, SkillPicker, matchSkills, skillName, skillQuery } from './skills.tsx';
 import { reviewDraft, useReviewDraft, reviewNoteSummary, reviewSubmission } from './review-draft.ts';
 import { ReviewDraftCards } from './review-draft-cards.tsx';
@@ -802,9 +803,22 @@ function NotePlacementWarning() {
   return <small className="note-placement-warning" title={t('The position in the new PDF could not be confirmed. The original text and note are kept.')}><Icon name="alert" size={12}/>{t('Position needs confirmation')}</small>;
 }
 
-type AnnotationChange = { note: Annotation; selected?: boolean } & ({ kind: 'add' | 'remove' } | { kind: 'edit'; comment: string });
+const manuscriptDocument = (data: Manuscript | null) => data?.document ?? data?.build.document ?? null;
+
+type NoteChange = { note: Annotation; selected?: boolean } & ({ kind: 'add' | 'remove' } | { kind: 'edit'; comment: string });
+type ClearedNotes = { kind: 'clear'; target: AnnotationBatch; selected: string[] };
+type AnnotationChange = NoteChange | ClearedNotes;
 interface NoteActions {
   history?: PdfHistoryActions;
+  batch?: {
+    document: string | null;
+    name: string;
+    disabled: boolean;
+    clear: (target: AnnotationBatch) => Promise<AnnotationBatchResult>;
+    undo: () => void;
+    clearedCount: number;
+    uncertain?: AnnotationBatch;
+  };
   selection: ReturnType<typeof useNoteSelection>;
   instructions: ReturnType<typeof useGroupInstructions>;
   group: NoteGroup | null;
@@ -900,6 +914,7 @@ interface NotesHandle { save: () => Promise<boolean> }
 function NotesPanel({ notes, sections = [], currentKey, active, actions, onShow, onAdded, onClose, controller }: { sections?: NoteSection[]; notes: Annotation[]; currentKey?: string; active: string; actions: NoteActions; onShow: (note: Annotation) => void; onAdded: () => void; onClose: () => void; controller: React.Ref<NotesHandle> }) {
   const list = useRef<HTMLElement>(null);
   const cards = useNoteCards(notes, actions, actions.onEditing);
+  const [clearTarget, setClearTarget] = useState<AnnotationBatch | null>(null);
   useSaveNotesOnLeave(cards.saveAll);
   const { editing, errors } = cards, locked = cards.busy || actions.sending;
   useEffect(() => { if (active) list.current?.querySelector(`[data-note="${active}"]`)?.scrollIntoView({ block: 'nearest' }); }, [active]);
@@ -908,6 +923,8 @@ function NotesPanel({ notes, sections = [], currentKey, active, actions, onShow,
   const toggle = (note: Annotation) => actions.selection.set([note.id], !actions.selection.has(note.id));
   const selectCard = (note: Annotation, index: number) => <NoteAttachButton number={index + 1} ai={Boolean(note.aiReview)} selected={actions.selection.has(note.id)} disabled={selectionLocked} onClick={() => toggle(note)}/>;
   const ownNotes = notes.filter(note => !note.aiReview);
+  const clearable = notes.filter(note => !isTaskReviewNote(note));
+  const batch = actions.batch, clearDisabled = !batch || batch.disabled || selectionLocked || (!batch.uncertain && !clearable.length);
   const unplacedSuggestions = notes.filter(note => note.aiReview && note.key !== currentKey);
   const renderNote = (note: Annotation, index: number) => cards.card(note, index, { currentKey, active, onShow, onToggle: () => toggle(note) });
   return <>
@@ -919,6 +936,14 @@ function NotesPanel({ notes, sections = [], currentKey, active, actions, onShow,
       </div>
     </div>
     <section ref={list} className="notes-panel" aria-label={t('PDF notes')}>
+    {batch && <div className="notes-clear">
+      <button type="button" className="button ghost compact" aria-disabled={clearDisabled} aria-haspopup="dialog" onClick={() => {
+        if (!clearDisabled) setClearTarget(batch.uncertain || { document: batch.document, batch: uuid(), ids: clearable.map(note => note.id) });
+      }}><Icon name="trash" size={14}/>{batch.uncertain ? t('Retry clearing annotations…') : t('Clear all annotations…')}</button>
+      {batch.clearedCount > 0 && <div className="note-dismissed" role="status">
+        {tn(batch.clearedCount, '{n} annotation cleared.', '{n} annotations cleared.')} <button type="button" disabled={batch.disabled || selectionLocked || Boolean(batch.uncertain)} onClick={batch.undo}>{t('Undo')}</button>
+      </div>}
+    </div>}
     {currentKey && notes.some(note => note.key !== currentKey) && <p className="note-placement-summary" role="status">{t('Some note positions need confirmation. Their original text and comments are kept.')}</p>}
     {ownNotes.length > 0 && <section className="note-section" aria-label={t('My notes')}>
     {noteGroups(notes).map(({ group, entries }) => {
@@ -937,6 +962,9 @@ function NotesPanel({ notes, sections = [], currentKey, active, actions, onShow,
     {cards.undo(selectionLocked)}
     {Object.entries(errors).filter(([id]) => !notes.some(note => note.id === id && !note.group)).map(([id, error]) => <p key={id} className="inline-error" role="alert">{error}</p>)}
     </section>
+    {batch && clearTarget && <ClearAnnotationsDialog target={clearTarget} name={clearTarget.document || batch.name}
+      unconfirmed={batch.uncertain?.batch === clearTarget.batch}
+      disabled={batch.disabled || selectionLocked || clearTarget.document !== batch.document} clear={batch.clear} onClose={() => setClearTarget(null)}/>}
   </>;
 }
 
@@ -1153,7 +1181,7 @@ function ManuscriptView({ onOpenTask, notesRequest, taskCards, navigationGuard, 
           onCreate={actions.add} onSelect={async note => { if (await closeReadingNotes()) setActive(note.id); }} outline={outline} section={section} onOutline={setOutline} onSection={setSection} lead={switcher} tools={pdfTools}
           onSource={async (target, key) => { if (!await closeReadingNotes()) return; setActive(''); setView('source'); setCollapsed(false); void source.open(target, key); }} passage={source.passage}/></Suspense>
         : !error && build?.status !== 'failed' && <div className="review-placeholder"><div className="placeholder-icon"><span className="spinner large"/></div><h2>{t('Compiling the PDF…')}</h2></div>}
-      {readingNotes && <><div aria-hidden="true" className="pdf-reading-notes-scrim" onClick={() => void closeReadingNotes()}/><aside className="pdf-reading-notes" aria-label={t('PDF note library')}><NotesPanel key={project.id} controller={notesPanel} notes={notes} sections={data?.noteSections} currentKey={build?.key} active={active} actions={actions} onShow={show} onAdded={() => void reviewAddedNotes()} onClose={() => void closeReadingNotes()}/></aside></>}
+      {readingNotes && <><div aria-hidden="true" className="pdf-reading-notes-scrim" onClick={() => void closeReadingNotes()}/><aside className="pdf-reading-notes" aria-label={t('PDF note library')}><NotesPanel key={project.id + ':' + (manuscriptDocument(data) || '')} controller={notesPanel} notes={notes} sections={data?.noteSections} currentKey={build?.key} active={active} actions={actions} onShow={show} onAdded={() => void reviewAddedNotes()} onClose={() => void closeReadingNotes()}/></aside></>}
     </section>}
     <aside id={panelId} className="manuscript-side" aria-label={t('Manuscript panels')} hidden={hidden}>
       <div className="manuscript-side-header">
@@ -1264,12 +1292,12 @@ function App() {
   const [marking, setMarking] = useState(0);
   // History belongs to this paper session. A restored note also returns to
   // the task draft it was in; late requests cannot populate another session.
-  const annotationHistory = useRef({ projectId, undo: [] as AnnotationChange[], redo: [] as AnnotationChange[], busy: false });
-  if (annotationHistory.current.projectId !== projectId) annotationHistory.current = { projectId, undo: [], redo: [], busy: false };
+  const annotationHistory = useRef({ projectId, undo: [] as AnnotationChange[], redo: [] as AnnotationChange[], busy: false, uncertain: new Map<string | null, AnnotationBatch>() });
+  if (annotationHistory.current.projectId !== projectId) annotationHistory.current = { projectId, undo: [], redo: [], busy: false, uncertain: new Map() };
   const history = annotationHistory.current;
   const [, refreshHistory] = useState(0);
   const historyChanged = () => { if (annotationHistory.current === history) refreshHistory(value => value + 1); };
-  const recordAnnotation = (entry: AnnotationChange) => {
+  const recordAnnotation = (entry: NoteChange) => {
     if (annotationHistory.current !== history || entry.note.projectId !== history.projectId) return;
     history.undo.push(entry); history.redo = []; historyChanged();
   };
@@ -1622,8 +1650,9 @@ function App() {
       // A later Undo may restore a deleted annotation, but its inclusion belonged
       // to the submitted draft. It must not attach itself to the next task.
       for (const direction of ['undo', 'redo'] as const) history[direction] = history[direction]
-        .filter(entry => !submittedNotes.has(entry.note.id))
-        .map(entry => !reviewing && entry.note.projectId === target ? { ...entry, selected: false } : entry);
+        .filter(entry => entry.kind === 'clear' || !submittedNotes.has(entry.note.id))
+        .map(entry => reviewing ? entry : entry.kind === 'clear' ? { ...entry, selected: [] }
+          : entry.note.projectId === target ? { ...entry, selected: false } : entry);
       historyChanged();
       if (restoreFocus && input?.isConnected && (document.activeElement === document.body || input.closest('form')?.contains(document.activeElement))) input.focus({ preventScroll: true });
       // Reload pending notes from the server: a retry may have returned an
@@ -1858,10 +1887,11 @@ function App() {
   const groupDrafts = useGroupInstructions(project?.id || '');
   const groupDirections = groupDrafts.forNotes(noteSelection.selected);
   const missingGroupDirections = !newDraft.trim() && !newSkill && groupsWithoutInstructions(noteSelection.selected, groupDirections).length > 0;
-  const withNotes = (update: (list: Annotation[]) => Annotation[]) => {
+  const withNotes = (update: (list: Annotation[]) => Annotation[], document?: string | null) => {
     // A poll started before this write must not put an old comment or a deleted note back.
     ++manuscriptRequest.current;
-    setManuscript(current => current.projectId === project?.id && current.data ? { ...current, data: { ...current.data, annotations: update(current.data.annotations || []) } } : current);
+    setManuscript(current => current.projectId === project?.id && current.data && (document === undefined || manuscriptDocument(current.data) === document)
+      ? { ...current, data: { ...current.data, annotations: update(current.data.annotations || []) } } : current);
   };
   const noteActions: NoteActions = {
     selection: { ...noteSelection, set(ids, checked) {
@@ -1944,10 +1974,71 @@ function App() {
   // notes mean the paper is still loading, so its drafts must not be pruned.
   const taskCards = useNoteCards(manuscriptData.data ? notes : undefined, noteActions, undefined, project?.id || projectId);
   const noteEditing = pdfNoteEditing || taskCards.editing || taskCards.busy;
+  const batchDocument = manuscriptDocument(manuscriptData.data);
+  const activeDocument = useRef(batchDocument);
+  activeDocument.current = batchDocument;
+  const historyDisabled = creating || Boolean(marking) || noteEditing || reviewNoteBusy || history.busy || noteWrites.current.size > 0;
+  async function changeAnnotationBatch(target: AnnotationBatch, undo?: ClearedNotes) {
+    if (!project || activeDocument.current !== target.document) throw new Error(t('The manuscript document changed. Open My notes again.'));
+    if (historyDisabled || history.busy || noteWrites.current.size) throw new Error(t('Wait for the annotations to finish saving.'));
+    history.busy = true;
+    historyChanged();
+    const selected = target.ids.filter(noteSelection.has);
+    try {
+      const result = await api<AnnotationBatchResult>(`/projects/${project.id}/annotations/${undo ? 'undo-clear' : 'clear'}`, target);
+      if (annotationHistory.current !== history) return result;
+      if (!undo && history.uncertain.get(target.document)?.batch === target.batch) history.uncertain.delete(target.document);
+      const changed = new Set(result.changed);
+      if (undo) {
+        undo.target.ids = undo.target.ids.filter(id => !changed.has(id));
+        if (!undo.target.ids.length) history.undo = history.undo.filter(entry => entry !== undo);
+      } else if (changed.size) {
+        const prev = history.undo.findLast((entry): entry is ClearedNotes => entry.kind === 'clear' && entry.target.batch === target.batch);
+        if (prev) {
+          prev.target.ids = [...new Set([...prev.target.ids, ...result.changed])];
+          prev.selected = [...new Set([...prev.selected, ...selected.filter(id => changed.has(id))])];
+        } else history.undo.push({ kind: 'clear', target: { ...target, ids: result.changed }, selected: selected.filter(id => changed.has(id)) });
+        history.redo = [];
+      }
+      if (activeDocument.current !== target.document) return result;
+      withNotes(() => result.annotations, target.document);
+      if (undo) noteSelection.set(undo.selected.filter(id => result.restoredIds?.includes(id)), true);
+      else {
+        noteSelection.set(result.changed, false);
+        setActiveNote(id => changed.has(id) ? '' : id);
+      }
+      window.dispatchEvent(new Event('papilot:manuscript'));
+      return result;
+    } catch (error) {
+      if (!undo) history.uncertain.set(target.document, target);
+      throw error;
+    } finally {
+      history.busy = false;
+      historyChanged();
+    }
+  }
+  const undoClear = (entry: ClearedNotes) => {
+    void changeAnnotationBatch(entry.target, entry).then(result => {
+      if (result.failed.length) reportError(new Error(result.failed.map(note => errorText(note.error)).join(' ')));
+    }, reportError);
+  };
+  const cleared = history.undo.findLast((entry): entry is ClearedNotes => entry.kind === 'clear' && entry.target.document === batchDocument);
+  const uncertain = history.uncertain.get(batchDocument);
+  if (project) noteActions.batch = {
+    document: batchDocument, name: project.name, disabled: historyDisabled, uncertain,
+    clearedCount: cleared?.target.ids.length ?? 0,
+    clear: target => changeAnnotationBatch(target),
+    undo: () => { if (cleared) undoClear(cleared); },
+  };
   const replayAnnotation = (direction: 'undo' | 'redo') => {
     const entry = history[direction].at(-1);
     if (!manuscriptOpen || !entry) return false;
-    if (creating || marking || noteEditing || reviewNoteBusy || noteWrites.current.size || history.busy) return true;
+    if (historyDisabled) return true;
+    if (entry.kind === 'clear') {
+      if (direction !== 'undo' || entry.target.document !== batchDocument || uncertain) return false;
+      undoClear(entry);
+      return true;
+    }
     history.busy = true; historyChanged();
     setError('');
     const { note } = entry;
@@ -1977,9 +2068,8 @@ function App() {
     })();
     return true;
   };
-  const historyDisabled = creating || Boolean(marking) || noteEditing || reviewNoteBusy || history.busy || noteWrites.current.size > 0;
   noteActions.history = {
-    canUndo: Boolean(history.undo.length) && !historyDisabled,
+    canUndo: !historyDisabled && history.undo.length > 0 && (history.undo.at(-1)?.kind !== 'clear' || (!uncertain && history.undo.at(-1) === cleared)),
     canRedo: Boolean(history.redo.length) && !historyDisabled,
     undo: () => { replayAnnotation('undo'); }, redo: () => { replayAnnotation('redo'); },
   };

@@ -1267,6 +1267,12 @@ body.resizing iframe{pointer-events:none}
 .pdf-reading-notes-actions>.icon-button{flex:none}
 @media(pointer:fine){.pdf-reading-notes-head .icon-button{width:28px;height:28px}}
 .pdf-reading-notes .notes-panel{overflow:auto;padding:4px 8px 8px}
+.notes-clear{display:flex;flex-direction:column;align-items:flex-start;padding:4px 8px}
+.notes-clear .button[aria-disabled=true]{opacity:.45;cursor:default}
+.clear-annotations-backdrop:modal,.clear-annotations-backdrop::backdrop{overscroll-behavior:contain}
+.clear-annotations-backdrop::backdrop{overflow:hidden}
+.clear-annotations-backdrop .delete-dialog p{font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+.clear-annotations-backdrop progress{max-width:100%}
 .pdf-reading-notes .note-section{margin-top:0}
 .pdf-reading-notes .note-list{margin:4px 0 0}
 .pdf-reading-notes .note-list>li{margin-bottom:2px}

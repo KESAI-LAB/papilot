@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- Clear a document’s annotations from **My notes** with a confirmation and batch undo. The confirmation fixes which annotations will be cleared, including retained positions and agent-authored notes. ([#261](https://github.com/PapilotAI/papilot/issues/261))
+
 ## [0.12.0] - 2026-11-20
 
 Turn feedback into PDF notes, keep track of passages being revised, and preview references without leaving the page. See the [release notes](docs/releases/0.12.0/release-notes.md) for setup and update instructions.
