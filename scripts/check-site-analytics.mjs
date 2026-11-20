@@ -106,6 +106,7 @@ try {
       assert.ok(['https://papilot.ai', 'https://www.papilot.ai', 'http://localhost:7274', 'https://preview.example', 'https://papilot.ai.preview.example'].includes(url.origin), `unexpected external request: ${url}`);
       const html = !enabled && disabledPages.get(url.pathname);
       if (html) return route.fulfill({ contentType: 'text/html', body: html });
+      if (url.pathname === '/api/github-stars') return route.fulfill({ json: { stars: 12345 } });
       return route.fulfill({ path: path.join(fixture, '_site', url.pathname, url.pathname.endsWith('/') ? 'index.html' : '') });
     });
     return context;

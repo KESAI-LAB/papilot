@@ -20,7 +20,7 @@ const copy = (from, names, to = '') => {
 };
 
 fs.rmSync(out, { recursive: true, force: true });
-copy('site', ['style.css', 'statistics-preferences.js']);
+copy('site', ['style.css', 'statistics-preferences.js', 'stars.js']);
 if (analytics) copy('site', ['analytics.js']);
 const source = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8');
 // Browsers and caches may keep a stylesheet or script from the previous
@@ -58,7 +58,7 @@ for (const locale of locales) {
     .replace(/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${title.replaceAll('"', '&quot;')}">`)
     .replace(/(<div class="lang-list"[^>]*>)(<\/div>)/, `$1${menu}$2`)
     .replace('<body>', `<body><noscript><nav class="no-js-languages">${locales.map(code => `<a lang="${code}" href="${code === 'en' ? '/' : `/${code}/`}">${names[code]}</a>`).join('')}</nav></noscript>`)
-    .replace(/(\s(?:href|src)=")(style\.css|analytics\.js|statistics-preferences\.js)"/g, (_, attr, name) => `${attr}/${name}?v=${version(name)}"`)
+    .replace(/(\s(?:href|src)=")(style\.css|analytics\.js|statistics-preferences\.js|stars\.js)"/g, (_, attr, name) => `${attr}/${name}?v=${version(name)}"`)
     .replace(/(\s(?:href|src)=")((?:assets|fonts)\/[^" ]+|favicon.png|apple-touch-icon.png)"/g, '$1/$2"');
   if (locale !== 'en') {
     html = html

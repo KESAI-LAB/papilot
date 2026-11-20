@@ -14,6 +14,7 @@ type OptionsRequest = (id: string, key: string, body?: { round: number; option?:
 type Preview = { key: string; round: number; option: string; version?: string; detail?: RoundDetail } | null;
 type Advance = { key: string; round: number; units: string[] };
 type PreviewRequest = (id: string, key: string, round: number, option: string, retry?: boolean, version?: string, background?: boolean) => Promise<RoundDetail>;
+type ReturnRequest = (task: string, note: string) => Promise<void>;
 const previewKey = (id: string, key: string, round: number, option: string, version?: string) => JSON.stringify([id, key, round, option, version]);
 const comparisonCache = new NotePreviewCache<RoundDetail>();
 const optionCache = new Map<string, NoteOptions>();
@@ -83,14 +84,16 @@ interface Links {
   clearFocus: () => void; decisionSaved: (decision: Advance) => void;
   alternativeCounts: Record<string, number>;
   focusNote: (key: string) => void;
+  returns: Record<string, { pending: boolean; error?: string }>;
+  returnNote?: (key: string) => void;
   showChange: (key: string, change: NoteChange) => void; showNote: (key: string) => void;
 }
 const Context = createContext<Links | null>(null);
 export const useNoteResults = () => useContext(Context);
 
-export function NoteResultsProvider({ task, items, read, optionsRequest, previewRequest, openReview, openChat, children }: {
+export function NoteResultsProvider({ task, items, read, optionsRequest, previewRequest, returnRequest, openReview, openChat, children }: {
   task?: Task; items: TimelineItem[]; read: (id: string) => Promise<{ notes: NoteResult[] }>;
-  optionsRequest?: OptionsRequest; previewRequest?: PreviewRequest; openReview: () => void; openChat: () => void; children: ReactNode;
+  optionsRequest?: OptionsRequest; previewRequest?: PreviewRequest; returnRequest?: ReturnRequest; openReview: () => void; openChat: () => void; children: ReactNode;
 }) {
   const [notes, setNotes] = useState<NoteResult[]>([]), [error, setError] = useState(false), [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(''), [focus, setFocus] = useState<NoteFocus | null>(null);
@@ -102,6 +105,9 @@ export function NoteResultsProvider({ task, items, read, optionsRequest, preview
   const sequence = useRef(0), actions = useRef({ read, openReview, openChat }); actions.current = { read, openReview, openChat };
   const signature = items.filter(item => item.type === 'user' && (item.meta?.notes?.length || readNotesInstructions(item.text))).map(item => item.id).join(',');
   const id = task?.id;
+  const activeTask = useRef(id); activeTask.current = id;
+  const runningReturns = useRef(new Set<string>());
+  const [returns, setReturns] = useState<Links['returns']>({});
   const reload = useCallback(() => {
     if (!id || !signature) return;
     const request = ++sequence.current; setLoading(true); setError(false);
@@ -180,6 +186,20 @@ export function NoteResultsProvider({ task, items, read, optionsRequest, preview
     })();
     return () => { cancelled = true; };
   }, [id, task?.status, task?.review?.round, task?.updatedAt, decisions, noteSignature]);
+  function returnNote(key: string) {
+    const note = notes.find(note => note.key === key);
+    if (!returnRequest || !id || !note?.note.id || note.returned !== false || runningReturns.current.has(key)) return;
+    runningReturns.current.add(key);
+    setReturns(current => ({ ...current, [key]: { pending: true } }));
+    void returnRequest(id, note.note.id).then(() => {
+      setReturns(current => { const next = { ...current }; delete next[key]; return next; });
+      if (activeTask.current !== id) return;
+      setNotes(current => current.map(result => result.note.id === note.note.id ? { ...result, returned: true } : result));
+      reload();
+    }, error => {
+      setReturns(current => ({ ...current, [key]: { pending: false, error: optionError(error instanceof Error ? error.message : String(error)) } }));
+    }).finally(() => runningReturns.current.delete(key));
+  }
   const value: Links = { task, optionsRequest, previewRequest: previewRequest && ((id, key, round, option, retry, version, background = false) => comparisonCache.read(previewKey(id, key, round, option, version),
     background => previewRequest(id, key, round, option, retry, version, background).then(detail => warmComparison(detail, background)),
     // A second lightweight request promotes the engine's existing work. Keep
@@ -187,9 +207,23 @@ export function NoteResultsProvider({ task, items, read, optionsRequest, preview
     background ? () => { void previewRequest(id, key, round, option, retry, version, false).catch(() => {}); } : undefined)), cachedPreview: (id, key, round, option, version) => comparisonCache.peek(previewKey(id, key, round, option, version)), preview: preview?.key === focus?.key && preview?.round === task?.review?.round ? preview : null, setPreview, notes, loading, error, selected, reveal, focus, scope, setScope, reload, showNote, focusNote,
     alternativeCounts: Object.fromEntries(notes.map(note => [note.key, task?.status === 'reviewing' && note.round === task.review?.round && note.changes.every(change => change.state === 'pending') && available[note.key]?.round === note.round ? available[note.key].count : 0])),
     clearFocus: () => { setScope('all'); setPreview(null); setFocus(null); setSelected(''); setAdvance(null); },
-    decisionSaved: decision => { setAdvance(decision); reload(); }, showChange };
+    decisionSaved: decision => { setAdvance(decision); reload(); }, showChange, returns, returnNote: returnRequest && returnNote };
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
+}
+
+export function NoteReturnAction({ noteKey }: { noteKey: string }) {
+  const links = useNoteResults();
+  const note = links?.notes.find(note => note.key === noteKey);
+  if (!links?.returnNote || note?.returned === undefined) return null;
+  const state = links.returns[noteKey];
+  const disabled = note.returned || Boolean(state?.pending);
+  return <div className="note-return-action">
+    <button type="button" className="note-link" aria-disabled={disabled} onClick={() => { if (!disabled) links.returnNote!(noteKey); }}>
+      <span aria-live="polite">{note.returned ? t('Returned to My notes') : state?.pending ? t('Returning…') : t('Return to My notes')}</span>
+    </button>
+    {state?.error && <span className="inline-error" role="alert">{state.error}</span>}
+  </div>;
 }
 
 // The display scope is a global viewer control. It does not discard the
@@ -204,8 +238,7 @@ export function NoteReviewScope() {
   </div>;
 }
 
-// Review controls belong to the PDF workspace. Sent annotations in the
-// conversation remain the author's original record, with no added controls.
+// The drawer shares note actions with the original annotations in Chat.
 export function NoteReviewControls({ doc }: { doc: Document | null }) {
   const links = useNoteResults();
   const note = links?.notes.find(note => note.key === (links.focus?.key || links.selected));
@@ -287,6 +320,7 @@ export function NoteReviewControls({ doc }: { doc: Document | null }) {
   const emptyHeader = <div className="note-option-navigation">{navigation}</div>;
   return <section ref={panel} className="review-note-controls" data-open={Boolean(note)} inert={!note} aria-label={t('Options for this note')}>
     {links.error ? <>{emptyHeader}<button type="button" className="note-result-retry" onClick={links.reload}><Icon name="refresh" size={12}/>{t('Retry linking changes')}</button></> : displayed.changes.length > 0 ? <NoteAlternatives key={displayed.key} note={displayed} navigation={navigation}/> : <>{emptyHeader}<p className="note-option-hint">{displayed.state === 'waiting' ? t('Awaiting changes') : t('No linked change')}</p></>}
+    <NoteReturnAction noteKey={displayed.key}/>
   </section>;
 }
 

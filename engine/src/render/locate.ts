@@ -181,7 +181,7 @@ export function textBounds(page: PdfPage): Span {
 }
 const textBlocks = (page: PdfPage) =>
   page.blocks
-    .filter((b) => b.text.trim())
+    .filter((b) => b.text.trim() && b.lines.some(line => !page.lineRulers.has(line)))
     .sort((a, b) => a.rect[1] - b.rect[1]);
 export class Margins {
   header: number | null = null;
@@ -406,7 +406,8 @@ export class Locator {
             block.rect[3] > top &&
             block.rect[0] < columnRight &&
             block.rect[2] > columnLeft &&
-            block.rect[3] - block.rect[1] < 180
+            block.rect[3] - block.rect[1] < 180 &&
+            block.lines.some(line => !page.lineRulers.has(line))
           ) {
             top = Math.min(top, block.rect[1] - 8);
             bottom = Math.max(bottom, block.rect[3] + 8);

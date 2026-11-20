@@ -13,6 +13,7 @@ declare global {
       overleafSignIn?(origin: string): Promise<string | null>;
       openEnvironment?(): Promise<void>;
       environment?(): Promise<string>;
+      onOpenSettings?(listener: () => void): () => void;
       onOpenFolder?(listener: (folder: string) => void): () => void;
       takeNewPaper?(): Promise<{ id: string; version: string } | null>;
       onNewPaper?(listener: () => void): () => void;
