@@ -88,6 +88,39 @@ async function settled(target) {
   return target.boundingBox();
 }
 const key = async value => { await page.locator('.pdf-container').focus(); await page.keyboard.press(value); };
+async function expectRailStable(action, description) {
+  const tracker = await rail().evaluateHandle(element => {
+    const items = [element, ...element.querySelectorAll('.rail-tool')].filter(item => item.getClientRects().length);
+    const position = item => {
+      const { x, y, width, height } = item.getBoundingClientRect();
+      return [x, y, width, height];
+    };
+    const before = items.map(item => JSON.stringify(position(item)));
+    let frame, movement;
+    const sample = () => {
+      for (const [index, item] of items.entries()) {
+        const after = JSON.stringify(position(item));
+        if (after !== before[index]) {
+          movement = `${item.getAttribute('aria-label')} moved from ${before[index]} to ${after}`;
+          return;
+        }
+      }
+      frame = requestAnimationFrame(sample);
+    };
+    frame = requestAnimationFrame(sample);
+    return async () => {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      cancelAnimationFrame(frame);
+      return movement;
+    };
+  });
+  try {
+    await action();
+    assert.equal(await tracker.evaluate(stop => stop()), undefined, description);
+  } finally {
+    await tracker.dispose();
+  }
+}
 try {
   await page.goto(origin);
   await words().first().waitFor();
@@ -144,8 +177,10 @@ try {
   await page.screenshot({ path: 'test-results/pdf-tools-expanded-dark.png' });
   await page.emulateMedia({ colorScheme: 'light' });
   // The note tool is its own color picker: a click picks it, a second opens colors.
-  await tool('Note').click();
-  await expect(tool('Note')).toHaveAttribute('aria-pressed', 'true');
+  await expectRailStable(async () => {
+    await tool('Note').click();
+    await expect(tool('Note')).toHaveAttribute('aria-pressed', 'true');
+  }, 'Selecting Note keeps the marking toolbar in place');
   await expect(page.getByRole('menu', { name: 'Annotation group color' })).toHaveCount(0);
   await tool('Note').click();
   await page.getByRole('menuitemradio', { name: 'Green', exact: true }).click();
@@ -236,8 +271,21 @@ try {
   await key('ControlOrMeta+z'); await expect.poll(() => notes.length).toBe(0);
   await expect(tool('Redo')).toBeEnabled();
   await key('ControlOrMeta+Shift+z'); await expect.poll(() => notes).toEqual([originalMark]);
-  await page.locator('.note-tag[data-kind="delete"]').click();
   const card = page.getByRole('dialog', { name: /^PDF note/ });
+  for (const size of [{ width: 1440, height: 900 }, { width: 1440, height: 400 }, { width: 820, height: 700 }, { width: 681, height: 500 }]) {
+    await page.setViewportSize(size); await settled(rail());
+    const viewport = `${size.width}×${size.height}`;
+    await expectRailStable(async () => {
+      await page.locator('.note-tag[data-kind="delete"]').click();
+      await expect(card).toBeVisible();
+    }, `Opening an existing mark keeps the marking toolbar in place at ${viewport}`);
+    await expectRailStable(async () => {
+      await page.keyboard.press('Escape');
+      await expect(card).toHaveCount(0);
+    }, `Closing an existing mark keeps the marking toolbar in place at ${viewport}`);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator('.note-tag[data-kind="delete"]').click();
   await expect(card).toContainText('Delete this text');
   await card.getByRole('button', { name: /^Edit note \d+$/ }).click();
   await expect(card.getByRole('textbox')).toHaveAttribute('placeholder', 'Replace with… (leave empty to delete)');
@@ -393,9 +441,11 @@ try {
   // A sticky note goes wherever the page is clicked, with the line beside it.
   await key('p');
   const paper = await page.locator('.page[data-page-number="1"]').boundingBox();
-  await page.mouse.click(paper.x + paper.width * 0.5, paper.y + paper.height * 0.3);
   const sticky = page.getByRole('dialog', { name: /^PDF note/ });
-  await expect(sticky.getByRole('textbox')).toBeFocused();
+  await expectRailStable(async () => {
+    await page.mouse.click(paper.x + paper.width * 0.5, paper.y + paper.height * 0.3);
+    await expect(sticky.getByRole('textbox')).toBeFocused();
+  }, 'Opening a new sticky note keeps the marking toolbar in place');
   await expect(page.locator('.note-point.draft')).toHaveCount(1);
   await page.keyboard.type('Explain why here.');
   await page.keyboard.press('Enter');
@@ -416,6 +466,19 @@ try {
 
   // A selection made first takes the tool picked for it.
   await key('v');
+  await selectText(6, false);
+  await expect(page.getByRole('button', { name: 'Add note', exact: true })).toBeVisible();
+  await expectRailStable(async () => {
+    await tool('Note').click();
+    await expect(card.getByRole('textbox')).toBeFocused();
+  }, 'Opening a note from selected text keeps the marking toolbar in place');
+  await page.screenshot({ path: 'test-results/pdf-tools-note-open.png', animations: 'disabled' });
+  await expectRailStable(async () => {
+    await page.keyboard.press('Escape');
+    await expect(card).toHaveCount(0);
+    await key('v');
+    await expect(tool('Select')).toHaveAttribute('aria-pressed', 'true');
+  }, 'Closing a note and returning to Select keeps the marking toolbar in place');
   await selectText(6, false);
   await expect(page.getByRole('button', { name: 'Add note', exact: true })).toBeVisible();
   await page.keyboard.press('d');

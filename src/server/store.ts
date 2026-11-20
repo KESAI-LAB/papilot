@@ -65,6 +65,8 @@ export class Store extends EventEmitter {
       this.db.prepare('INSERT OR IGNORE INTO deleted_tasks SELECT id, ? FROM tasks WHERE project_id=?').run(Date.now(), id);
       for (const table of ['items', 'runs', 'ai_review_inputs']) this.db.prepare(`DELETE FROM ${table} WHERE task_id IN (SELECT id FROM tasks WHERE project_id=?)`).run(id);
       for (const task of tasks) { const prefix = `note-options:${task}:`; this.db.prepare('DELETE FROM settings WHERE substr(key,1,?)=?').run(prefix.length, prefix); }
+      const clearPrefix = `annotation-clear:${id}:`;
+      this.db.prepare('DELETE FROM settings WHERE substr(key,1,?)=?').run(clearPrefix.length, clearPrefix);
       for (const table of ['tasks', 'annotations', 'anchor_sources']) this.db.prepare(`DELETE FROM ${table} WHERE project_id=?`).run(id);
       this.db.prepare('DELETE FROM projects WHERE id=?').run(id);
     });

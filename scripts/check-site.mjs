@@ -21,6 +21,7 @@ const checkAgentRoster = async page => {
 const route = locale => locale === 'en' ? '/' : `/${locale}/`;
 const universe = 'https://papilot.ai/universe/';
 const server = Fastify();
+server.get('/api/github-stars', async () => ({ stars: Number(process.env.PAPILOT_SITE_STARS || 0) }));
 await server.register(staticFiles, { root: path.resolve('_site') });
 await server.listen({ host: '127.0.0.1', port: 0 });
 const origin = `http://127.0.0.1:${server.server.address().port}`;

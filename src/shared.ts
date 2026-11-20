@@ -289,7 +289,7 @@ export const isMarkKind = (value: unknown): value is MarkKind => value === 'dele
 export interface QuickNote { id: string; label?: string; instruction?: string; icon?: string }
 export const QUICK_NOTE_LIMIT = 8;
 export const PRESET_QUICK_NOTES = ['polish', 'tighten', 'runt', 'connect', 'verify'];
-export interface Annotation { agentAnnotation?: { taskId: string; request: string }; context?: string[]; groupInstruction?: string; /** The root document whose PDF it is on; absent on notes from before a paper could compile several. */ document?: string; aiReview?: { taskId: string; agent: AgentId; sourceId?: string; copiedTo?: string }; group?: NoteGroup; kind?: MarkKind; stamp?: string; id: string; projectId: string; key: string; page: number; rect: [number, number, number, number]; rects?: [number, number, number, number][]; comment: string; quote: string; source: { file: string; lines: [number, number]; excerpt?: string } | null; createdAt: number; taskId?: string; author?: Author; deletedAt?: number }
+export interface Annotation { agentAnnotation?: { taskId: string; request: string }; context?: string[]; groupInstruction?: string; /** The root document whose PDF it is on; absent on notes from before a paper could compile several. */ document?: string; aiReview?: { taskId: string; agent: AgentId; sourceId?: string; copiedTo?: string }; group?: NoteGroup; kind?: MarkKind; stamp?: string; id: string; projectId: string; key: string; page: number; rect: [number, number, number, number]; rects?: [number, number, number, number][]; comment: string; quote: string; source: { file: string; lines: [number, number]; excerpt?: string } | null; createdAt: number; taskId?: string; author?: Author; deletedAt?: number; deletedBatch?: string }
 // Review findings stay with their task; only explicit copies belong to the manuscript.
 export const isTaskReviewNote = (note: Annotation) => Boolean(note.aiReview && !note.aiReview.sourceId);
 export interface NoteSection { id: string; title: string; level: number; notes: string[] }
@@ -299,7 +299,9 @@ export interface RepositoryFile { path: string; root?: true }
 export interface RepositoryFiles { document: string | null; files: RepositoryFile[] }
 /** A display-only position; the task's original annotation stays unchanged. */
 export interface InFlightMark { note: Annotation; taskId: string; title: string; status: TaskStatus; ready?: true }
-export interface Manuscript { git: GitStatus; build: ManuscriptBuild; annotations: Annotation[]; inFlightMarks?: InFlightMark[]; noteSections?: NoteSection[]; unplacedSectionNotes?: number }
+export interface AnnotationBatch { document: string | null; batch: string; ids: string[] }
+export interface AnnotationBatchResult { changed: string[]; restoredIds?: string[]; failed: { id: string; error: string }[]; annotations: Annotation[] }
+export interface Manuscript { git: GitStatus; build: ManuscriptBuild; document?: string; annotations: Annotation[]; inFlightMarks?: InFlightMark[]; noteSections?: NoteSection[]; unplacedSectionNotes?: number }
 // A source file for manual editing, as it is on disk: `revision` names its
 // bytes, so a save refuses when the file changed meanwhile, and `base` is the
 // file at the last commit (null when it has none), to show what changed.

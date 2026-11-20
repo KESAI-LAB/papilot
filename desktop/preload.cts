@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld('papilotDesktop', {
     ipcRenderer.on('papilot:new-paper', receive);
     return () => { ipcRenderer.off('papilot:new-paper', receive); };
   },
+  onOpenSettings: (listener: () => void) => {
+    const receive = () => listener();
+    ipcRenderer.on('papilot:open-settings', receive);
+    return () => { ipcRenderer.off('papilot:open-settings', receive); };
+  },
   // File › Open Paper… picks the folder in the main process and sends its path.
   onOpenFolder: (listener: (folder: string) => void) => {
     const receive = (_event: IpcRendererEvent, folder: unknown) => { if (typeof folder === 'string') listener(folder); };
