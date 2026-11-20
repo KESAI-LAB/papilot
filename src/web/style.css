@@ -360,7 +360,7 @@ body.resizing iframe{pointer-events:none}
 .tool-item summary:hover{background:var(--bg-muted)}
 .tool-item summary>svg{color:var(--text-3)}
 .tool-label{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.tool-note{margin-left:8px;color:var(--text-3);font-size:11px}
+.tool-label>.tool-note{margin-left:8px;color:var(--text-3);font-size:11px}
 /* Commands are code; everything else reads as a sentence. */
 .tool-item[data-kind="command"] .tool-label{font-family:var(--mono);font-size:12px}
 .tool-item .spinner{width:12px;height:12px;border-width:1.5px}

@@ -363,6 +363,7 @@ jobs:
             test-results/section-comments-*.png
             test-results/anchors-*.png
             test-results/bulk-tasks-*.png
+            test-results/pdf-tools-note-open.png
             test-results/typeless-*.png
             test-results/in-flight-marks/*.png
           if-no-files-found: ignore
