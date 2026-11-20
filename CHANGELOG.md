@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep PDF reference previews aligned with their links as the PDF scrolls, zooms or resizes. Previews stay inside the visible viewport and close when the reference leaves view. ([#260](https://github.com/PapilotAI/papilot/issues/260))
+
 ## [0.12.0] - 2026-11-20
 
 Turn feedback into PDF notes, keep track of passages being revised, and preview references without leaving the page. See the [release notes](docs/releases/0.12.0/release-notes.md) for setup and update instructions.
