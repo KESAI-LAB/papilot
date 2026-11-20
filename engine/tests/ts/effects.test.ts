@@ -2,10 +2,13 @@ import { it, expect } from "vitest";
 import { buildDate } from "../../src/core/build.ts";
 import { attribute } from "../../src/core/publish.ts";
 import {
+  compareDocuments,
   differences,
   furniture,
   type Words,
 } from "../../src/render/effects.ts";
+import type { Build } from "../../src/render/locate.ts";
+import { mupdf, PdfDocument } from "../../src/render/pdf.ts";
 import type { Rect, Unit } from "../../src/types.ts";
 
 // One printed line of words.
@@ -103,7 +106,7 @@ it("leaves out page numbers and running heads but keeps text at the top of a pag
   ];
   const document = {
     length: pages.length,
-    page: (n: number) => ({ lines: pages[n], label: String(n + 3) }),
+    page: (n: number) => ({ lines: pages[n], label: String(n + 3), lineRulers: new Set() }),
   } as unknown as Parameters<typeof furniture>[0];
   expect(furniture(document)).toEqual([
     [pages[0][0].rect, pages[0][2].rect],
@@ -112,6 +115,44 @@ it("leaves out page numbers and running heads but keeps text at the top of a pag
     [pages[3][2].rect],
     [pages[4][2].rect],
   ]);
+});
+
+it("keeps changed numbers in a regular series outside the prose", () => {
+  function page(first: number) {
+    const raw = new mupdf.PDFDocument();
+    const font = new mupdf.Font("Helvetica");
+    const ref = raw.addSimpleFont(font);
+    const rows = Array.from({ length: 8 }, (_, i) => {
+      const y = 500 - 18 * i;
+      return `BT /F 6 Tf 30 ${y} Td (${first + i}) Tj ET\n` +
+        `BT /F 12 Tf 100 ${y} Td (A fixed reading of the scientific sample) Tj ET`;
+    });
+    const page = raw.addPage([0, 0, 600, 600], 0, { Font: { F: ref } }, rows.join("\n"));
+    raw.insertPage(-1, page);
+    const buffer = raw.saveToBuffer("");
+    const document = new PdfDocument(buffer.asUint8Array());
+    buffer.destroy();
+    page.destroy();
+    ref.destroy();
+    font.destroy();
+    raw.destroy();
+    return document;
+  }
+  const old = page(1);
+  const next = page(21);
+  try {
+    expect(old.page(0).lineRulers.size).toBe(8);
+    expect(next.page(0).lineRulers.size).toBe(8);
+    const comparison = compareDocuments({ document: old } as Build, { document: next } as Build);
+    const changed = (side: "old" | "new") => comparison.changes.flatMap(
+      (effect) => comparison[side].tokens.slice(...effect[side]).map((token) => token.text),
+    );
+    expect(changed("old")).toEqual(["1", "2", "3", "4", "5", "6", "7", "8"]);
+    expect(changed("new")).toEqual(["21", "22", "23", "24", "25", "26", "27", "28"]);
+  } finally {
+    old.close();
+    next.close();
+  }
 });
 
 const unit = (id: string) => ({ id }) as Unit;

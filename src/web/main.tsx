@@ -90,7 +90,7 @@ import { TaskFlight, type TaskFlightData } from './task-flight.tsx';
 import { returnNotes } from './note-flight.ts';
 import { UsageSummary, type RefreshUsage } from './usage.tsx';
 import { useNoteUndo } from './use-note-undo.ts';
-import { NoteResultsProvider, useNoteResults } from './note-results.tsx';
+import { NoteResultsProvider, NoteReturnAction, useNoteResults } from './note-results.tsx';
 import { usePanelWidth } from './panel-width.tsx';
 import { RepositoryFilesMenu } from './repository-files.tsx';
 import { OverleafLinkDialog, OverleafPanel, OverleafRow } from './overleaf.tsx';
@@ -252,6 +252,7 @@ function NotesMessage({ item, notes }: { item: TimelineItem; notes: NoteSummary[
       <span className="sent-note-where"><span className="sent-note-number" aria-hidden="true">{index + 1}</span><span className="sent-note-location">{noteLocation(note.where)}</span></span>
       {note.quote ? <blockquote data-kind={note.kind}>{note.quote}</blockquote> : <span className="sent-note-region">{t('Marked region')}</span>}
       {(note.comment || note.kind === 'delete') && <p>{note.stamp && <span className="pdf-note-stamp"><Icon name="spark" size={12}/>{note.stamp}</span>}{markText(note)}</p>}
+      <NoteReturnAction noteKey={`${item.id}:${index}`}/>
     </li>;
   return <article className="message user notes-message" aria-label={senderLabel(sender, item.createdAt)}><SenderName sender={sender}/><div className="message-body" title={time(item.createdAt)}>
     {item.meta?.skill && <SkillChip skill={item.meta.skill}/>}
@@ -1001,8 +1002,9 @@ function TaskNotes({ notes, currentKey, actions, onShow, controller, cards, head
       : <div className="note-selection-head"><span>{t('Added to task: {n}', { n: chosen.length })}</span><button type="button" className="note-select-all" disabled={selectionLocked} onClick={() => putBack(chosen)}>{t('Remove all from task')}</button></div>)}
     {noteGroups(notes).map(({ group, entries }) => {
       const selected = entries.filter(({ note }) => actions.selection.has(note.id));
+      const selectedNotes = selected.map(({ note }) => note);
       return selected.length > 0 && <GroupCard key={group} group={group} count={selected.length}>
-        <GroupInstruction group={group} value={actions.instructions.get(group)} disabled={actions.sending} onChange={value => actions.instructions.set(group, value)}/>
+        <GroupInstruction group={group} value={actions.instructions.get(group, selectedNotes)} disabled={actions.sending} onChange={value => actions.instructions.set(group, value, selectedNotes)}/>
         <ol className="task-note-list">{selected.map(({ note, index }) => reference(note, index))}</ol>
       </GroupCard>;
     })}
@@ -1314,6 +1316,12 @@ function App() {
   // Appearance, language and notifications live in Settings; a new language re-renders everything.
   const theme = useTheme(); const { language: uiLanguage } = useLanguage();
   const [settings, setSettings] = useState<false | SettingsInitialPage>(false);
+  const openSettings = useCallback(() => {
+    const dialog = document.querySelector('.settings-dialog')?.closest('dialog');
+    if (dialog?.open && !dialog.contains(document.activeElement)) dialog.focus({ preventScroll: true });
+    setSettings(current => current || 'general');
+  }, []);
+  useEffect(() => window.papilotDesktop?.onOpenSettings?.(openSettings), [openSettings]);
   useEffect(() => {
     const shortcuts = () => setSettings('shortcuts'), quickNotes = () => setSettings('quickNotes');
     window.addEventListener('papilot:open-shortcuts', shortcuts); window.addEventListener('papilot:open-quick-notes', quickNotes);
@@ -1519,11 +1527,23 @@ function App() {
   const newFiles = useAttachmentDraft(`papilot:files:new:${project?.id || projectId}`);
   const tasks = state?.tasks.filter(t => !project || t.projectId === project.id) || [];
   const listedTasks = tasks.filter(task => Boolean(task.archivedAt) === showArchived);
+  const pinnedTaskIds = state?.pinnedTaskIds;
+  const pinOrder = new Map((pinnedTaskIds || []).map((id, index) => [id, index]));
+  const pinFocus = useRef<{ id: string; pinned: boolean; trigger: HTMLButtonElement | null } | null>(null);
+  useLayoutEffect(() => {
+    const focus = pinFocus.current;
+    if (!focus || Boolean(pinnedTaskIds?.includes(focus.id)) !== focus.pinned) return;
+    pinFocus.current = null;
+    // The committed order can move a focused row. The task's timeline may
+    // still be loading, so restore focus as soon as this list is rendered.
+    if (focus.trigger?.isConnected && document.activeElement === document.body) focus.trigger.focus();
+  }, [pinnedTaskIds]);
+  const pinRank = (id: string) => showArchived ? 0 : pinOrder.get(id) ?? pinOrder.size;
   const searchTerms = taskSearch.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   const visibleTasks = listedTasks.filter(task => {
     const text = `${task.title}\n${task.instructions}`.toLocaleLowerCase();
     return searchTerms.every(term => text.includes(term));
-  });
+  }).reverse().sort((a, b) => pinRank(a.id) - pinRank(b.id) || (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt) || b.createdAt - a.createdAt);
   const running = state?.tasks.filter(t => ['preparing', 'running', 'waiting_input', 'building'].includes(t.status)).length || 0;
   // One import entry offers links, folders and ZIPs. Desktop folder choices
   // open the original folder in place through the system picker.
@@ -1673,11 +1693,19 @@ function App() {
   async function deleteSavedTask(target: Task) {
     if (await action('/tasks/' + target.id + '/delete', { confirm: true }, false)) taskDeleted(target.id);
   }
+  async function pinTask(target: Task) {
+    const pinned = !pinOrder.has(target.id);
+    const trigger = sidebarRef.current?.querySelector<HTMLButtonElement>(`[data-task="${CSS.escape(target.id)}"] .more-button`) || null;
+    const focus = { id: target.id, pinned, trigger };
+    pinFocus.current = focus;
+    if (!await action('/tasks/' + target.id + '/pin', { pinned }) && pinFocus.current === focus) pinFocus.current = null;
+  }
   async function archiveTask(target: Task) {
     const archived = !target.archivedAt;
-    if (!await action('/tasks/' + target.id + '/archive', { archived })) return;
+    if (!await action('/tasks/' + target.id + '/archive', { archived }, false)) return;
     if (archived && selectedRef.current === target.id) { setProjectId(target.projectId); setSelected(''); }
     setShowArchived(false);
+    await refresh(true);
     requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.task-search input')?.focus());
   }
   const sidebarShown = narrow ? sidebar : sidebarVisible;
@@ -1694,7 +1722,7 @@ function App() {
     snapshotText.current = '';
     setState(previous => previous ? bulkTarget?.action === 'archive'
       ? { ...previous, tasks: previous.tasks.map(task => task.id === target.id ? { ...task, archivedAt: Date.now() } : task) }
-      : { ...previous, tasks: previous.tasks.filter(task => task.id !== target.id), requests: previous.requests.filter(request => request.taskId !== target.id) } : previous);
+      : { ...previous, tasks: previous.tasks.filter(task => task.id !== target.id), pinnedTaskIds: previous.pinnedTaskIds?.filter(id => id !== target.id), requests: previous.requests.filter(request => request.taskId !== target.id) } : previous);
   }
   useLayoutEffect(() => {
     if (addedTask && sidebarShown) sidebarRef.current?.querySelector('.task-list')?.scrollTo({ top: 0 });
@@ -1705,7 +1733,7 @@ function App() {
     setDeleteTarget(null);
     if (selectedRef.current === id) setSelected('');
     snapshotText.current = '';
-    setState(previous => previous ? { ...previous, tasks: previous.tasks.filter(t => t.id !== id), requests: previous.requests.filter(r => r.taskId !== id) } : previous);
+    setState(previous => previous ? { ...previous, tasks: previous.tasks.filter(t => t.id !== id), pinnedTaskIds: previous.pinnedTaskIds?.filter(taskId => taskId !== id), requests: previous.requests.filter(r => r.taskId !== id) } : previous);
     void refresh(true);
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(sidebarShown ? '.sidebar .manuscript-link' : '.main .sidebar-toggle')?.focus());
   }
@@ -2255,7 +2283,10 @@ function App() {
     </div>
   </section>;
 
-  return <NoteResultsProvider task={task} items={task ? timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || [] : []} read={id => api(`/tasks/${id}/note-results`)} optionsRequest={(id, key, body) => body ? api(`/tasks/${id}/note-options`, { key, ...body }) : api(`/tasks/${id}/note-options?key=${encodeURIComponent(key)}`)} previewRequest={(id, key, round, option, retry, version, background) => api(`/tasks/${id}/note-options/preview?key=${encodeURIComponent(key)}&round=${round}&option=${encodeURIComponent(option)}${retry ? '&retry=1' : ''}${background ? '&background=1' : ''}${version ? '&comparison=' + encodeURIComponent(version) : ''}`, undefined, undefined, undefined, background ? 'low' : 'auto')} openReview={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} openChat={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}><div className={'app-shell' + (sidebarVisible ? '' : ' sidebar-collapsed')}>
+  return <NoteResultsProvider task={task} items={task ? timeline.taskId === task.id ? timeline.items : timelineCache.current.get(task.id) || [] : []} read={id => api(`/tasks/${id}/note-results`)} returnRequest={isPlayground ? undefined : async (id, note) => {
+    await api(`/tasks/${id}/notes/${encodeURIComponent(note)}/return`, {});
+    window.dispatchEvent(new Event('papilot:manuscript'));
+  }} optionsRequest={(id, key, body) => body ? api(`/tasks/${id}/note-options`, { key, ...body }) : api(`/tasks/${id}/note-options?key=${encodeURIComponent(key)}`)} previewRequest={(id, key, round, option, retry, version, background) => api(`/tasks/${id}/note-options/preview?key=${encodeURIComponent(key)}&round=${round}&option=${encodeURIComponent(option)}${retry ? '&retry=1' : ''}${background ? '&background=1' : ''}${version ? '&comparison=' + encodeURIComponent(version) : ''}`, undefined, undefined, undefined, background ? 'low' : 'auto')} openReview={() => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); }} openChat={() => { setMobileTab('conversation'); setLayout(current => current === 'review' ? 'split' : current); }}><div className={'app-shell' + (sidebarVisible ? '' : ' sidebar-collapsed')}>
     <DesktopWindowChrome/>
     {project && <WorkspaceSwitcher key={project.id} active={task?.id ?? (manuscriptOpen ? '' : null)}
       items={[{ id: '', title: t('Manuscript') }, ...[...tasks].reverse().filter(item => item.status !== 'deleting' && (!item.archivedAt || item.id === task?.id)).map(item => ({ id: item.id, title: item.title }))]}
@@ -2290,16 +2321,21 @@ function App() {
           { label: showArchived ? t('Delete all archived tasks…') : t('Delete all current tasks…'), icon: 'trash', danger: true, select: () => openBulkAction('delete') },
         ]}/>
       </div>
-      <nav className="task-list" aria-label={t('Task list')}>{visibleTasks.length ? [...visibleTasks].reverse().sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt) || b.createdAt - a.createdAt).map(row => <div key={row.id} data-task={row.id} className={'task-row ' + (row.id === selected ? 'active' : '') + (row.id === flyingTask?.id ? ' task-arriving' : '') + (row.id === addedTask?.id ? ' task-added' : '')}>
+      <nav className="task-list" aria-label={t('Task list')}>{visibleTasks.length ? visibleTasks.map(row => <div key={row.id} data-task={row.id} className={'task-row ' + (row.id === selected ? 'active' : '') + (row.id === flyingTask?.id ? ' task-arriving' : '') + (row.id === addedTask?.id ? ' task-added' : '')}>
         {renaming === row.id ? <form className="task-rename" onSubmit={e => { e.preventDefault(); refocus.current = row.id; e.currentTarget.querySelector('input')?.blur(); }}>
           <input name="title" aria-label={t('Rename {name}', { name: row.title })} defaultValue={row.title} maxLength={120} autoFocus onFocus={e => e.currentTarget.select()} onBlur={e => void rename(row, e.currentTarget.value)} onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); refocus.current = row.id; e.currentTarget.value = row.title; e.currentTarget.blur(); } }}/>
         </form>
-        : <button aria-current={row.id === selected ? 'page' : undefined} className={'task-link ' + (row.id === selected ? 'active' : '')} onClick={() => { setSelected(row.id); setSidebar(false); }} onDoubleClick={() => { if (row.status !== 'deleting') setRenaming(row.id); }}><span className="task-title" title={row.title}>{row.title}</span><span className="task-meta"><Status task={row}/><span className="task-time">{ago(row.updatedAt)}</span></span></button>}
+        : <button aria-current={row.id === selected ? 'page' : undefined} className={'task-link ' + (row.id === selected ? 'active' : '')} onClick={() => { setSelected(row.id); setSidebar(false); }} onDoubleClick={() => { if (row.status !== 'deleting') setRenaming(row.id); }}><span className="task-title-line"><span className="task-title" title={row.title}>{row.title}</span>
+          {!showArchived && pinOrder.has(row.id) && <span className="task-pin" role="img" aria-label={t('Pinned task')} title={t('Pinned task')}><Icon name="pin" size={12}/></span>}</span><span className="task-meta"><Status task={row}/><span className="task-time">{ago(row.updatedAt)}</span></span></button>}
         <div className="task-row-actions">
           {row.review?.counts?.pending ? <span className="task-badge" title={tn(row.review.counts.pending, '{n} change to decide', '{n} changes to decide')}>{row.review.counts.pending}</span> : null}
           <ActionMenu label={t('Task actions for {title}', { title: row.title })} actions={[
             ...(row.status === 'deleting' ? [] : [{ label: t('Rename…'), icon: 'pencil', select: () => setRenaming(row.id) }]),
             ...(row.status === 'deleting' ? [] : [{ label: row.titleGeneration === 'pending' ? t('Generating task title…') : row.titleGeneration === 'failed' ? t('Retry title generation') : t('Generate task title'), icon: 'spark', disabled: row.titleGeneration === 'pending' || pendingActions.has('/tasks/' + row.id), select: () => void action('/tasks/' + row.id + '/title') }]),
+            ...(!isPlayground && !row.archivedAt && row.status !== 'deleting' ? [{
+              label: pinOrder.has(row.id) ? t('Unpin task') : t('Pin task'), icon: pinOrder.has(row.id) ? 'unpin' : 'pin',
+              disabled: !online || pendingActions.has('/tasks/' + row.id), select: () => void pinTask(row),
+            }] : []),
             ...(row.status === 'deleting' ? [] : [{ label: row.archivedAt ? t('Restore task') : t('Archive task'), icon: row.archivedAt ? 'restore' : 'archive', disabled: pendingActions.has('/tasks/' + row.id), select: () => void archiveTask(row) }]),
             ...(ACTIVE.includes(row.status) ? [{ label: t('Pause task'), icon: 'pause', disabled: pendingActions.has('/tasks/' + row.id), select: () => void action('/tasks/' + row.id + '/interrupt') }] : []),
             ...(row.status === 'uncertain' ? [{ label: t('Check status'), icon: 'refresh', disabled: pendingActions.has('/tasks/' + row.id), select: () => void action('/tasks/' + row.id + '/reconcile') }] : []),
@@ -2318,7 +2354,7 @@ function App() {
           <a href="/" className="brand-home" aria-label="Papilot" onClick={e => { e.preventDefault(); setSelected(''); setPage('manuscript'); if (mobile) setManuscriptView('pdf'); setSidebar(false); }}><PapilotMark size={16} className="brand-mark"/><span>Papilot</span></a>
           {state && (!isPlayground ? <UpdateNotice api={api} version={state.version}/> : <span className="brand-version" title={t('Papilot {version}', { version: state.version })}>v{versionLabel(state.version)}</span>)}
         </div>
-        <button type="button" className="icon-button settings-link" aria-label={t('Settings')} title={t('Settings')} aria-haspopup="dialog" onClick={() => setSettings('general')}><Icon name="settings" size={18}/></button>
+        <button type="button" className="icon-button settings-link" aria-label={t('Settings')} title={t('Settings')} aria-haspopup="dialog" onClick={openSettings}><Icon name="settings" size={18}/></button>
       </div>
     </aside>
     {sidebar && narrow && <button tabIndex={-1} className="sidebar-scrim" aria-label={t('Close task list')} onClick={() => setSidebar(false)}/>}

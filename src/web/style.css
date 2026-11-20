@@ -143,6 +143,8 @@ code{font-family:var(--mono);font-variant-ligatures:none}
 [data-notes-home].notes-received{z-index:1;color:var(--accent);background:var(--accent-soft);animation:notes-received .45s cubic-bezier(.3,1.5,.5,1)}
 .notes-received::after{content:attr(data-received);position:absolute;top:-4px;right:-5px;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:999px;background:var(--primary);color:#fff;box-shadow:0 0 0 2px var(--bg);font:600 10px/16px var(--sans);font-variant-numeric:tabular-nums;text-align:center;pointer-events:none;animation:notes-received-count 1.6s ease-out both}
 .task-link{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;text-align:left;padding:7px 4px 7px 8px;border-radius:var(--r)}
+.task-title-line{display:flex;align-items:center;gap:5px;max-width:100%}
+.task-pin{display:flex;flex:none;color:var(--text-2)}
 .task-title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;font-size:12px;line-height:1.4;color:var(--text);overflow:hidden;overflow-wrap:anywhere;white-space:normal}
 .task-row.active .task-title{font-weight:500}
 .task-meta{display:flex;align-items:center;gap:5px;min-width:0;font-size:11px}
@@ -1303,6 +1305,11 @@ body.resizing iframe{pointer-events:none}
    the PDF workspace; the document keeps its width and native layout. */
 .sent-notes li[data-note-result] { cursor: pointer; }
 .sent-notes li[data-note-result]:focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
+.note-return-action{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.note-return-action .note-link{display:inline-flex;align-items:center;min-block-size:24px}
+@media(pointer:coarse){.note-return-action .note-link{min-block-size:36px}}
+.note-return-action .note-link[aria-disabled=true]{color:var(--text-2);cursor:default;text-decoration:none}
+.review-note-controls>.note-return-action{padding:0 12px 8px}
 .review-note-controls { position: absolute; z-index: 5; inset: auto 0 0; padding: 0 0 env(safe-area-inset-bottom, 0px); border: 0; border-top: 1px solid var(--line); border-radius: 0; background: var(--bg); max-height: min(44%, 300px); display: flex; flex-direction: column; overflow: hidden; transform: translateY(100%); transition: transform .18s var(--ease); }
 /* Open, the drawer shares the selected change's accent, linking the two. */
 .review-note-controls[data-open="true"] { transform: translateY(0); border-top: 2px solid var(--primary); }

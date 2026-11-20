@@ -20,6 +20,7 @@ import { PassThrough } from 'node:stream';
 import type { Codex } from '../src/server/codex.ts';
 import type { ReviewClient } from '../src/server/review.ts';
 import { AGENT_IDS, type Annotation, type Task } from '../src/shared.ts';
+import { summarizeNotes } from '../src/notes.ts';
 
 const PUBLIC = 'https://mini.example.ts.net:8443';
 const LOCAL = { host: '127.0.0.1:7274' };
@@ -49,6 +50,32 @@ async function fixture(latexInstallation: AppOptions['latexInstallation'] = asyn
   return { updates, diagnosticRequests, manuscripts: shared.manuscripts, store, workspace, review, local, state, as, async close() { updates.close(); await local.close(); workspace.close(); store.close(); fs.rmSync(dist, { recursive: true }); } };
 
 }
+
+test('changing task pins updates shared state without changing task activity', async () => {
+  const f = await fixture();
+  try {
+    const first = f.store.task('thesis-task'), another = { ...first, id: 'second-thesis-task' };
+    f.store.saveTask(another);
+    const state = () => f.local.inject({ url: '/api/state', headers: LOCAL });
+    const pin = (id: string, pinned: unknown) => f.local.inject({ method: 'POST', url: `/api/tasks/${id}/pin`, headers: f.as, payload: { pinned } });
+    const initial = await state();
+    assert.deepEqual(initial.json().pinnedTaskIds, []);
+    assert.equal((await pin(first.id, 'true')).statusCode, 400);
+    assert.equal((await pin(first.id, true)).statusCode, 200);
+    assert.equal((await pin('grant-task', true)).statusCode, 200);
+    assert.equal((await pin(another.id, true)).statusCode, 200);
+    const pinned = await state();
+    assert.notEqual(pinned.headers.etag, initial.headers.etag);
+    assert.deepEqual(pinned.json().pinnedTaskIds, [first.id, 'grant-task', another.id]);
+    assert.deepEqual(f.store.task(first.id), first);
+    assert.deepEqual(f.store.task(another.id), another);
+    assert.equal((await pin(first.id, true)).statusCode, 200);
+    assert.equal((await state()).headers.etag, pinned.headers.etag, 'An identical request preserves pin order and activity');
+    assert.equal((await pin(first.id, false)).statusCode, 200);
+    assert.equal((await pin(first.id, true)).statusCode, 200);
+    assert.deepEqual((await state()).json().pinnedTaskIds, ['grant-task', another.id, first.id]);
+  } finally { await f.close(); }
+});
 
 test('task restart forwards destination permissions and model settings', async () => {
   const f = await fixture(), choices: any[] = [];
@@ -747,6 +774,82 @@ test('review notes retain their anchors and link only to their own task result',
     const retry = await f.local.inject({ method: 'POST', url: '/api/tasks/thesis-task/messages', headers: f.as, payload });
     assert.equal(retry.json().id, sent.json().id); assert.equal(f.store.items('thesis-task').length, 1);
   } finally { await f.close(); }
+});
+
+test('return unresolved task annotations without changing the original submission or review', async () => {
+  const f = await fixture(), root = fs.mkdtempSync(path.join(os.tmpdir(), 'papilot-return-notes-'));
+  try {
+    const taskId = 'thesis-task', projectId = 'thesis';
+    f.store.saveProject({ ...f.store.project(projectId), path: root });
+    for (const file of ['main.tex', 'appendix.tex']) fs.writeFileSync(path.join(root, file), '\\documentclass{article}\n\\begin{document}Text\\end{document}');
+    let openDocument = 'main.tex';
+    f.manuscripts.document = async () => openDocument;
+    f.store.updateTask(taskId, { document: 'main.tex', review: { state: 'reviewing', round: 1, counts: { accepted: 1, rejected: 1 } } });
+    const makeNote = (id: string, line: number, group?: Annotation['group']): Annotation => ({
+      id, taskId, projectId, key: 'before', page: 0, rect: [0.1, 0.2, 0.4, 0.3], rects: [[0.1, 0.2, 0.4, 0.3]], ...(group ? { group } : {}),
+      comment: group ? '' : 'Revisit this request.', quote: `Original passage ${id}.`, createdAt: 1,
+      source: { file: 'main.tex', lines: [line, line], excerpt: `Original passage ${id}.` },
+    });
+    const accepted = makeNote('accepted', 10), missed = makeNote('missed', 90);
+    const rejected: Annotation = { ...makeNote('rejected', 20, 'purple'), kind: 'point', stamp: 'Clarify', aiReview: { taskId: 'agent-review', agent: 'codex', sourceId: 'suggestion' } };
+    const originals = [accepted, rejected, missed].map(note => f.store.saveAnnotation(note));
+    f.store.saveAnnotation({ ...makeNote('foreign', 30), projectId: 'grant' });
+    f.store.saveAnnotation({ ...makeNote('unsent', 40), taskId: undefined });
+    f.store.saveItem({ id: 'submitted', taskId, type: 'user', createdAt: 1, text: '', meta: { notes: summarizeNotes(originals), groupInstructions: { purple: 'Clarify the definition.' } } });
+    const decisions = { 'accepted-edit': 'accepted', 'rejected-edit': 'rejected' };
+    f.review.get = async (route: string) => (route.includes('/rounds/') ? {
+      round: 1, sections: [],
+      units: [accepted, rejected].map(note => ({ id: `${note.id}-edit`, file: 'main.tex', old_start: note.source!.lines[0], old_end: note.source!.lines[1], old_text: note.quote, new_text: 'Revised passage.' })),
+      loose: [accepted, rejected].map(note => ({ kind: 'change', units: [`${note.id}-edit`] })),
+    } : { decisions }) as any;
+    f.manuscripts.state = async () => ({ git: { branch: 'main', upstream: null, ahead: 0, behind: 0, files: [], head: null }, build: { key: 'latest', status: 'ready', current: true } });
+    f.manuscripts.reanchor = async (_id, _root, notes) => notes.map(note => note.quote === rejected.quote ? { ...note, key: 'latest', page: 2, source: { ...rejected.source!, lines: [25, 25] } } : note);
+    f.manuscripts.noteSections = async () => ({ sections: [], contexts: {}, unplaced: 0 });
+    const get = (url: string) => f.local.inject({ url, headers: f.as });
+    const returns = (note: string) => f.local.inject({ method: 'POST', url: `/api/tasks/${taskId}/notes/${note}/return`, headers: f.as, payload: {} });
+    const results = () => get(`/api/tasks/${taskId}/note-results`);
+    assert.deepEqual((await results()).json().notes.map((result: any) => [result.returned, result.changes[0]?.state]), [[false, 'accepted'], [false, 'rejected'], [false, undefined]]);
+    for (const id of ['foreign', 'unsent', 'missing']) assert.equal((await returns(id)).statusCode, 400);
+    f.store.updateTask(taskId, { status: 'failed', preparation: {} });
+    assert.equal((await returns('rejected')).statusCode, 400, 'A failed preparation can still release the original');
+    assert.ok((await results()).json().notes.every((note: any) => note.returned === undefined));
+    f.store.updateTask(taskId, { status: 'reviewing', preparation: undefined });
+    const oldItems = f.store.items(taskId), oldTask = f.store.task(taskId);
+    const [first, repeat] = await Promise.all([returns('rejected'), returns('rejected')]);
+    assert.equal(first.statusCode, 200, first.body);
+    assert.deepEqual(repeat.json(), first.json());
+    const returned = first.json() as Annotation;
+    assert.equal(returned.taskId, undefined);
+    assert.equal(returned.aiReview, undefined, 'An adopted suggestion returns as an ordinary editable note');
+    assert.equal(returned.document, 'main.tex', 'A legacy note inherits the submitted task document');
+    assert.equal(returned.group, 'purple');
+    assert.equal(returned.groupInstruction, 'Clarify the definition.');
+    assert.equal(returned.quote, rejected.quote);
+    assert.equal(returned.kind, 'point');
+    assert.equal(returned.stamp, 'Clarify');
+    const unplaced = (await returns('missed')).json() as Annotation;
+    assert.deepEqual((await results()).json().notes.map((result: any) => result.returned), [false, true, true]);
+    const manuscript = '/api/projects/thesis/manuscript';
+    const current = (await get(manuscript)).json().annotations as Annotation[];
+    assert.deepEqual(current.map(note => note.id), ['unsent', returned.id, unplaced.id]);
+    assert.equal(current[1].key, 'latest'); assert.equal(current[1].page, 2);
+    assert.equal(current[2].key, 'before'); assert.equal(current[2].comment, missed.comment);
+    assert.deepEqual(f.store.items(taskId), oldItems);
+    assert.deepEqual(f.store.task(taskId), oldTask);
+    assert.deepEqual(originals.map(note => f.store.annotation(projectId, note.id)), originals);
+    openDocument = 'appendix.tex';
+    assert.deepEqual((await get(manuscript)).json().annotations.map((note: Annotation) => note.id), ['unsent']);
+    openDocument = 'main.tex';
+
+    const next = { id: 'returned-notes-task-001', projectId, title: 'Follow up unresolved notes', instructions: '', annotations: [returned.id, unplaced.id], groupInstructions: { purple: returned.groupInstruction } };
+    const sent = await f.local.inject({ method: 'POST', url: '/api/tasks', headers: f.as, payload: next });
+    assert.equal(sent.statusCode, 200, sent.body);
+    assert.deepEqual(f.store.items(next.id)[0].meta?.notes?.map(note => note.id), next.annotations);
+    assert.deepEqual(f.store.items(next.id)[0].meta?.groupInstructions, next.groupInstructions);
+    assert.equal((await returns('rejected')).json().taskId, next.id, 'A repeat never puts a note already re-submitted back in My notes');
+    assert.deepEqual((await get(manuscript)).json().annotations.map((note: Annotation) => note.id), ['unsent']);
+    assert.deepEqual(f.store.items(taskId), oldItems);
+  } finally { await f.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });
 
 test('notes can be edited, deleted and restored in order without changing their PDF anchors or authors', async () => {
