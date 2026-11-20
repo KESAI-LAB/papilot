@@ -475,5 +475,7 @@
   "Enable collaboration mode in Settings → Experiments first.": "Aktivera först samarbetsläget under Inställningar → Experimentella funktioner.",
   "The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.": "Den valda agenten för commit-meddelanden stöder inte skrivskyddade uppgifter. Välj en annan under Inställningar → Git.",
   "The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "Den valda agenten för commit-meddelanden är inte tillgänglig. Anslut den under Inställningar → Agenter eller välj en annan under Inställningar → Git.",
-  "Invalid agent.": "Ogiltig agent."
+  "Invalid agent.": "Ogiltig agent.",
+  "The selected conflict-resolution agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "Den valda konfliktagenten är inte tillgänglig. Anslut den under Inställningar → Agenter eller välj en annan under Inställningar → Git.",
+  "Choose a supported agent.": "Välj en agent som stöds."
 }

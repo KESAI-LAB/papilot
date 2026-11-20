@@ -475,5 +475,7 @@
   "Enable collaboration mode in Settings → Experiments first.": "먼저 설정 → 실험 기능에서 협업 모드를 활성화하세요.",
   "The selected commit-message agent does not support read-only tasks. Choose another in Settings → Git.": "선택한 커밋 메시지 에이전트는 읽기 전용 작업을 지원하지 않습니다. 설정 → Git에서 다른 에이전트를 선택하세요.",
   "The selected commit-message agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "선택한 커밋 메시지 에이전트를 사용할 수 없습니다. 설정 → 에이전트에서 연결하거나 설정 → Git에서 다른 에이전트를 선택하세요.",
-  "Invalid agent.": "유효하지 않은 에이전트입니다."
+  "Invalid agent.": "유효하지 않은 에이전트입니다.",
+  "The selected conflict-resolution agent is unavailable. Connect it in Settings → Agents or choose another in Settings → Git.": "선택한 충돌 해결 에이전트를 사용할 수 없습니다. 설정 → 에이전트에서 연결하거나 설정 → Git에서 다른 에이전트를 선택하세요.",
+  "Choose a supported agent.": "지원되는 에이전트를 선택하세요."
 }

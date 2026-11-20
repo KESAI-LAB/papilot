@@ -88,6 +88,23 @@ test('task restart forwards destination permissions and model settings', async (
   } finally { await f.close(); }
 });
 
+test('Git conflict resolution validates and forwards the chosen helper settings', async () => {
+  const f = await fixture();
+  const calls: unknown[] = [];
+  f.workspace.resolveConflicts = async (id, choice) => {
+    calls.push([id, choice]);
+    return { summary: '', remaining: [], agent: 'codex', git: { branch: 'main', upstream: null, ahead: 0, behind: 0, files: [], head: null } };
+  };
+  try {
+    const send = (payload: object) => f.local.inject({ method: 'POST', url: '/api/projects/thesis/git/resolve', headers: f.as, payload });
+    const choice = { agent: 'codex', model: 'selected', effort: 'high', serviceTier: 'priority' };
+    assert.equal((await send(choice)).statusCode, 200);
+    for (const invalid of [{ agent: 'unknown' }, { model: 4 }, { effort: 'high effort' }, { serviceTier: [] }])
+      assert.equal((await send(invalid)).statusCode, 400);
+    assert.deepEqual(calls, [['thesis', choice]]);
+  } finally { await f.close(); }
+});
+
 test('commit-message endpoints validate and forward the requested language', async () => {
   const f = await fixture(), choices: any[] = [];
   f.workspace.commitMessage = async (_project, _paths, choice) => { choices.push(choice); return { message: 'Clarify the introduction', agent: 'codex' }; };

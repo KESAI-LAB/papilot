@@ -71,7 +71,7 @@ import { taskSaveStatus } from './task-save-status.ts';
 import { TaskSaved } from './task-saved.tsx';
 import { GitRepository } from './git-overview.tsx';
 import { useAdvancedGit, commitMessageLanguage } from './git-preferences.ts';
-import { commitConversation, rememberCommitConversation, useCommitMessageAgent, type CommitMessageChoice } from './commit-agent-preferences.ts';
+import { commitConversation, rememberCommitConversation, useCommitMessageAgent, useConflictAgent, type CommitMessageChoice } from './commit-agent-preferences.ts';
 import { GitDiffView } from './git-diff-view.tsx';
 import { VersionHistory, type HistorySelection } from './git-history.tsx';
 import type { GitHistory, GitVersionDetail } from '../shared.ts';
@@ -534,7 +534,11 @@ function DiscardDialog({ files, onCancel, onConfirm }: { files: GitFile[]; onCan
   </dialog>;
 }
 
-function GitWorkspace({ projectId, navigation, git, onStatus, writer, messageWriter, tasks, onOpenTask }: { navigation?: React.ReactNode; tasks: Task[]; onOpenTask: (id: string) => void; projectId: string; git: GitStatus | null; onStatus: (status: GitStatus) => void; writer: CommitWriter; messageWriter: CommitMessageChoice }) {
+type GitResolution = { merge: string; agent: AgentId; busy?: boolean; summary?: string; notice?: string; error?: string };
+
+const gitMergeId = (git: GitStatus | null) => git?.merging ? [git.head?.hash, git.merging.head].join(':') : '';
+
+function GitWorkspace({ projectId, navigation, git, onStatus, resolver, onChangeResolver, resolution, setResolution, messageWriter, tasks, onOpenTask }: { navigation?: React.ReactNode; tasks: Task[]; onOpenTask: (id: string) => void; projectId: string; git: GitStatus | null; onStatus: (status: GitStatus) => void; resolver: CommitMessageChoice; onChangeResolver: () => void; resolution?: GitResolution; setResolution: (value?: GitResolution) => void; messageWriter: CommitMessageChoice }) {
   const advanced = useAdvancedGit();
   const [writingAgent, setWritingAgent] = useState<AgentId | null>(null);
   const displayedMessageAgent = writingAgent ?? messageWriter.agent;
@@ -545,8 +549,9 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, messageWri
   const loadVersion = useCallback((hash: string, signal: AbortSignal) => api<GitVersionDetail>(`/projects/${projectId}/git/history/${hash}`, undefined, signal), [projectId]);
   const draftKey = `papilot:commit:${projectId}`;
   const [message, setMessage] = useState(() => browserStorage.getItem(draftKey) || '');
-  const [busy, setBusy] = useState(''), [error, setError] = useState(''), [notice, setNotice] = useState('');
-  const [resolution, setResolution] = useState<{ agent: string; summary: string } | null>(null);
+  const [operation, setBusy] = useState(''), [operationError, setError] = useState(''), [operationNotice, setNotice] = useState('');
+  const busy = resolution?.busy ? 'resolve' : operation;
+  const error = operationError || resolution?.error, notice = operationNotice || resolution?.notice;
   const [discarding, setDiscarding] = useState<GitFile[] | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [detail, setDetail] = useState<'changes' | 'history'>(() => readPlace('git-view:' + projectId) === 'history' ? 'history' : 'changes');
@@ -653,10 +658,26 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, messageWri
   // A branch and its upstream that have both moved on are merged; conflicts
   // go to an agent, then the author reads the diffs and commits the merge.
   const diverged = Boolean(git.upstream && git.ahead > 0 && git.behind > 0 && !merging);
-  const resolve = () => void run('resolve', () => api<{ git: GitStatus; summary: string; remaining: string[]; agent: AgentId }>(`/projects/${projectId}/git/resolve`, { agent: writer.agent, model: writer.model || undefined }),
-    result => { setResolution({ agent: agentLabel(result.agent), summary: result.summary }); return result.remaining.length ? tn(result.remaining.length, '{n} file still has conflicts.', '{n} files still have conflicts.') : t('Conflicts resolved. Read the diffs, then commit the merge.'); });
-  const finish = () => void run('finish', () => api<{ git: GitStatus; commit: string }>(`/projects/${projectId}/git/finish`, {}), result => { setResolution(null); return t('Committed {hash}.', { hash: result.commit }); });
-  const abort = () => void run('abort', () => api<{ git: GitStatus }>(`/projects/${projectId}/git/abort`, {}), () => { setResolution(null); return t('The merge was abandoned.'); });
+  const resolve = async () => {
+    if (busy) return;
+    const choice = resolver;
+    const merge = gitMergeId(git);
+    setError(''); setNotice('');
+    setResolution({ merge, agent: choice.agent, busy: true });
+    try {
+      const result = await api<{ git: GitStatus; summary: string; remaining: string[]; agent: AgentId }>(`/projects/${projectId}/git/resolve`, choice);
+      onStatus(result.git);
+      setDiffRefresh(value => value + 1);
+      const notice = result.remaining.length ? tn(result.remaining.length, '{n} file still has conflicts.', '{n} files still have conflicts.') : t('Conflicts resolved. Read the diffs, then commit the merge.');
+      setResolution({ merge, agent: result.agent, summary: result.summary, notice });
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      try { onStatus(await api<GitStatus>(`/projects/${projectId}/git`)); } catch { /* Keep the original failure. */ }
+      setResolution({ merge, agent: choice.agent, error });
+    }
+  };
+  const finish = () => void run('finish', () => api<{ git: GitStatus; commit: string }>(`/projects/${projectId}/git/finish`, {}), result => { setResolution(); return t('Committed {hash}.', { hash: result.commit }); });
+  const abort = () => void run('abort', () => api<{ git: GitStatus }>(`/projects/${projectId}/git/abort`, {}), () => { setResolution(); return t('The merge was abandoned.'); });
   const commitTitle = staged.length ? tn(staged.length, 'Commit staged changes in 1 file', 'Commit staged changes in {n} files') : chosen.length === files.length ? tn(files.length, 'Commit 1 file', 'Commit all {n} files') : t('Commit {chosen} of {n} files', { chosen: chosen.length, n: files.length });
   const commitDisabled = Boolean(busy) || !message.trim() || !chosen.length;
   const syncPrimary = !chosen.length && canSync;
@@ -731,11 +752,12 @@ function GitWorkspace({ projectId, navigation, git, onStatus, writer, messageWri
     <div className="git-panel-content">
       {merging && <div className={'git-merge' + (merging.conflicts.length ? '' : ' resolved')} role="group" aria-label={t('Merge in progress')}>
         <p><strong>{merging.conflicts.length ? tn(merging.conflicts.length, 'Merging: {n} file has conflicts', 'Merging: {n} files have conflicts') : t('Merging: no conflicts left')}</strong><span>{merging.message}</span></p>
-        {resolution && <div className="git-merge-summary markdown" aria-label={t('{agent} on the merge', { agent: resolution.agent })}><Markdown text={resolution.summary}/></div>}
+        {resolution?.summary && <div className="git-merge-summary markdown" aria-label={t('{agent} on the merge', { agent: agentLabel(resolution.agent) })}><Markdown text={resolution.summary}/></div>}
         <div className="button-row">
           <button type="button" className="button secondary compact" disabled={Boolean(busy)} onClick={abort}>{busy === 'abort' ? t('Aborting…') : t('Abort merge')}</button>
-          {merging.conflicts.length
-            ? <button type="button" className="button primary compact" disabled={Boolean(busy)} onClick={resolve}>{busy === 'resolve' ? <><span className="spinner"/>{t('{agent} is resolving…', { agent: agentLabel(writer.agent) })}</> : <><Icon name="spark" size={14}/>{t('Resolve with {agent}', { agent: agentLabel(writer.agent) })}</>}</button>
+          {(merging.conflicts.length > 0 || resolution?.busy) && <button type="button" className="button secondary compact" onClick={onChangeResolver}>{t('Change conflict agent')}</button>}
+          {merging.conflicts.length || resolution?.busy
+            ? <button type="button" className="button primary compact" disabled={Boolean(busy)} onClick={resolve}>{busy === 'resolve' ? <><span className="spinner"/>{t('{agent} is resolving…', { agent: agentLabel(resolution?.agent ?? resolver.agent) })}</> : <><Icon name="spark" size={14}/>{t('Resolve with {agent}', { agent: agentLabel(resolver.agent) })}</>}</button>
             : <button type="button" className="button primary compact" disabled={Boolean(busy)} onClick={finish}>{busy === 'finish' ? t('Committing…') : t('Commit merge')}</button>}
         </div>
       </div>}
@@ -1316,6 +1338,7 @@ function App() {
   // Appearance, language and notifications live in Settings; a new language re-renders everything.
   const theme = useTheme(); const { language: uiLanguage } = useLanguage();
   const [settings, setSettings] = useState<false | SettingsInitialPage>(false);
+  const [gitResolutions, setGitResolutions] = useState<Record<string, GitResolution>>({});
   const openSettings = useCallback(() => {
     const dialog = document.querySelector('.settings-dialog')?.closest('dialog');
     if (dialog?.open && !dialog.contains(document.activeElement)) dialog.focus({ preventScroll: true });
@@ -1485,7 +1508,7 @@ function App() {
   useEffect(() => {
     if (task && task.status !== 'deleting' && commitContextKey) rememberCommitConversation(commitContextKey, task.id);
   }, [commitContextKey, task?.id, task?.status]);
-  const commitPreference = useCommitMessageAgent();
+  const commitPreference = useCommitMessageAgent(), conflictPreference = useConflictAgent();
   const commitContext = task || state?.tasks.find(item => item.id === commitConversation(commitContextKey) && item.projectId === project?.id && item.status !== 'deleting');
   // Remember the paper even when its manuscript is open, and replace stale
   // paper IDs only after the host has returned the accessible papers.
@@ -1600,7 +1623,12 @@ function App() {
   const modelInfo = models.find(m => m.id === chosenModel) || models.find(m => m.isDefault);
   const pref = readModelPreferences(agentChoice, chosenModel, modelInfo) || { effort: isPlayground && agentChoice === 'codex' ? 'xhigh' : null, fast: false };
   const agent = { agent: agentChoice, model: modelInfo?.id || chosenModel, effort: taskEffort(pref.effort, modelInfo), serviceTier: agentChoice === 'codex' ? (pref.fast && modelInfo?.fastMode ? modelInfo.fastMode.serviceTier : 'default') : undefined };
-  const commitWriter: CommitMessageChoice = commitPreference === 'conversation' ? (commitContext ? { agent: commitContext.agent || 'codex', model: commitContext.model || '', effort: commitContext.effort || '', ...(commitContext.serviceTier ? { serviceTier: commitContext.serviceTier } : {}) } : agent) : commitPreference;
+  const conversationHelper: CommitMessageChoice = commitContext ? {
+    agent: commitContext.agent || 'codex', model: commitContext.model || '', effort: commitContext.effort || '',
+    ...(commitContext.serviceTier ? { serviceTier: commitContext.serviceTier } : {}),
+  } : agent;
+  const commitWriter = commitPreference === 'conversation' ? conversationHelper : commitPreference;
+  const conflictWriter = conflictPreference === 'conversation' ? conversationHelper : conflictPreference;
   const remember = (change: Partial<{ effort: string; fast: boolean }>) => {
     saveModelPreferences(agentChoice, agent.model, { ...pref, ...change });
   };
@@ -1864,6 +1892,15 @@ function App() {
     return () => { live = false; window.removeEventListener('focus', load); };
   }, [project?.id, project?.path, skillsRevision]);
   const projectGit = git.projectId === project?.id ? git.status : null;
+  const mergeId = gitMergeId(projectGit), resolution = gitResolutions[commitContextKey];
+  useEffect(() => {
+    if (!projectGit || !resolution || resolution.busy || resolution.merge === mergeId) return;
+    setGitResolutions(current => {
+      if (current[commitContextKey] !== resolution) return current;
+      const { [commitContextKey]: _, ...others } = current;
+      return others;
+    });
+  }, [commitContextKey, mergeId, projectGit, resolution]);
   const overleafSync = state?.overleaf?.syncs.find(sync => sync.projectId === project?.id);
   // Coauthors' cursors come with each state read, and between reads with
   // the event stream when there is one.
@@ -2380,7 +2417,11 @@ function App() {
             <button type="button" className="button secondary compact" disabled={taskActionBusy} aria-busy={taskActionBusy} onClick={() => void action('/tasks/' + task.id + '/publish')}><Icon name="diff" size={14}/>{task.review?.round ? t('Regenerate PDF comparison') : t('Generate PDF comparison')}</button>
           </div> : null} onTaskSaved={acceptSavedTask} reportError={reportError} pause={pause} pausing={taskActionBusy} skills={projectSkills} feedback={chatOnly ? <>{reviewFeedback(true)}{applicationStep && <div className="review-feedback card commit-card task-delivery">{applicationStep}</div>}</> : null} openReview={chatOnly ? () => { setMobileTab('review'); setLayout(current => current === 'conversation' ? 'split' : current); } : undefined}/></div>
       : manuscriptOpen && project ? <ManuscriptView onOpenTask={id => void switchWorkspace(id, true)} notesRequest={playgroundNotes} taskCards={taskCards} key={project.id + project.path} navigationGuard={manuscriptNavigationGuard} collapsed={manuscriptCollapsed} setCollapsed={setManuscriptCollapsed} navigation={!mobile ? sidebarToggle : null} project={project} data={shownManuscript} error={manuscriptData.error} view={manuscriptView} setView={setManuscriptView} region={region} setRegion={setRegion} active={activeNote} setActive={setActiveNote} actions={noteActions} newTask={newTaskPanel} tools={!mobile ? manuscriptTools : null} share={!mobile ? manuscriptShare : null} onFixProblems={fixProblems} diagnoseBuild={isPlayground ? undefined : failureId => api<BuildRepairResult>(`/projects/${project.id}/manuscript/repair`, { failureId, agent: agent.agent, model: agent.model })} onGit={status => updateGit(project.id, status)} writer={commitWriter} reportError={reportError} openFile={openFile} onOpened={() => setOpenFile(null)} onEditing={setEditingFile}/>
-      : gitOpen && project ? <GitWorkspace key={project.id + project.path} projectId={project.id} navigation={sidebarToggle} git={projectGit} onStatus={status => updateGit(project.id, status)} writer={{ agent: agent.agent, model: agent.model }} messageWriter={commitWriter} tasks={state?.tasks.filter(task => task.projectId === project.id) || []} onOpenTask={id => { setSelected(id); setSidebar(false); }}/>
+      : gitOpen && project ? <GitWorkspace key={project.id + project.path} projectId={project.id} navigation={sidebarToggle} git={projectGit} onStatus={status => updateGit(project.id, status)} resolver={conflictWriter} resolution={resolution?.busy || resolution?.merge === mergeId ? resolution : undefined} setResolution={value => setGitResolutions(resolutions => {
+        if (value) return { ...resolutions, [commitContextKey]: value };
+        const { [commitContextKey]: _, ...others } = resolutions;
+        return others;
+      })} onChangeResolver={() => setSettings('git-conflicts')} messageWriter={commitWriter} tasks={state?.tasks.filter(task => task.projectId === project.id) || []} onOpenTask={id => { setSelected(id); setSidebar(false); }}/>
       : referencesOpen && project ? <section className="references-page" aria-label={t('Reference check')}>
           <header className="references-page-head"><h2>{t('Reference check')}</h2><span>{project.name}</span></header>
           <ReferencesPanel key={project.id} place={'references:' + project.id} data={bibliography} onInvestigate={draftInvestigation}/>
@@ -2389,7 +2430,7 @@ function App() {
       : <div className="home"><div className="home-inner"><PapilotMark size={52} className="home-logo"/><h1>{t('Add your first paper')}</h1><div className="home-paper-actions"><button className="button primary" onClick={createProject}><Icon name="plus" size={16}/>{t('New paper')}</button><button className="button secondary" onClick={importProject}><Icon name="download" size={16}/>{t('Import or open')}</button></div>{overleafEntry && <div className="home-integrations">{overleafEntry}</div>}</div></div>}
     </main>
     {error && !modal && <div role="alert" className="toast"><Icon name="alert" size={16}/><span>{error}</span><button className="icon-button" aria-label={t('Dismiss error')} onClick={() => setError('')}><Icon name="close" size={14}/></button></div>}
-    {settings && <SettingsDialog refreshUsage={refreshUsage} commitWriter={commitWriter} workflow={isPlayground ? undefined : { enabled: runtimes.collaboration?.hidden === false, online, runtimes, load: () => api<CollaborationSettingsState>('/collaboration'), save: async change => { const result = await api<CollaborationSettingsState>('/collaboration', change); await refresh(true); return result; } }} requirements={isPlayground ? undefined : { state: requirements, online }} modelDefaults={{ agents: offered.map(id => ({ value: id, label: agentLabel(id), runtime: runtimes[id] })), agent: agentChoice, model: chosenModel, effort: agent.effort, onSelect: chooseModel, onEffort: effort => remember({ effort }) }} updates={!isPlayground ? api : undefined} overleaf={!isPlayground ? { api, state: state?.overleaf } : undefined} initialPage={settings} theme={theme.theme} onTheme={theme.setTheme} resolved={theme.resolved} appearance={theme.appearance} onAppearance={theme.setAppearance} onClose={() => setSettings(false)} diagnostics={!isPlayground ? { online, runtimes, project, check: checkDiagnostics, latex: detectLatexInstallation, compiler: chooseCompiler, reconnect: async () => { await api('/reconnect', {}); await refresh(true); }, writer: (route: string, body?: unknown) => api('/writer' + route, body) } : undefined} skills={!isPlayground ? { project, api, onChanged: () => setSkillsRevision(value => value + 1) } : undefined}/>}
+    {settings && <SettingsDialog refreshUsage={refreshUsage} commitWriter={commitWriter} conflictWriter={conflictWriter} workflow={isPlayground ? undefined : { enabled: runtimes.collaboration?.hidden === false, online, runtimes, load: () => api<CollaborationSettingsState>('/collaboration'), save: async change => { const result = await api<CollaborationSettingsState>('/collaboration', change); await refresh(true); return result; } }} requirements={isPlayground ? undefined : { state: requirements, online }} modelDefaults={{ agents: offered.map(id => ({ value: id, label: agentLabel(id), runtime: runtimes[id] })), agent: agentChoice, model: chosenModel, effort: agent.effort, onSelect: chooseModel, onEffort: effort => remember({ effort }) }} updates={!isPlayground ? api : undefined} overleaf={!isPlayground ? { api, state: state?.overleaf } : undefined} initialPage={settings} theme={theme.theme} onTheme={theme.setTheme} resolved={theme.resolved} appearance={theme.appearance} onAppearance={theme.setAppearance} onClose={() => setSettings(false)} diagnostics={!isPlayground ? { online, runtimes, project, check: checkDiagnostics, latex: detectLatexInstallation, compiler: chooseCompiler, reconnect: async () => { await api('/reconnect', {}); await refresh(true); }, writer: (route: string, body?: unknown) => api('/writer' + route, body) } : undefined} skills={!isPlayground ? { project, api, onChanged: () => setSkillsRevision(value => value + 1) } : undefined}/>}
     {deleteTarget && <DeleteTaskDialog task={state?.tasks.find(t => t.id === deleteTarget.id) || deleteTarget} submit={() => api('/tasks/' + deleteTarget.id + '/delete', { confirm: true })} onClose={() => setDeleteTarget(null)} onDeleted={() => taskDeleted(deleteTarget.id)} refresh={() => void refresh(true)}/>}
     {bulkTarget && <BulkTaskDialog target={bulkTarget}
       submit={target => api('/tasks/' + target.id + '/' + bulkTarget.action, bulkTarget.action === 'archive' ? { archived: true } : { confirm: true })}
