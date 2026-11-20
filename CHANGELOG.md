@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- Add an Arch Linux package recipe for the official x86_64 desktop build and automate validation and publication from stable releases after maintainer setup. ([#267](https://github.com/PapilotAI/papilot/issues/267))
+
 ### Fixed
 
 - Generate initial task-review commit drafts in the selected commit-message language instead of copying the task title. Manual edits and preserved reconciliation messages remain intact. ([#255](https://github.com/PapilotAI/papilot/issues/255))

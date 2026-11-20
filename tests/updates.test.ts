@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import net from 'node:net';
 import { spawn, execFileSync } from 'node:child_process';
-import { activeInstallation, devRevision, newerVersion, readJson, releaseVersion, stableVersion, writeJson } from '../bin/installation.mjs';
+import { activeInstallation, agentSdkFolder, devRevision, newerVersion, readJson, releaseVersion, stableVersion, writeJson } from '../bin/installation.mjs';
 import { importLoader, killTree, tarCommand } from '../bin/agent-paths.mjs';
 import { DESKTOP_DEV_TAG, DESKTOP_RELEASES, latestDesktopRelease, latestRelease, Updates } from '../src/server/updates.ts';
 import { DEV_REPOSITORY, download, health, installLayer, installRelease, loaderFor, npmCli, prepareDev, probeInstallation, sleep } from '../src/server/update-install.ts';
@@ -20,6 +20,24 @@ function fixture(overrides: Record<string, any> = {}) {
   const updates = new Updates({ root: process.cwd(), data, version: '0.6.0', port: 1, supported: true, latest: async () => '0.7.0', busy: () => false, shutdown() {}, ...overrides });
   return { data, updates, close() { updates.close(); fs.rmSync(data, { recursive: true, force: true }); } };
 }
+test('package-managed desktop updates keep user-level agent installation available', async () => {
+  const previous = process.env.PAPILOT_DESKTOP_PACKAGE_UPDATES;
+  process.env.PAPILOT_DESKTOP_PACKAGE_UPDATES = '1';
+  const desktop = fixture({ desktop: true, latestDesktop: async () => assert.fail('A managed desktop package does not check for updates') });
+  const web = fixture();
+  try {
+    assert.equal((await desktop.updates.check()).packageManager, 'managed');
+    assert.equal(desktop.updates.snapshot().canUpdate, false);
+    assert.throws(() => desktop.updates.setChannel('dev'), /managed outside Papilot/);
+    assert.throws(() => desktop.updates.install('0.7.0'), /managed outside Papilot/);
+    assert.equal(agentSdkFolder(process.cwd(), desktop.data), path.join(desktop.data, 'agents'));
+    assert.equal((await web.updates.check()).latestVersion, '0.7.0');
+  } finally {
+    if (previous === undefined) delete process.env.PAPILOT_DESKTOP_PACKAGE_UPDATES;
+    else process.env.PAPILOT_DESKTOP_PACKAGE_UPDATES = previous;
+    desktop.close(); web.close();
+  }
+});
 test('the development desktop app checks its own source and only links to installers', async () => {
   const data = temporary(), downloadUrl = `${DESKTOP_RELEASES}/tag/v0.7.0`;
   const saved = { currentVersion: devVersion, latestVersion: devVersion, phase: 'restarting', pid: process.pid };
