@@ -6,6 +6,7 @@ import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { chromium, expect } from './playwright.mjs';
 import { dragPdfText } from './pdf-selection-fixture.mjs';
+import { regroupAnnotation } from '../src/note-groups.ts';
 import { summarizeNotes } from '../src/notes.ts';
 
 const server = Fastify();
@@ -45,6 +46,18 @@ const routeApi = async route => {
   if (url.pathname.endsWith('/restore')) {
     const id = url.pathname.split('/').at(-2); notes.push(deleted.find(note => note.id === id)); notes.sort((a, b) => a.createdAt - b.createdAt); return json({ annotations: notes });
   }
+  if (url.pathname.endsWith('/annotations/regroup')) {
+    const edits = route.request().postDataJSON();
+    const updated = edits.map(edit => regroupAnnotation(notes.find(note => note.id === edit.id), edit.group, edit.groupInstruction));
+    notes = notes.map(note => updated.find(next => next.id === note.id) || note);
+    return json({ annotations: updated });
+  }
+  if (/\/annotations\/[^/]+$/.test(url.pathname)) {
+    const index = notes.findIndex(note => note.id === url.pathname.split('/').at(-1));
+    const edit = route.request().postDataJSON();
+    notes[index] = 'group' in edit ? regroupAnnotation(notes[index], edit.group, edit.groupInstruction) : { ...notes[index], comment: edit.comment };
+    return json(notes[index]);
+  }
   if (url.pathname === '/api/tasks') {
     const body = route.request().postDataJSON(); requests.push(body);
     const attached = notes.filter(note => body.annotations.includes(note.id));
@@ -60,7 +73,7 @@ await page.route('**/api/**', routeApi);
 // On wide viewers the note tool is the color picker: a click picks the tool,
 // a second click opens the colors. Narrow viewers keep the toolbar's picker.
 const noteTool = () => page.getByRole('toolbar', { name: 'Marking tools' }).getByRole('button', { name: 'Note', exact: true });
-const picker = () => page.locator('.group-select:visible');
+const picker = () => page.locator('.pdf-toolbar .group-select:visible, [aria-label="Marking tools"] .group-select:visible');
 async function chooseGroup(name) {
   if (await noteTool().isVisible()) {
     if (await noteTool().getAttribute('aria-pressed') !== 'true') await noteTool().click();
@@ -190,10 +203,78 @@ try {
   await expect(mobile.locator('.note-tag.active')).toHaveAttribute('data-note', notes[0].id);
   assert.equal(notes.length, 3);
   await mobile.close();
+  // The mark's own color is independent of the drawing tool. An unattached
+  // annotation keeps its individual comment as it moves between library rows.
+  await clickMark(notes[0]);
+  const popup = page.locator('.pdf-personal-note[role="dialog"]');
+  await popup.getByRole('button', { name: /^Edit note \d+$/ }).click();
+  await popup.getByRole('textbox').fill('Keep this individual comment.');
+  await popup.getByRole('textbox').press('Escape');
+  await expect.poll(() => notes[0].comment).toBe('Keep this individual comment.');
+  await clickMark(notes[0]);
+  await popup.locator('.group-select').click();
+  await page.getByRole('menuitemradio', { name: 'Red' }).click();
+  await expect.poll(() => notes[0].group).toBe('red');
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
+  const row = page.locator(`.notes-panel [data-note="${notes[0].id}"]`);
+  await expect(row).toContainText('Keep this individual comment.');
+  const edit = row.getByRole('button', { name: /^Edit note \d+$/ });
+  await edit.click();
+  const groupedEditor = row.getByRole('textbox');
+  await groupedEditor.fill('Edited in the color group.');
+  await groupedEditor.press('Escape');
+  await expect(row).toContainText('Edited in the color group.');
+  await expect(edit).toBeFocused();
+  await edit.click();
+  await groupedEditor.fill('');
+  await groupedEditor.press('Escape');
+  await expect.poll(() => notes[0].comment).toBe('');
+  await edit.click();
+  await groupedEditor.fill('Edited in the color group.');
+  await groupedEditor.press('Escape');
+
+  await row.locator('.group-select').click();
+  await page.getByRole('menuitemradio', { name: 'Individual notes' }).click();
+  await expect(row.locator('.group-select')).not.toHaveAttribute('data-group', /.+/);
+  await expect(row).toContainText('Edited in the color group.');
+  await row.locator('.group-select').click();
+  await page.getByRole('menuitemradio', { name: 'Yellow' }).click();
+  await expect(row.locator('.group-select')).toHaveAttribute('data-group', 'yellow');
+  const header = color => page.locator(`.notes-panel .group-header .group-color-picker .group-select[data-group="${color}"]`);
+  const hits = notes.filter(note => note.group === 'yellow').map(note => note.id);
+  assert.equal(hits.length, 2);
+  await header('yellow').click();
+  await page.getByRole('menuitemradio', { name: 'Green' }).click();
+  await expect(header('green')).toHaveCount(1);
+  assert.deepEqual(notes.filter(note => note.group === 'green').map(note => note.id), hits);
+  await header('green').click();
+  await page.getByRole('menuitemradio', { name: 'Individual notes' }).click();
+  await expect(header('green')).toHaveCount(0);
+  await expect(row).toContainText('Edited in the color group.');
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(header('green')).toHaveCount(1);
+  assert.deepEqual(notes.filter(note => note.group === 'green').map(note => note.id), hits);
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(header('yellow')).toHaveCount(1);
+  assert.deepEqual(notes.filter(note => note.group === 'yellow').map(note => note.id), hits);
+  await expect(row).toContainText('Edited in the color group.');
+
   await page.getByRole('button', { name: 'Select all notes for this task', exact: true }).click();
   await page.getByRole('button', { name: 'Close notes', exact: true }).click();
   await page.getByRole('tab', { name: 'New task', exact: true }).click();
+  const yellowInstruction = page.getByRole('textbox', { name: 'Instructions for Yellow notes' });
+  const purpleInstruction = page.getByRole('textbox', { name: 'Instructions for Purple notes' });
+  await yellowInstruction.fill('Retain the examples.');
+  await purpleInstruction.fill('Shorten the explanations.');
+  await page.locator('.task-notes-panel .group-header .group-color-picker button[data-group="yellow"]').click();
+  await page.getByRole('menuitemradio', { name: 'Purple' }).click();
+  await expect(yellowInstruction).toHaveCount(0);
+  await expect(purpleInstruction).toHaveValue('Shorten the explanations.');
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(yellowInstruction).toHaveValue('Retain the examples.');
+  await expect(purpleInstruction).toHaveValue('Shorten the explanations.');
+  await yellowInstruction.clear(); await purpleInstruction.clear();
   await page.getByRole('textbox', { name: 'Describe the revision' }).fill('Explain yellow selections. Shorten purple selections.');
   await page.screenshot({ path: 'test-results/note-groups-desktop.png', fullPage: true });
   await page.getByRole('button', { name: 'Start task', exact: true }).click();
@@ -217,6 +298,7 @@ try {
   await page.getByRole('button', { name: /^My notes(?: · .+)?$/ }).click();
   await expect(page.locator('.annotation-group')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Notes in this task' })).toHaveCount(0);
+  await page.locator('.pdf-reading-notes').evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)));
   await page.screenshot({ path: 'test-results/note-groups-mobile.png', fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390);
   assert.deepEqual(errors, []);

@@ -6,7 +6,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Fixed
 
-- Keep internal note-alternative data out of live and saved Chat replies, including plain follow-ups after a note task. ([#271](https://github.com/PapilotAI/papilot/issues/271))
+- Keep internal note-alternative data out of live and saved Chat replies, including plain follow-ups and alternatives sent as bare JSON or ordinary JSON code blocks. ([#271](https://github.com/PapilotAI/papilot/issues/271))
 
 - Link PDF annotations through citations, inline math, hyperlinks, headings and captions. Follow-up notes on pending proposals link to the revised change when the original source range can still be identified. ([#270](https://github.com/PapilotAI/papilot/issues/270))
 
@@ -18,6 +18,8 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Changed
 
+- Pin and unpin tasks directly from the task list with a pushpin button. The **My notes** header labels **Add to task** and uses a trash icon for clearing annotations. **Undo** appears below the header after clearing.
+- Rejecting a change while reviewing an annotation returns that annotation to **Manuscript**. The annotation card flies to the count and its checked note icon becomes a muted note icon. Click the muted icon to bring the annotation back to the current task. Rejecting an edit in **All changes** returns every original annotation linked to that edit. Returned annotations keep their original group and comment. Use the swatch to change or remove colors for one annotation or a whole group, and the pencil to edit a grouped comment. Undo restores an entire group or takes back a manual annotation return. Undo a rejection to restore the proposed text and the annotations it returned.
 - Store new task worktrees under `~/.papilot/worktrees` by default. Existing tasks retain their stored paths, and project-specific overrides still apply. ([#273](https://github.com/PapilotAI/papilot/issues/273))
 
 - Refresh the website's GitHub star count with a 15-minute edge cache. Keep the last successful count during GitHub failures and show the deployment-time count without JavaScript. ([#257](https://github.com/PapilotAI/papilot/issues/257))

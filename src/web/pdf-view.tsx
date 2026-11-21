@@ -7,7 +7,7 @@ import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy } from 'pdf
 import { EventBus, FindState, LinkTarget, PDFFindController, PDFLinkService, PDFViewer } from 'pdfjs-dist/web/pdf_viewer.mjs';
 import viewerStyles from 'pdfjs-dist/web/pdf_viewer.css?inline';
 import worker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import type { Annotation, InFlightMark, MarkKind, SourcePlace } from '../shared.ts';
+import { isTaskReviewNote, type Annotation, type InFlightMark, type MarkKind, type SourcePlace } from '../shared.ts';
 import { loadStamps, useStamps, type Stamp } from './stamps.ts';
 import { StampWheel } from './stamp-wheel.tsx';
 import { PdfToolRail, TOOL_KEYS, type PdfTool, type PdfToolRailHandle } from './pdf-tool-rail.tsx';
@@ -204,7 +204,7 @@ export const PdfView = forwardRef<PdfHandle, {
   /** `notes` span builds, each naming the build it was made on in `key`;
    *  the reader shows those of the build on screen, also while a replacement
    *  downloads or after it fails. */
-  keyedNotes?: boolean;
+  keyedNotes?: boolean; revealNote?: string; onNoteShown?: (id: string) => void;
   /** Source binding is available for a live manuscript; task PDFs are immutable snapshots. */
   anchorApi?: (action: 'capture' | 'resolve', body: unknown) => Promise<any>;
   onCreate: (page: number, rect: Rect, rects: Rect[], quote: string, comment: string, group?: NoteGroup, options?: { reveal?: boolean; quote?: boolean; kind?: MarkKind; stamp?: string; key?: string }) => Promise<void>;
@@ -462,6 +462,11 @@ export const PdfView = forwardRef<PdfHandle, {
       setFlash({ page, rect, id: Date.now() });
     },
   }), []);
+  useEffect(() => {
+    if (!props.revealNote || props.active !== props.revealNote || !anchorsReady || loading || shown.url !== props.url) return;
+    const note = notes.find(entry => entry.note.id === props.revealNote && entry.note.key === props.pdfKey)?.note;
+    if (note && handle.current) { handle.current.showPlace(note.page, note.rect); props.onNoteShown?.(note.id); }
+  }, [props.revealNote, props.onNoteShown, props.active, props.pdfKey, props.url, shown.url, notes, anchorsReady, loading]);
   useEffect(() => {
     if (!flash) return;
     const timer = setTimeout(() => setFlash(current => current?.id === flash.id ? null : current), 2400);
@@ -1061,6 +1066,12 @@ export const PdfView = forwardRef<PdfHandle, {
           if (draft === null) delete next[activeNote.note.id]; else next[activeNote.note.id] = draft;
           return next;
         })}
+        onGroupChange={props.noteActions.regroup && !isTaskReviewNote(activeNote.note) ? async group => {
+          setNoteBusy(true); setNoteError('');
+          try { await props.noteActions!.regroup!(activeNote.note, group); }
+          catch (error) { setNoteError(error instanceof Error ? error.message : String(error)); }
+          finally { setNoteBusy(false); }
+        } : undefined}
         destination={props.noteActions.copy ? 'manuscript' : undefined}
         onToggle={() => props.noteActions!.copy ? void copyNote(activeNote.note) : props.noteActions!.toggle(activeNote.note)} onDismiss={() => void dismissNote(activeNote.note)} onClose={closeNote}
         onEditing={props.noteActions.onEditing} onSave={async (comment, action) => {

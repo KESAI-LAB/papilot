@@ -9,6 +9,11 @@ import type { Annotation, Project, Task, Run, TimelineItem } from '../shared.ts'
 // A thread's task, through the task_threads index.
 export const TASK_BY_THREAD = "SELECT data FROM tasks WHERE json_extract(data,'$.threadId')=? ORDER BY rowid LIMIT 1";
 
+// The navigation count spans every root document of a paper. The partial
+// index keeps frequent state reads independent of the historical task notes.
+const onManuscript = `json_extract(data, '$.taskId') IS NULL AND json_extract(data, '$.deletedAt') IS NULL
+  AND (json_extract(data, '$.aiReview') IS NULL OR NULLIF(json_extract(data, '$.aiReview.sourceId'), '') IS NOT NULL)`;
+
 export class Store extends EventEmitter {
   db: DatabaseSync;
   constructor(public readonly file: string) {
@@ -24,6 +29,7 @@ export class Store extends EventEmitter {
       CREATE TABLE IF NOT EXISTS deleted_tasks(id TEXT PRIMARY KEY, deleted INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS ai_review_inputs(task_id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS annotations(id TEXT PRIMARY KEY, project_id TEXT NOT NULL, data TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS manuscript_notes_by_project ON annotations(project_id) WHERE ${onManuscript};
       CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY, project_id TEXT NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS anchor_sources(project_id TEXT NOT NULL, revision TEXT NOT NULL, text TEXT NOT NULL, PRIMARY KEY(project_id, revision));
       CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -43,6 +49,10 @@ export class Store extends EventEmitter {
   }
   private rows<T>(table: string): T[] { return (this.db.prepare(`SELECT data FROM ${table} ORDER BY rowid`).all() as { data: string }[]).map(r => JSON.parse(r.data)); }
   projects() { return this.rows<Project>('projects'); }
+  manuscriptNoteCounts(): Record<string, number> {
+    const counts = this.db.prepare(`SELECT project_id, COUNT(*) AS total FROM annotations WHERE ${onManuscript} GROUP BY project_id`).all();
+    return Object.fromEntries(counts.map(row => [String(row.project_id), Number(row.total)]));
+  }
   tasks() { return this.rows<Task>('tasks'); }
   pinnedTaskIds() {
     return (this.db.prepare('SELECT task_id FROM task_pins ORDER BY rowid').all() as { task_id: string }[]).map(row => row.task_id);
@@ -143,6 +153,23 @@ export class Store extends EventEmitter {
     return note;
   }
   saveAnnotation(a: Annotation) { this.db.prepare('INSERT INTO annotations VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(a.id, a.projectId, JSON.stringify(a)); this.emit('change'); return a; }
+  returnAnnotation(copy: Annotation, decision?: string) {
+    const existing = this.findAnnotation(copy.projectId, copy.id), replay = copy.returnReplay;
+    if (existing && ((decision && existing.returnDecisions?.includes(decision)) || (replay && existing.returnReplays?.includes(replay)))) return existing;
+    const returnReplays = replay ? [...(existing?.returnReplays ?? []), replay] : existing?.returnReplays;
+    if (existing && (existing.taskId || (existing.deletedAt === undefined && !decision))) {
+      return replay ? this.saveAnnotation({ ...existing, returnReplays }) : existing;
+    }
+    const note = existing ?? copy, active = existing && existing.deletedAt === undefined;
+    return this.restoreAnnotation({ ...note, returnReplays,
+      returnAction: active ? existing.returnAction : copy.returnAction,
+      returnReplay: active ? existing.returnReplay : replay,
+      createdAt: existing?.deletedAt !== undefined ? Math.max(copy.createdAt, existing.createdAt + 1) : note.createdAt,
+      ...(decision ? { returnDecisions: [...(note.returnDecisions ?? []), decision] } : {}) });
+  }
+  reviewReturns(projectId: string, taskId: string, action: string) {
+    return this.annotations(projectId, true).filter(note => !note.taskId && note.returnAction?.taskId === taskId && note.returnAction.id === action);
+  }
   deleteAnnotation(projectId: string, id: string) {
     const note = this.annotation(projectId, id);
     if (note.taskId) throw new Error('This note has already been sent.');

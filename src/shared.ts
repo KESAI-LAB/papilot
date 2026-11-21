@@ -26,7 +26,7 @@ export interface ReviewSummary { ready?: number; state: string; round: number | 
 export interface PendingBuild { requestId: string; job?: string; runs: string[]; sendBack: boolean; restarts: number }
 // previousStatus and previousError are where Check status returns the task
 // once the engine confirms the action.
-export interface PendingReview { route: string; body: Record<string, unknown>; previousStatus: TaskStatus; previousError?: string | null }
+export interface PendingReview { returnNote?: Annotation; returnNotes?: Annotation[]; route: string; body: Record<string, unknown>; previousStatus: TaskStatus; previousError?: string | null }
 // A task is saved with its first message queued before its manuscript copy
 // exists, and prepared in the background: the review engine checks out the
 // copy, and an AI review also compiles its PDF. A failed preparation keeps
@@ -108,7 +108,10 @@ export interface NoteAnchor { sources: { file: string; lines: [number, number] }
 // shown to the agent; context: what the agent is told beyond its location.
 export interface NoteSummary { group?: NoteGroup; kind?: MarkKind; stamp?: string; where: string; quote: string; comment: string; id?: string; anchor?: NoteAnchor; context?: string[]; paper?: { page: number; rects: [number, number, number, number][]; round?: number; key?: string; build?: string } }
 export interface NoteChange { round: number; stop: number; units: string[]; state: 'pending' | 'accepted' | 'rejected' | 'commented' | 'mixed'; match: 'source' | 'quote' }
-export interface NoteResult { key: string; itemId: string; index: number; note: NoteSummary; returned?: boolean; round: number | null; state: 'waiting' | 'unmatched' | 'matched'; changes: NoteChange[] }
+export interface NoteReturnState { returned: boolean; undoReturnAt?: number }
+export interface RemovedNoteReturn { id: string; projectId: string; createdAt: number; originalId: string }
+export interface NoteReturnReceipt extends NoteReturnState { key: string; annotation?: Annotation; removed?: RemovedNoteReturn; moved?: boolean }
+export interface NoteResult extends Partial<NoteReturnState> { key: string; itemId: string; index: number; note: NoteSummary; round: number | null; state: 'waiting' | 'unmatched' | 'matched'; changes: NoteChange[] }
 export interface NoteOption { id: string; label: string; reason?: string; previewError?: string; edits: { unit: string; text: string }[] }
 export const NOTE_ALTERNATIVE_RANGES = { few: [1, 2], balanced: [2, 3], many: [3, 5] } as const;
 export type NoteAlternativeRange = keyof typeof NOTE_ALTERNATIVE_RANGES;
@@ -117,7 +120,7 @@ export const noteAlternativeRange = (value: unknown): NoteAlternativeRange => ty
 export const MAX_NOTE_ALTERNATIVES = 6;
 // Prepared by the editing agent in the same turn, before review-unit IDs exist.
 export interface PreparedNoteOptions { note: number; current: { label: string; reason: string }; options: { label: string; reason: string; edits: { file: string; find: string; replace: string }[] }[] }
-export interface NoteOptions { before?: Record<string, string>; round: number; key: string; options: NoteOption[]; selected?: string; locked?: string; comparisonKey?: string }
+export interface NoteOptions { noteReturn?: NoteReturnState & { annotation?: Annotation; moved?: boolean }; before?: Record<string, string>; round: number; key: string; options: NoteOption[]; selected?: string; locked?: string; comparisonKey?: string }
 // request: the author's own overall request sent with notes, which the prompt otherwise only embeds.
 export interface MessageMeta { attachments?: Attachment[]; skill?: { id: string; name: string; icon?: SkillIcon }; notes?: NoteSummary[]; request?: string; groupInstructions?: GroupInstructions; feedback?: FeedbackSummary; sendsFeedback?: boolean; build?: BuildFailure; author?: Author }
 // Historical attribution on messages and notes from older shared workspaces.
@@ -198,7 +201,7 @@ export interface DiagnosticReport {
   version: string; checkedAt: number; platform: string; arch: string; node: string;
   ok: boolean; checks: DiagnosticCheck[];
 }
-export interface Snapshot { projects: Project[]; tasks: Task[]; pinnedTaskIds?: string[]; requests: PendingRequest[]; runtime: RuntimeStatus; runtimes?: Partial<Record<AgentId, RuntimeStatus>>; version: string; gitAvailable?: boolean; overleaf?: OverleafState }
+export interface Snapshot { projects: Project[]; manuscriptNoteCounts?: Record<string, number>; tasks: Task[]; pinnedTaskIds?: string[]; requests: PendingRequest[]; runtime: RuntimeStatus; runtimes?: Partial<Record<AgentId, RuntimeStatus>>; version: string; gitAvailable?: boolean; overleaf?: OverleafState }
 // Live synchronization of a paper folder with an Overleaf project. A conflict
 // is a passage (or whole file) both sides changed while Papilot was away:
 // Overleaf's version stayed, and the author's can be put back.
@@ -289,7 +292,7 @@ export const isMarkKind = (value: unknown): value is MarkKind => value === 'dele
 export interface QuickNote { id: string; label?: string; instruction?: string; icon?: string }
 export const QUICK_NOTE_LIMIT = 8;
 export const PRESET_QUICK_NOTES = ['polish', 'tighten', 'runt', 'connect', 'verify'];
-export interface Annotation { agentAnnotation?: { taskId: string; request: string }; context?: string[]; groupInstruction?: string; /** The root document whose PDF it is on; absent on notes from before a paper could compile several. */ document?: string; aiReview?: { taskId: string; agent: AgentId; sourceId?: string; copiedTo?: string }; group?: NoteGroup; kind?: MarkKind; stamp?: string; id: string; projectId: string; key: string; page: number; rect: [number, number, number, number]; rects?: [number, number, number, number][]; comment: string; quote: string; source: { file: string; lines: [number, number]; excerpt?: string } | null; createdAt: number; taskId?: string; author?: Author; deletedAt?: number; deletedBatch?: string }
+export interface Annotation { returnAction?: { taskId: string; id: string; key: string; originalId: string; undone?: boolean }; returnDecisions?: string[]; returnReplay?: string; returnReplays?: string[]; agentAnnotation?: { taskId: string; request: string }; context?: string[]; groupInstruction?: string; /** The root document whose PDF it is on; absent on notes from before a paper could compile several. */ document?: string; aiReview?: { taskId: string; agent: AgentId; sourceId?: string; copiedTo?: string }; group?: NoteGroup; kind?: MarkKind; stamp?: string; id: string; projectId: string; key: string; page: number; rect: [number, number, number, number]; rects?: [number, number, number, number][]; comment: string; quote: string; source: { file: string; lines: [number, number]; excerpt?: string } | null; createdAt: number; taskId?: string; author?: Author; deletedAt?: number; deletedBatch?: string }
 // Review findings stay with their task; only explicit copies belong to the manuscript.
 export const isTaskReviewNote = (note: Annotation) => Boolean(note.aiReview && !note.aiReview.sourceId);
 export interface NoteSection { id: string; title: string; level: number; notes: string[] }
@@ -299,6 +302,8 @@ export interface RepositoryFile { path: string; root?: true }
 export interface RepositoryFiles { document: string | null; files: RepositoryFile[] }
 /** A display-only position; the task's original annotation stays unchanged. */
 export interface InFlightMark { note: Annotation; taskId: string; title: string; status: TaskStatus; ready?: true }
+export interface AnnotationGroupState { id: string; createdAt: number; group: NoteGroup | null; groupInstruction?: string }
+export interface AnnotationGroupEdit extends AnnotationGroupState { from: Pick<AnnotationGroupState, 'group' | 'groupInstruction'> }
 export interface AnnotationBatch { document: string | null; batch: string; ids: string[] }
 export interface AnnotationBatchResult { changed: string[]; restoredIds?: string[]; failed: { id: string; error: string }[]; annotations: Annotation[] }
 export interface Manuscript { git: GitStatus; build: ManuscriptBuild; document?: string; annotations: Annotation[]; inFlightMarks?: InFlightMark[]; noteSections?: NoteSection[]; unplacedSectionNotes?: number }
