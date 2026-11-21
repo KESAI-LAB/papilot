@@ -4,6 +4,29 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-21
+
+Return annotations to the manuscript, undo review decisions and color changes, and pin the tasks you use most. See the [release notes](docs/releases/0.12.1/release-notes.md) for update instructions.
+
+### Added
+
+- Return a submitted annotation from Chat or PDF Review. Rejecting an edit returns the original annotations linked to it, with the scope limited to the selected annotation in a focused review. The original comment, mark, and color remain available for editing and reuse. Undo a manual return or undo a rejection and its automatic returns together. ([#264](https://github.com/PapilotAI/papilot/issues/264), [#290](https://github.com/PapilotAI/papilot/pull/290))
+- Pin several tasks directly in the task list. Pins keep their order across task activity, reloads, and connected clients. ([#265](https://github.com/PapilotAI/papilot/issues/265), [#290](https://github.com/PapilotAI/papilot/pull/290))
+- Edit grouped comments with the pencil and change the color of one annotation or a whole group. Choose **Individual notes** to remove a color. Undo restores the entire group in one step. ([#290](https://github.com/PapilotAI/papilot/pull/290))
+- Clear annotations from the current manuscript document with confirmation and batch undo. ([#261](https://github.com/PapilotAI/papilot/issues/261))
+
+### Fixed
+
+- Keep the PDF marking toolbar in place when selecting the Note tool or opening a note. ([#256](https://github.com/PapilotAI/papilot/issues/256))
+- Keep small ACM review changes near the edit in single- and two-column layouts with line rulers. ([#266](https://github.com/PapilotAI/papilot/issues/266), [#272](https://github.com/PapilotAI/papilot/issues/272))
+- Link notes through citations, inline math, hyperlinks, headings, and captions. Link follow-ups to pending proposals when the underlying source range can still be identified. ([#270](https://github.com/PapilotAI/papilot/issues/270))
+- Keep internal note-option data out of live and saved Chat replies, including when the agent emits bare JSON. ([#271](https://github.com/PapilotAI/papilot/issues/271), [#290](https://github.com/PapilotAI/papilot/pull/290))
+
+### Updates
+
+Official Desktop 0.12.0 installations can update in place from **Settings → Updates**. The update keeps your papers, tasks, and settings.
+
+
 ## [0.12.0] - 2026-11-20
 
 Turn feedback into PDF notes, keep track of passages being revised, and preview references without leaving the page. See the [release notes](docs/releases/0.12.0/release-notes.md) for setup and update instructions.
@@ -665,7 +688,8 @@ The first release on npm.
 - A Git panel to diff files, commit the chosen ones, and fetch, pull or push.
 - Remote access through Tailscale, and a background service on macOS.
 
-[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/PapilotAI/papilot/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/PapilotAI/papilot/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/PapilotAI/papilot/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/PapilotAI/papilot/compare/v0.10.4...v0.11.0
 [0.10.4]: https://github.com/PapilotAI/papilot/compare/v0.10.3...v0.10.4
