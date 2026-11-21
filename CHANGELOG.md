@@ -26,7 +26,6 @@ Return annotations to the manuscript, undo review decisions and color changes, a
 
 Official Desktop 0.12.0 installations can update in place from **Settings → Updates**. The update keeps your papers, tasks, and settings.
 
-
 ## [0.12.0] - 2026-11-20
 
 Turn feedback into PDF notes, keep track of passages being revised, and preview references without leaving the page. See the [release notes](docs/releases/0.12.0/release-notes.md) for setup and update instructions.
