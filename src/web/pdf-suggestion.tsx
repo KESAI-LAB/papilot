@@ -25,7 +25,7 @@ export interface PdfNoteActions {
   copy?: (note: Annotation) => Promise<void>;
 }
 
-function usePdfNotePosition(card: RefObject<HTMLElement | null>, rect: Annotation['rect'], preferredWidth = 280, enabled = true, anchorLayer?: HTMLElement) {
+function usePdfNotePosition(card: RefObject<HTMLElement | null>, rect: Annotation['rect'], preferredWidth = 280, enabled = true, anchorLayer?: HTMLElement, actionPoint?: { x: number; y: number }) {
   useLayoutEffect(() => {
     if (!enabled) return;
     const element = card.current!, layer = anchorLayer ?? element.closest<HTMLElement>('.note-layer')!, viewport = layer.closest<HTMLElement>('.pdf-container')!;
@@ -44,13 +44,36 @@ function usePdfNotePosition(card: RefObject<HTMLElement | null>, rect: Annotatio
       const width = Math.min(preferredWidth, right - left);
       element.style.width = `${width}px`;
       element.style.maxHeight = `${bottom - top}px`;
-      const height = element.getBoundingClientRect().height;
+      let height = element.getBoundingClientRect().height;
       // Use space beside the passage when possible; otherwise sit just below
       // it, or above when the passage is near the foot of the visible page.
       const beside = right - anchor.right >= width + 12;
-      const x = beside ? anchor.right + 12 : Math.max(left, Math.min(anchor.left, right - width));
+      let x = beside ? anchor.right + 12 : Math.max(left, Math.min(anchor.left, right - width));
       const below = bottom - anchor.bottom, above = anchor.top - top;
-      const y = beside ? anchor.top : below >= height + 10 || below >= above ? anchor.bottom + 10 : anchor.top - height - 10;
+      let y = beside ? anchor.top : below >= height + 10 || below >= above ? anchor.bottom + 10 : anchor.top - height - 10;
+      if (actionPoint) {
+        // Keep the action at the pointer's page position while the editor
+        // grows or flips at a viewport edge. The button is outside the card.
+        const point = { x: page.left + actionPoint.x * page.width, y: page.top + actionPoint.y * page.height };
+        const gap = 24;
+        if (right - point.x >= width + gap) { x = point.x + gap; y = point.y - 20; }
+        else if (point.x - left >= width + gap) { x = point.x - width - gap; y = point.y - 20; }
+        else {
+          x = Math.max(left, Math.min(point.x - width / 2, right - width));
+          const below = bottom - point.y - gap, above = point.y - top - gap;
+          const under = below >= height || below >= above;
+          // Constrain the editor to one side of the fixed action. Clamping a
+          // tall card across the point would put the button over its text.
+          element.style.maxHeight = `${Math.max(0, under ? below : above)}px`;
+          height = element.getBoundingClientRect().height;
+          y = under ? point.y + gap : point.y - height - gap;
+        }
+        y = Math.max(top, Math.min(y, bottom - height));
+        element.style.setProperty('--note-action-x', `${point.x - x}px`);
+        element.style.setProperty('--note-action-y', `${point.y - y}px`);
+        const action = element.querySelector<HTMLElement>('.pdf-note-pointer-action');
+        if (action) action.style.visibility = point.x >= view.left && point.x <= view.right && point.y >= view.top && point.y <= view.bottom ? '' : 'hidden';
+      }
       const origin = anchorLayer ? viewport.parentElement!.getBoundingClientRect() : page;
       element.style.left = `${x - origin.left}px`;
       element.style.top = `${Math.max(top, Math.min(y, bottom - height)) - origin.top}px`;
@@ -61,7 +84,7 @@ function usePdfNotePosition(card: RefObject<HTMLElement | null>, rect: Annotatio
     viewport.addEventListener('scroll', schedule); window.addEventListener('resize', schedule);
     place();
     return () => { observer.disconnect(); cancelAnimationFrame(frame); viewport.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); };
-  }, [card, enabled, preferredWidth, anchorLayer, rect[0], rect[1], rect[2], rect[3]]);
+  }, [card, enabled, preferredWidth, anchorLayer, rect[0], rect[1], rect[2], rect[3], actionPoint?.x, actionPoint?.y]);
 }
 
 export function NoteAttachButton({ number, ai = false, selected, disabled, destination, onClick }: {
@@ -95,11 +118,13 @@ export function TaskRemoveButton({ number, ai, disabled, onClick }: { number: nu
 // The PDF popover and reading list share the editor and actions. Floating cards
 // also follow their text anchor and close when the reader clicks elsewhere.
 export interface PdfNoteHandle { save: () => Promise<boolean> }
-export function PdfNoteCard({ controller, note, number, index, total, selected, busy, error, draft, onDraftChange, onToggle, onDismiss, onClose, onPrevious, onNext, onSave, onGroupChange, onEditing, destination, inline = false, inTask = false, header, children, anchorLayer }: {
+export function PdfNoteCard({ controller, note, number, index, total, selected, busy, error, draft, onDraftChange, onToggle, onDismiss, onClose, onPrevious, onNext, onSave, onGroupChange, onEditing, destination, inline = false, inTask = false, header, children, anchorLayer, actionPoint }: {
   controller?: Ref<PdfNoteHandle>;
   onGroupChange?: (group: NoteGroup | null) => void;
   /** Cropped pages clip their marks; the card floats above them in the scroll host. */
   anchorLayer?: HTMLElement;
+  /** Pointer release, normalized to the original page. Keyboard/touch use the regular card. */
+  actionPoint?: { x: number; y: number };
   destination?: 'manuscript'; inline?: boolean; inTask?: boolean; header?: ReactNode; children?: ReactNode;
   note: Pick<Annotation, 'rect' | 'comment' | 'group' | 'aiReview' | 'kind' | 'stamp'> & { id?: string }; number: number; index: number; total: number; selected: boolean; busy: boolean; error: string;
   draft: string | null; onDraftChange: (draft: string | null) => void;
@@ -118,6 +143,8 @@ export function PdfNoteCard({ controller, note, number, index, total, selected, 
   // once there is text to discard.
   const compose = !inline && !note.id, send = !inline && !destination;
   const typeless = useTypelessNote(input, compose && editing && !busy);
+  const pointerAction = compose && typeless.enabled ? actionPoint : undefined;
+  const pointerConfirm = Boolean(draft?.trim());
   useEffect(() => { onEditing?.(editing); return () => onEditing?.(false); }, [editing, onEditing]);
   // Focus goes back to the text in the commit that shows it again. A frame
   // later is not enough: after a save the draft clears from a promise, and
@@ -190,17 +217,17 @@ export function PdfNoteCard({ controller, note, number, index, total, selected, 
     const element = input.current;
     if (element) { element.style.height = '0'; element.style.height = `${element.scrollHeight}px`; }
   }, [draft]);
-  usePdfNotePosition(card, note.rect, note.aiReview ? 330 : 280, !inline, anchorLayer);
+  usePdfNotePosition(card, note.rect, note.aiReview ? 330 : 280, !inline, anchorLayer, pointerAction);
   // Enter in the popover sends, like the arrow; a note already in the chat
   // just saves, and the library keeps Enter for saving edits in place.
   const enterAction = !inline && !destination && !selected ? 'quote' : 'keep';
   useLayoutEffect(() => { if (!inline && (!input.current || input.current.disabled)) card.current?.focus({ preventScroll: true }); }, [inline, note.id]);
 
   const deleteButton = <button type="button" className="icon-button pdf-note-delete" aria-label={ai ? t('Ignore suggestion {n}', { n: number }) : t('Delete note {n}', { n: number })} title={ai ? t('Ignore') : t('Delete note')} disabled={busy} onClick={onDismiss}><Icon name="trash" size={14}/></button>;
-  const sendButton = send && <NoteSendButton number={number} ai={ai} selected={selected} busy={busy} disabled={busy || (editing && !draft.trim() && !commentOptional)} onClick={() => void save('quote')}/>;
+  const sendButton = send && <NoteSendButton number={number} ai={ai} selected={selected} busy={busy} disabled={busy || typeless.sending || (editing && !draft.trim() && !commentOptional)} onClick={() => void save('quote')}/>;
   const shown = deleting ? markText(note) : note.comment || (note.group ? t('Highlighted in {group}', { group: groupName(note.group) }) : '');
 
-  const content = <section ref={card} className={'pdf-note-card ' + (ai ? 'pdf-suggestion' : 'pdf-personal-note') + (inline ? ' pdf-note-inline' : '') + (compose ? ' pdf-note-compose' : '')} role={inline ? 'group' : 'dialog'} aria-modal={inline ? undefined : false} aria-label={ai ? t('AI suggestion {n}', { n: number }) : t('PDF note {n}', { n: number })} tabIndex={inline ? undefined : -1}>
+  const content = <section ref={card} className={'pdf-note-card ' + (ai ? 'pdf-suggestion' : 'pdf-personal-note') + (inline ? ' pdf-note-inline' : '') + (compose ? ' pdf-note-compose' : '') + (pointerAction ? ' pdf-note-pointer' : '')} role={inline ? 'group' : 'dialog'} aria-modal={inline ? undefined : false} aria-label={ai ? t('AI suggestion {n}', { n: number }) : t('PDF note {n}', { n: number })} tabIndex={inline ? undefined : -1}>
     {header}
     <div className="pdf-note-content"><div className="pdf-suggestion-body">{note.stamp && <span className="pdf-note-stamp"><Icon name="spark" size={12}/>{note.stamp}</span>}{editing ?
       <textarea ref={input} id={typeless.inputId} className="pdf-note-input" aria-label={deleting ? t('Replacement for mark {n}', { n: number }) : t('Edit note {n}', { n: number })} placeholder={deleting ? t('Replace with… (leave empty to delete)') : t('Write a note…')} value={draft} rows={1} readOnly={busy} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (sendsMessage(event.nativeEvent, window.matchMedia('(pointer: coarse)').matches)) { event.preventDefault(); void save(enterAction); } }}/>
@@ -209,7 +236,8 @@ export function PdfNoteCard({ controller, note, number, index, total, selected, 
         if (selection && !selection.isCollapsed && text.current?.contains(selection.anchorNode)) return;
         edit();
       }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); edit(); } }} data-kind={note.kind}>{shown}</p>}
-    </div>{compose ? <div className="pdf-note-compose-tools">{typeless.button}{draft?.trim() && deleteButton}{sendButton}</div> : !inline && (ai || !send) && <button type="button" className="icon-button pdf-note-close" aria-label={ai ? t('Close suggestion') : t('Close note')} title={ai ? t('Close suggestion') : t('Close note')} disabled={busy} onClick={() => void save('close')}>{busy ? <span className="spinner"/> : <Icon name="close" size={14}/>}</button>}</div>
+    </div>{compose ? <div className="pdf-note-compose-tools">{(!pointerAction || pointerConfirm) && typeless.button}{draft?.trim() && deleteButton}{!pointerAction && sendButton}</div> : !inline && (ai || !send) && <button type="button" className="icon-button pdf-note-close" aria-label={ai ? t('Close suggestion') : t('Close note')} title={ai ? t('Close suggestion') : t('Close note')} disabled={busy} onClick={() => void save('close')}>{busy ? <span className="spinner"/> : <Icon name="close" size={14}/>}</button>}</div>
+    {pointerAction && <div className="pdf-note-pointer-action" onClickCapture={event => { if (event.detail > 1) event.stopPropagation(); }}>{pointerConfirm ? sendButton : typeless.button}</div>}
     {typeless.hint}
     {children}
     {error && <p className="inline-error" role="alert">{error}</p>}

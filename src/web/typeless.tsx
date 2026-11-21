@@ -94,6 +94,8 @@ export function useTypelessNote(input: RefObject<HTMLTextAreaElement | null>, el
   return {
     inputId,
     pending,
+    enabled,
+    sending,
     button: available && <button type="button" className="icon-button typeless-note-button" data-state={sending ? 'sending' : sent ? 'sent' : 'idle'} aria-label={label} aria-busy={sending} aria-describedby={info ? inputId + '-status' : undefined} title={label} disabled={sending} onPointerDown={event => event.preventDefault()} onClick={event => { if (event.detail < 2) void send(); }}>{sending ? <span className="spinner" aria-hidden="true"/> : <Icon name={sent ? 'check' : 'microphone'} size={16}/>}</button>,
     hint: available && <p id={inputId + '-status'} className={'typeless-note-status' + (!info || sent ? ' sr-only' : '')} role="status">{info ? description(info) : ''}</p>,
   };
