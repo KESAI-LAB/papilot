@@ -82,3 +82,8 @@
 .note-send.note-returned,.pdf-note-attach.note-returned{animation:notes-received .45s cubic-bezier(.3,1.5,.5,1)}
 @media(prefers-reduced-motion:reduce){.pdf-note-card,.note-send,.pdf-note-attach{animation:none!important}}
 .pdf-note-compose-tools{display:flex;align-items:center;gap:2px;flex:none}
+.pdf-note-pointer .pdf-note-content{align-items:stretch}
+.pdf-note-pointer .pdf-note-compose-tools{align-self:flex-end}
+.pdf-note-pointer-action{position:absolute;left:var(--note-action-x);top:var(--note-action-y);transform:translate(-50%,-50%);display:flex;border-radius:50%;background:var(--raised);box-shadow:var(--float)}
+.pdf-note-pointer-action .icon-button{border-radius:50%}
+.pdf-note-pointer-action button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
