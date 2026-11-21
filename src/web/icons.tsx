@@ -1,6 +1,7 @@
 import { editorIcons } from '../../engine/src/web/editor-icons.tsx';
 import type { SkillIcon } from '../skill-icons.ts';
 
+const noteOutline = <path d="M5 3.5h14a1.5 1.5 0 0 1 1.5 1.5v10.5l-5 5H5A1.5 1.5 0 0 1 3.5 19V5A1.5 1.5 0 0 1 5 3.5Z"/>;
 const paths: Record<string, React.ReactNode> & Record<SkillIcon, React.ReactNode> = {
   ...editorIcons,
   crop: <><path d="M6 3v13a2 2 0 0 0 2 2h13M3 6h13a2 2 0 0 1 2 2v13"/></>,
@@ -14,8 +15,8 @@ const paths: Record<string, React.ReactNode> & Record<SkillIcon, React.ReactNode
   grip: <><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></>,
   attachment: <path d="m21 11-8 8a6 6 0 0 1-8.5-8.5l9-9a4 4 0 0 1 5.7 5.7l-9 9a2 2 0 0 1-2.8-2.8l8-8"/>,
   archive: <><rect x="3" y="3" width="18" height="4" rx="1"/><path d="M5 7v13h14V7M10 11h4"/></>,
-  pin: <path d="m16 3 5 5-3 1-4 4v3l-2 2-6-6 2-2h3l4-4 1-3ZM3 21l6-6"/>,
-  unpin: <path d="m16 3 5 5-3 1-3 3M9 10H8l-2 2 6 6 2-2v-1M3 21l6-6M3 3l18 18"/>,
+  pin: <><path d="M9 4h6v5l3 4v2H6v-2l3-4Z"/><path d="M12 15v6"/></>,
+  unpin: <><path d="M9 6V4h6v5l3 4v1M8 11l-2 2v2h6v6"/><path d="m3 3 18 18"/></>,
   folder: <path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>,
   restore: <><path d="M3 10a9 9 0 1 1 2 9M3 4v6h6M12 7v5l3 2"/></>,
   bolt: <path d="m13 2-9 12h7l-1 8 10-12h-7Z"/>,
@@ -34,6 +35,8 @@ const paths: Record<string, React.ReactNode> & Record<SkillIcon, React.ReactNode
   external: <><path d="M15 3h6v6M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></>,
   share: <><path d="M12 3v12M8 7l4-4 4 4"/><path d="M8 10H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-2"/></>,
   download: <><path d="M12 3v12m-4-4 4 4 4-4"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></>,
+  checkedManuscriptNote: <>{noteOutline}<path d="m7.5 11.5 3 3 6-6"/></>,
+  manuscriptNote: <>{noteOutline}<path d="M8 9h8M8 13h4m3.5 7.5v-5h5"/></>,
   paper: <><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5M16 13H8M16 17H8M10 9H8"/></>,
   compile: <path d="M6 3.5 21 12 6 20.5Z" fill="currentColor" stroke="none"/>,
   pdf: <><path d="M4 9V4a2 2 0 0 1 2-2h9l5 5v2M14 2v5h6M4 20a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2"/><path strokeWidth="1.5" d="M2.5 18v-6h2a2 2 0 0 1 0 4h-2M9.5 12v6h1.5a3 3 0 0 0 0-6ZM17 18v-6h4m-4 3h3"/></>,

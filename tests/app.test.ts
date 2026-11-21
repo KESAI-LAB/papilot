@@ -96,7 +96,8 @@ test('timeline reads redact internal alternatives from saved assistant replies',
     const first = await read();
     assert.deepEqual(first.items, [user, { id: assistant.id, taskId, type: 'assistant', text: 'Revised.', createdAt: 2 }, codeReply]);
     assert.equal(f.store.item(taskId, assistant.id)?.text, assistant.text, 'the original stored reply remains available to publication');
-    f.store.saveItem({ ...assistant, text: 'Checked.\n\n' + payload });
+    const raw = JSON.stringify({ notes: [{ note: 1, current: { label: 'First edit', reason: 'Clarify.' }, options: [] }] }, null, 2);
+    f.store.saveItem({ ...assistant, text: 'Checked.\n\n' + raw });
     const update = await read(first.revision);
     assert.equal(update.partial, true);
     assert.deepEqual(update.items, [{ id: assistant.id, taskId, type: 'assistant', text: 'Checked.', createdAt: 2 }]);
@@ -816,7 +817,7 @@ test('return unresolved task annotations without changing the original submissio
       comment: group ? '' : 'Revisit this request.', quote: `Original passage ${id}.`, createdAt: 1,
       source: { file: 'main.tex', lines: [line, line], excerpt: `Original passage ${id}.` },
     });
-    const accepted = makeNote('accepted', 10), missed = makeNote('missed', 90);
+    const accepted = { ...makeNote('accepted', 10, 'purple'), comment: 'Shorten this definition.' }, missed = makeNote('missed', 90);
     const rejected: Annotation = { ...makeNote('rejected', 20, 'purple'), kind: 'point', stamp: 'Clarify', aiReview: { taskId: 'agent-review', agent: 'codex', sourceId: 'suggestion' } };
     const originals = [accepted, rejected, missed].map(note => f.store.saveAnnotation(note));
     f.store.saveAnnotation({ ...makeNote('foreign', 30), projectId: 'grant' });
@@ -833,7 +834,11 @@ test('return unresolved task annotations without changing the original submissio
     f.manuscripts.noteSections = async () => ({ sections: [], contexts: {}, unplaced: 0 });
     const get = (url: string) => f.local.inject({ url, headers: f.as });
     const returns = (note: string) => f.local.inject({ method: 'POST', url: `/api/tasks/${taskId}/notes/${note}/return`, headers: f.as, payload: {} });
+    const undoReturn = (note: string, createdAt: number) => f.local.inject({ method: 'POST', url: `/api/tasks/${taskId}/notes/${note}/undo-return`, headers: f.as, payload: { createdAt } });
     const results = () => get(`/api/tasks/${taskId}/note-results`);
+    const count = async () => (await get('/api/state')).json().manuscriptNoteCounts[projectId] ?? 0;
+    f.store.saveAnnotation({ ...makeNote('unadopted', 90), taskId: undefined, aiReview: { taskId: 'ai-review', agent: 'codex' } });
+    assert.equal(await count(), 1, 'Only available manuscript annotations count');
     assert.deepEqual((await results()).json().notes.map((result: any) => [result.returned, result.changes[0]?.state]), [[false, 'accepted'], [false, 'rejected'], [false, undefined]]);
     for (const id of ['foreign', 'unsent', 'missing']) assert.equal((await returns(id)).statusCode, 400);
     f.store.updateTask(taskId, { status: 'failed', preparation: {} });
@@ -842,6 +847,7 @@ test('return unresolved task annotations without changing the original submissio
     f.store.updateTask(taskId, { status: 'reviewing', preparation: undefined });
     const oldItems = f.store.items(taskId), oldTask = f.store.task(taskId);
     const [first, repeat] = await Promise.all([returns('rejected'), returns('rejected')]);
+    assert.equal(await count(), 2, 'Concurrent returns count the new copy once');
     assert.equal(first.statusCode, 200, first.body);
     assert.deepEqual(repeat.json(), first.json());
     const returned = first.json() as Annotation;
@@ -853,28 +859,138 @@ test('return unresolved task annotations without changing the original submissio
     assert.equal(returned.quote, rejected.quote);
     assert.equal(returned.kind, 'point');
     assert.equal(returned.stamp, 'Clarify');
+    const recolor = (id: string, group: unknown, groupInstruction?: string) => f.local.inject({ method: 'POST',
+      url: '/api/projects/thesis/annotations/' + id, headers: f.as, payload: { group, groupInstruction } });
+    assert.equal((await recolor(rejected.id, 'red')).statusCode, 400, 'Submitted originals remain immutable');
+    assert.equal((await recolor(returned.id, 'cerulean')).statusCode, 400);
+    assert.equal(f.store.annotation(projectId, returned.id).group, 'purple');
+    const green = await recolor(returned.id, 'green');
+    assert.equal(green.statusCode, 200, green.body);
+    assert.deepEqual(green.json(), JSON.parse(JSON.stringify({ ...returned, group: 'green', groupInstruction: undefined })), 'preserve location, identity and comment');
+    const single = (await recolor(returned.id, null)).json();
+    assert.equal(single.group, undefined); assert.equal(single.groupInstruction, undefined);
+    assert.equal(single.comment, rejected.comment);
+    assert.equal((await recolor(returned.id, 'purple', returned.groupInstruction)).json().groupInstruction, returned.groupInstruction);
     const unplaced = (await returns('missed')).json() as Annotation;
-    assert.deepEqual((await results()).json().notes.map((result: any) => result.returned), [false, true, true]);
+    const batchRegroup = (payload: object[]) => f.local.inject({
+      method: 'POST', url: '/api/projects/thesis/annotations/regroup', headers: f.as, payload,
+    });
+    const before = [returned, unplaced].map(({ id, createdAt, group, groupInstruction }) => ({ id, createdAt, group: group ?? null, groupInstruction }));
+    const edits = before.map(from => ({ id: from.id, createdAt: from.createdAt, group: 'orange', from }));
+    assert.equal((await batchRegroup([edits[0], { ...edits[1], createdAt: -1 }])).statusCode, 400);
+    assert.equal(f.store.annotation(projectId, returned.id).group, 'purple', 'Validate every note before saving the first');
+    const regrouped = await batchRegroup(edits);
+    assert.equal(regrouped.statusCode, 200, regrouped.body);
+    assert.deepEqual(regrouped.json().annotations.map((note: Annotation) => [note.group, note.comment]), [['orange', returned.comment], ['orange', unplaced.comment]]);
+    assert.equal((await batchRegroup(edits)).statusCode, 200, 'The same group change can be safely retried');
+    const undo = before.map(note => ({ ...note, from: { group: 'orange' } }));
+    assert.equal((await recolor(unplaced.id, 'green')).statusCode, 200);
+    assert.equal((await batchRegroup(undo)).statusCode, 400, 'Undo refuses to overwrite a newer color on any member');
+    assert.equal(f.store.annotation(projectId, returned.id).group, 'orange');
+    await recolor(unplaced.id, 'orange');
+    const reverted = await batchRegroup(undo);
+    assert.equal(reverted.statusCode, 200, reverted.body);
+    assert.equal(reverted.json().annotations[0].groupInstruction, returned.groupInstruction);
+
+    assert.deepEqual((await results()).json().notes.map((result: any) => [result.returned, result.undoReturnAt]), [
+      [false, undefined], [true, returned.createdAt], [true, unplaced.createdAt],
+    ]);
     const manuscript = '/api/projects/thesis/manuscript';
     const current = (await get(manuscript)).json().annotations as Annotation[];
     assert.deepEqual(current.map(note => note.id), ['unsent', returned.id, unplaced.id]);
     assert.equal(current[1].key, 'latest'); assert.equal(current[1].page, 2);
     assert.equal(current[2].key, 'before'); assert.equal(current[2].comment, missed.comment);
-    assert.deepEqual(f.store.items(taskId), oldItems);
-    assert.deepEqual(f.store.task(taskId), oldTask);
-    assert.deepEqual(originals.map(note => f.store.annotation(projectId, note.id)), originals);
     openDocument = 'appendix.tex';
     assert.deepEqual((await get(manuscript)).json().annotations.map((note: Annotation) => note.id), ['unsent']);
     openDocument = 'main.tex';
 
+    const edited = await f.local.inject({ method: 'POST', url: '/api/projects/thesis/annotations/' + returned.id, headers: f.as, payload: { comment: 'Keep my edited note.' } });
+    assert.equal(edited.statusCode, 200, edited.body);
+    assert.equal((await undoReturn('unsent', returned.createdAt)).statusCode, 400);
+    const undone = await undoReturn('rejected', returned.createdAt);
+    assert.equal(undone.statusCode, 200, undone.body);
+    assert.deepEqual(undone.json(), { returned: false, removed: returned.id });
+    assert.deepEqual((await undoReturn('rejected', returned.createdAt)).json(), undone.json());
+    assert.deepEqual((await results()).json().notes.map((result: any) => result.returned), [false, false, true]);
+    assert.deepEqual((await get(manuscript)).json().annotations.map((note: Annotation) => note.id), ['unsent', unplaced.id]);
+
+    assert.equal(await count(), 2, 'Undo removes a copy from the count');
+    const redoReturn = (replay: string) => f.local.inject({
+      method: 'POST', url: `/api/tasks/${taskId}/notes/rejected/return`, headers: f.as,
+      payload: { receipt: true, replay, expected: returned.createdAt },
+    });
+    const retriedReturn = await redoReturn('replay-return');
+    assert.equal(retriedReturn.statusCode, 200, retriedReturn.body);
+    assert.equal(retriedReturn.json().moved, true);
+    assert.deepEqual((await redoReturn('replay-return')).json(), retriedReturn.json());
+    assert.equal((await redoReturn('different-action')).statusCode, 400, 'Redo cannot claim a return from another action');
+    const again = retriedReturn.json() as Annotation;
+    const staleRoot = { ...again, document: 'renamed-root.tex' };
+    f.store.saveAnnotation(staleRoot);
+    const openNote = await f.local.inject({ method: 'POST', url: `/api/projects/${projectId}/document`, headers: f.as, payload: { annotation: again.id } });
+    assert.equal(openNote.statusCode, 200, openNote.body);
+    assert.equal(openNote.json().document, openDocument);
+    f.store.saveAnnotation(again);
+    assert.equal(again.id, returned.id);
+    assert.equal(again.comment, 'Keep my edited note.');
+    assert.ok(again.createdAt > returned.createdAt);
+    const stale = await undoReturn('rejected', returned.createdAt);
+    assert.deepEqual(stale.json(), { returned: true, undoReturnAt: again.createdAt });
+    assert.equal(f.store.annotation(projectId, again.id).deletedAt, undefined);
+
     const next = { id: 'returned-notes-task-001', projectId, title: 'Follow up unresolved notes', instructions: '', annotations: [returned.id, unplaced.id], groupInstructions: { purple: returned.groupInstruction } };
     const sent = await f.local.inject({ method: 'POST', url: '/api/tasks', headers: f.as, payload: next });
     assert.equal(sent.statusCode, 200, sent.body);
+    assert.equal(await count(), 1, 'Sending the two returned copies removes them from the count');
     assert.deepEqual(f.store.items(next.id)[0].meta?.notes?.map(note => note.id), next.annotations);
     assert.deepEqual(f.store.items(next.id)[0].meta?.groupInstructions, next.groupInstructions);
     assert.equal((await returns('rejected')).json().taskId, next.id, 'A repeat never puts a note already re-submitted back in My notes');
+    assert.deepEqual((await results()).json().notes.map((result: any) => [result.returned, result.undoReturnAt]), [
+      [false, undefined], [true, undefined], [true, undefined],
+    ]);
+    const sentUndo = await undoReturn('rejected', again.createdAt);
+    assert.equal(sentUndo.statusCode, 200, sentUndo.body);
+    assert.deepEqual(sentUndo.json(), { returned: true });
+    assert.equal(f.store.annotation(projectId, again.id).taskId, next.id);
     assert.deepEqual((await get(manuscript)).json().annotations.map((note: Annotation) => note.id), ['unsent']);
     assert.deepEqual(f.store.items(taskId), oldItems);
+    assert.deepEqual(f.store.task(taskId), oldTask);
+    assert.deepEqual(originals.map(note => f.store.annotation(projectId, note.id)), originals);
+    // Sending a returned annotation in the same session claims it together
+    // with the new message. A stale draft cannot claim another return.
+    const replayAccepted = (replay: string) => f.local.inject({
+      method: 'POST', url: `/api/tasks/${taskId}/notes/accepted/return`, headers: f.as, payload: { receipt: true, replay },
+    });
+    const firstClick = (await replayAccepted('first-click')).json();
+    assert.equal(firstClick.moved, true);
+    assert.equal((await replayAccepted('duplicate-tab')).json().moved, false, 'A second tab cannot own the same return');
+    assert.equal((await undoReturn('accepted', firstClick.createdAt)).json().returned, false);
+    assert.equal((await replayAccepted('first-click')).json().moved, false, 'A delayed response retry must not reopen an undone return');
+    const nextClick = (await replayAccepted('next-click')).json();
+    assert.equal(nextClick.moved, true);
+    assert.equal((await undoReturn('accepted', nextClick.createdAt)).json().returned, false);
+    assert.equal((await replayAccepted('first-click')).json().moved, false, 'Older clicks remain retired across later returns');
+    assert.equal((await replayAccepted('duplicate-tab')).json().moved, false, 'An earlier no-op stays a no-op on retry');
+    const copy = (await returns('accepted')).json() as Annotation;
+    const messages = (generation: number) => f.local.inject({ method: 'POST', url: `/api/tasks/${taskId}/messages`, headers: f.as,
+      payload: { text: '', requestKey: 'continue-here', notes: [{ ...summarizeNotes([accepted])[0], comment: 'Try a shorter wording.', returnedFrom: { original: accepted.id, createdAt: generation } }] } });
+    f.review.get = async () => ({ feedback: [], cursor: 0 }) as any;
+    assert.equal((await messages(copy.createdAt - 1)).statusCode, 400);
+    assert.equal(f.store.annotation(projectId, copy.id).taskId, undefined);
+    const sameTask = await messages(copy.createdAt);
+    assert.equal(sameTask.statusCode, 200, sameTask.body);
+    assert.equal((await messages(copy.createdAt)).json().id, sameTask.json().id);
+    assert.equal(f.store.annotation(projectId, copy.id).taskId, taskId);
+    assert.equal(f.store.items(taskId).at(-1)?.meta?.notes?.[0].id, copy.id);
+    assert.equal(f.store.items(taskId).at(-1)?.meta?.notes?.[0].comment, 'Try a shorter wording.');
+    assert.match(sameTask.json().prompt, /Color group instruction: Clarify the definition\./);
+    const followup = (await returns(copy.id)).json() as Annotation;
+    assert.equal(followup.groupInstruction, 'Clarify the definition.');
+    const other = f.store.saveTask({ ...oldTask, id: 'another-session', name: 'another-session' });
+    const crossTask = await f.local.inject({ method: 'POST', url: `/api/tasks/${other.id}/messages`, headers: f.as,
+      payload: { text: '', requestKey: 'wrong-conversation', notes: [{ ...summarizeNotes([copy])[0], returnedFrom: { original: copy.id, createdAt: followup.createdAt } }] } });
+    assert.equal(crossTask.statusCode, 400);
+    assert.equal(f.store.annotation(projectId, followup.id).taskId, undefined);
   } finally { await f.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -1094,6 +1210,14 @@ test('deletions need no comment, quick notes keep their name, and a task of dele
     assert.equal(replaced.json().comment, 'a plain idea');
     const cleared = await f.local.inject({ method: 'POST', url: `/api/projects/thesis/annotations/${deletion.json().id}`, headers: f.as, payload: { comment: '' } });
     assert.equal(cleared.statusCode, 200, 'Clearing the replacement goes back to deleting');
+    const highlight = (await post({ group: 'green' })).json();
+    const editHighlight = (payload: object) => f.local.inject({
+      method: 'POST', url: `/api/projects/thesis/annotations/${highlight.id}`, headers: f.as, payload,
+    });
+    assert.equal((await editHighlight({ group: null })).json().group, undefined);
+    assert.equal((await editHighlight({ comment: 'My note' })).json().comment, 'My note');
+    assert.equal((await editHighlight({ group: null, comment: '' })).json().comment, '', 'Undo can restore a plain highlight');
+    assert.equal((await editHighlight({ group: 'green' })).json().group, 'green');
     const send = await f.local.inject({ method: 'POST', url: '/api/tasks', headers: f.as, payload: { id: 'deletions-only-task-01', projectId: 'thesis', title: 'Delete marked text', instructions: '', annotations: [deletion.json().id] } });
     assert.equal(send.statusCode, 200, send.body);
     assert.match(f.store.runByKey('initial-deletions-only-task-01')!.prompt, /· Delete\n {3}PDF text: "a very simple idea"\n {3}Note: Delete the marked text\./);

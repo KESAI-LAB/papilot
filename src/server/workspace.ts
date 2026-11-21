@@ -299,7 +299,7 @@ export class Workspace extends EventEmitter {
     if (usesCodex(id)) this.loaded.clear();
     this.emit('change');
   }
-  snapshot(): Snapshot { return { version: VERSION, projects: this.store.projects(), tasks: this.store.tasks(), pinnedTaskIds: this.store.pinnedTaskIds(), requests: [...this.requests.values()].map(({ rpcId: _, agent: __, ...r }) => r), runtime: this.runtime, runtimes: this.runtimes }; }
+  snapshot(): Snapshot { return { version: VERSION, projects: this.store.projects(), manuscriptNoteCounts: this.store.manuscriptNoteCounts(), tasks: this.store.tasks(), pinnedTaskIds: this.store.pinnedTaskIds(), requests: [...this.requests.values()].map(({ rpcId: _, agent: __, ...r }) => r), runtime: this.runtime, runtimes: this.runtimes }; }
   /** Loads the SDKs of the agents this host has before the server answers
    *  requests. Evaluating one blocks for up to a few hundred milliseconds,
    *  which would otherwise hold up whatever the app asked for while the
@@ -713,7 +713,7 @@ export class Workspace extends EventEmitter {
   // feedback alone, or a build the agent broke. The chat keeps what happened;
   // the agent gets the prompt.
   // admit is a new task, saved with its first message (see createTask).
-  async enqueue(taskId: string, text: string, requestKey: string, includeFeedback = true, options: { attachments?: string[]; skill?: SkillFile; notes?: Annotation[]; groupInstructions?: GroupInstructions; reviewNotes?: NoteSummary[]; feedback?: boolean; build?: BuildFailure; merge?: TaskReconciliation; admit?: Task } = {}) {
+  async enqueue(taskId: string, text: string, requestKey: string, includeFeedback = true, options: { attachments?: string[]; skill?: SkillFile; notes?: Annotation[]; groupInstructions?: GroupInstructions; reviewNotes?: NoteSummary[]; returnedNotes?: Map<string, number>; feedback?: boolean; build?: BuildFailure; merge?: TaskReconciliation; admit?: Task } = {}) {
     if (this.restarting.has(taskId)) throw new Error('Wait for this task to restart before sending more instructions.');
     const task = options.admit ?? this.store.task(taskId);
     if (task.status === 'deleting') throw new Error('This task is being deleted.');
@@ -772,6 +772,14 @@ export class Workspace extends EventEmitter {
       if (files.length) {
         this.attachments.claim(task.projectId, files.map(file => file.id), taskId);
         meta.attachments = files;
+      }
+      for (const note of options.reviewNotes || []) {
+        const generation = note.id && options.returnedNotes?.get(note.id);
+        if (typeof generation !== 'number') continue;
+        const copy = this.store.findAnnotation(current.projectId, note.id!);
+        if (!copy || copy.createdAt !== generation || copy.taskId || copy.deletedAt !== undefined)
+          throw new Error('A selected PDF note is no longer available. Refresh the manuscript and try again.');
+        this.store.saveAnnotation({ ...copy, taskId, comment: note.comment });
       }
       this.store.saveRun(run);
       for (const note of options.notes || []) {
@@ -1345,6 +1353,30 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
     }
     return this.store.task(taskId);
   }
+  private settleReviewNotes(task: Task, pending: Pick<PendingReview, 'returnNotes' | 'returnNote' | 'body' | 'route'>) {
+    if (pending.route.endsWith('/undo')) {
+      for (const note of this.store.reviewReturns(task.projectId, task.id, String(pending.body.id))) {
+        if (!note.returnAction || note.returnAction.undone) continue;
+        // Remember the undo even if the author already hid this copy. A lost
+        // reply retried after a manual restore must leave that restore alone.
+        this.store.saveAnnotation({ ...note, deletedAt: note.deletedAt ?? Date.now(), returnAction: { ...note.returnAction, undone: true } });
+      }
+      return;
+    }
+    const action = String(pending.body.id);
+    if (pending.returnNotes) {
+      for (const note of pending.returnNotes) this.store.returnAnnotation(note, action);
+    } else if (pending.returnNote) {
+      // A single-note journal from before return ownership used the same
+      // note key, so recovery can still bind the new copy to its decision.
+      const note = pending.returnNote, key = pending.body.noteKey;
+      const location = typeof key === 'string' ? /^(.*):(\d+)$/.exec(key) : null;
+      const originalId = location && this.store.items(task.id).find(item => item.id === location[1])?.meta?.notes?.[Number(location[2])]?.id;
+      this.store.returnAnnotation(!note.returnAction && typeof key === 'string' && originalId
+        ? { ...note, returnAction: { taskId: task.id, id: action, key, originalId } }
+        : note, action);
+    }
+  }
   private async reconcileReview(task: Task) {
     if (this.reviewWrites.has(task.id)) throw new Error('The review action is still being checked. Wait for it to finish.');
     this.reviewWrites.add(task.id);
@@ -1365,6 +1397,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
         const going = this.active.has(task.id) || (this.publishing.has(task.id) && current.status === 'building');
         const status = going ? current.status : this.store.runs().some(r => r.taskId === task.id && r.status === 'queued') ? 'queued' : reached.previousStatus;
         this.store.updateTask(task.id, { pendingReview: null, status, error: !response.ok ? value.error || 'Check the review result before continuing.' : going ? null : reached.previousError ?? null });
+        if (response.ok) this.settleReviewNotes(task, pending);
         if (sourceBuild) this.rememberSourceBuild(task.id, value, pending);
       });
       // So does the build held after the agent's turn for this action, and a
@@ -1408,6 +1441,7 @@ ${this.agentOf(task) === 'antigravity' ? 'Use file tools for manuscript edits. S
       const result = await operation();
       const sourceBuild = Boolean(pending && startsBuild(pending.route, result)) && confirmedReviewResponse(200, result, task.name);
       this.store.transaction(() => {
+        if (pending && confirmedReviewResponse(200, result, task.name)) this.settleReviewNotes(task, pending);
         if (pending) this.store.updateTask(taskId, { pendingReview: null });
         if (sourceBuild) this.rememberSourceBuild(taskId, result, pending);
       });
