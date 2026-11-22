@@ -6,9 +6,114 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent,
+  type PointerEvent,
 } from "react";
-import type { Strip, TextGlyph } from "../types.ts";
+import type { Decision, Mark, Rect, Strip, TextGlyph } from "../types.ts";
 import { language as viewerLanguage, t, type Language } from "./i18n.ts";
+
+type UnitMark = Mark & { unit: string };
+
+/** Merge adjacent same-line marks belonging to the same unit so hover/click hit
+ *  targets and focus outlines stay continuous across word spaces. */
+export function mergeUnitMarks(marks: readonly UnitMark[]): UnitMark[] {
+  const groups = new Map<string, UnitMark[]>();
+  for (const mark of marks) {
+    const key = `${mark.unit}:${mark.kind}`;
+    const list = groups.get(key);
+    if (list) list.push(mark);
+    else groups.set(key, [mark]);
+  }
+  const merged: UnitMark[] = [];
+  for (const list of groups.values()) {
+    // Bucket vertical bands by midpoint (matching backend mergeRects) so words
+    // on the same line with taller/shorter ascenders still sort left-to-right.
+    const sorted = [...list].sort(
+      (a, b) =>
+        Math.round((a.rect[1] + a.rect[3]) / 4) - Math.round((b.rect[1] + b.rect[3]) / 4) ||
+        a.rect[0] - b.rect[0],
+    );
+    const out: UnitMark[] = [];
+    for (const mark of sorted) {
+      const [x0, y0, x1, y1] = mark.rect;
+      const height = Math.max(y1 - y0, 1);
+      const prev = out.findLast((item) => {
+        const [px0, py0, px1, py1] = item.rect;
+        const overlap = Math.min(py1, y1) - Math.max(py0, y0);
+        const minH = Math.max(Math.min(py1 - py0, height), 1);
+        const gap = Math.max(x0 - px1, px0 - x1);
+        return overlap >= minH * 0.5 && gap <= height * 0.9;
+      });
+      if (prev) {
+        prev.rect = [
+          Math.min(prev.rect[0], x0),
+          Math.min(prev.rect[1], y0),
+          Math.max(prev.rect[2], x1),
+          Math.max(prev.rect[3], y1),
+        ] as Rect;
+      } else {
+        out.push({ ...mark, rect: [...mark.rect] as Rect });
+      }
+    }
+    merged.push(...out);
+  }
+  return merged;
+}
+
+function rectsOverlap(a: Rect, b: Rect) {
+  const ox = Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0]));
+  const oy = Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+  if (ox <= 0 || oy <= 0) return false;
+  const areaA = Math.max(1e-3, (a[2] - a[0]) * (a[3] - a[1]));
+  const areaB = Math.max(1e-3, (b[2] - b[0]) * (b[3] - b[1]));
+  return (ox * oy) / Math.min(areaA, areaB) >= 0.7;
+}
+
+/** Drop coarse fallback marks that duplicate a more-specific sibling unit's
+ *  exact span on the same strip so per-unit states and hit-testing stay crisp. */
+export function resolveUnitMarks(marks: readonly UnitMark[]): UnitMark[] {
+  if (marks.length <= 1) return [...marks];
+  const counts = new Map<string, number>();
+  for (const mark of marks) counts.set(mark.unit, (counts.get(mark.unit) ?? 0) + 1);
+  return marks.filter((mark, idx) => {
+    const myCount = counts.get(mark.unit) ?? 1;
+    for (let j = 0; j < marks.length; j++) {
+      if (j === idx || marks[j].unit === mark.unit) continue;
+      if ((counts.get(marks[j].unit) ?? 1) < myCount && rectsOverlap(mark.rect, marks[j].rect)) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
+/** When two equal-specificity units still share an identical spatial rect
+ *  (e.g. two fallback math edits on one line), render only the single highest-
+ *  priority unit on that rect so highlights and strikes never double-stack. */
+function dedupeOverlappingMarks(
+  marks: readonly UnitMark[],
+  activeUnit?: string | null,
+  hoveredUnit?: string | null,
+  unitStates?: Record<string, Decision>,
+): UnitMark[] {
+  if (marks.length <= 1) return [...marks];
+  const rank = (unit: string) => {
+    if (unit === activeUnit) return 3;
+    if (unit === hoveredUnit) return 2;
+    const s = unitStates?.[unit] ?? "pending";
+    return s !== "pending" ? 1 : 0;
+  };
+  const chosen: UnitMark[] = [];
+  for (const mark of marks) {
+    const hit = chosen.findIndex((item) => item.unit !== mark.unit && rectsOverlap(item.rect, mark.rect));
+    if (hit < 0) {
+      chosen.push(mark);
+    } else if (rank(mark.unit) > rank(chosen[hit].unit)) {
+      chosen[hit] = mark;
+    }
+  }
+  return chosen;
+}
 let context: CanvasRenderingContext2D | null | undefined;
 const widths = new Map<string, number>();
 // Advance of `text` in the overlay font, in ems; marks that take no room give 0.
@@ -135,6 +240,14 @@ export const PdfStrip = memo(function PdfStrip({
   label,
   clean = false,
   focus,
+  stopIndex,
+  side,
+  unitStates,
+  activeUnit,
+  hoveredUnit,
+  selectableUnits,
+  onHoverUnit,
+  onSelectUnit,
   language = viewerLanguage(),
 }: {
   image: Strip;
@@ -142,11 +255,21 @@ export const PdfStrip = memo(function PdfStrip({
   label: string;
   clean?: boolean;
   focus?: string[];
+  stopIndex?: number;
+  side?: "before" | "after";
+  unitStates?: Record<string, Decision>;
+  activeUnit?: string | null;
+  hoveredUnit?: string | null;
+  selectableUnits?: ReadonlySet<string>;
+  onHoverUnit?: (stop: number, unit: string | null) => void;
+  onSelectUnit?: (stop: number, unit: string | null, side?: "before" | "after") => void;
   language?: Language;
 }) {
   // Keep every line searchable. Only visible strips need the individual
   // glyph boxes used for accurate pointer selection over the PDF image.
   const box = useRef<HTMLDivElement>(null),
+    pointerDown = useRef<{ x: number; y: number } | null>(null),
+    [localHover, setLocalHover] = useState(false),
     [detailed, setDetailed] = useState(false);
   const rendered = useRef(detailed),
     restoreSelection = useRef<(() => void) | null>(null);
@@ -249,6 +372,102 @@ export const PdfStrip = memo(function PdfStrip({
       )),
     [image, lines, lineTiles, detailed],
   );
+  const interactive = Boolean(
+    !clean &&
+      !focus &&
+      stopIndex !== undefined &&
+      selectableUnits &&
+      selectableUnits.size > 1 &&
+      image.marks?.length,
+  );
+  useEffect(() => {
+    if (!interactive) setLocalHover(false);
+  }, [interactive]);
+  const mergedMarks = useMemo(
+    () => (interactive && image.marks?.length ? resolveUnitMarks(mergeUnitMarks(image.marks)) : []),
+    [interactive, image.marks],
+  );
+  const selectableMarks = useMemo(
+    () =>
+      interactive && selectableUnits
+        ? mergedMarks.filter((mark) => selectableUnits.has(mark.unit))
+        : [],
+    [interactive, mergedMarks, selectableUnits],
+  );
+  const visibleMarks = useMemo(
+    () => dedupeOverlappingMarks(mergedMarks, activeUnit, hoveredUnit, unitStates),
+    [mergedMarks, activeUnit, hoveredUnit, unitStates],
+  );
+  const hasPartialDecision = Boolean(
+    interactive &&
+      unitStates &&
+      selectableUnits &&
+      [...selectableUnits].some((id) => (unitStates[id] ?? "pending") !== "pending"),
+  );
+  // Swap to the clean image only when partial decisions or an active selection
+  // need to dim/resolve individual units; hover alone draws a zero-flicker ring
+  // directly over the baked strip image.
+  const useCleanForUnits = interactive && (Boolean(activeUnit) || hasPartialDecision);
+  const showUnitOverlay = interactive && (useCleanForUnits || Boolean(hoveredUnit));
+  const hitUnit = (clientX: number, clientY: number): string | null => {
+    const el = box.current;
+    if (!el || !selectableMarks.length) return null;
+    const rect = el.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const px = ((clientX - rect.left) / rect.width) * image.width,
+      py = ((clientY - rect.top) / rect.height) * image.height,
+      pad = 2.5;
+    let best: string | null = null,
+      bestScore = Infinity;
+    for (const mark of selectableMarks) {
+      const [x0, y0, x1, y1] = mark.rect;
+      if (px >= x0 - pad && px <= x1 + pad && py >= y0 - pad && py <= y1 + pad) {
+        const inside = px >= x0 && px <= x1 && py >= y0 && py <= y1;
+        const area = Math.max(1, (x1 - x0) * (y1 - y0));
+        const score = (inside ? 0 : 1e6) + area;
+        if (score < bestScore) {
+          bestScore = score;
+          best = mark.unit;
+        }
+      }
+    }
+    return best;
+  };
+  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!interactive || !onHoverUnit || stopIndex === undefined) return;
+    if (event.buttons !== 0 || event.pointerType === "touch") return;
+    const hit = hitUnit(event.clientX, event.clientY);
+    setLocalHover(Boolean(hit));
+    if (hit !== hoveredUnit) onHoverUnit(stopIndex, hit);
+  };
+  const onPointerLeave = () => {
+    if (!interactive || stopIndex === undefined) return;
+    setLocalHover(false);
+    if (hoveredUnit) onHoverUnit?.(stopIndex, null);
+  };
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (!interactive) return;
+    pointerDown.current = { x: event.clientX, y: event.clientY };
+  };
+  const onClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (!interactive || !onSelectUnit || stopIndex === undefined) return;
+    // Double-click word selection or drag selection must keep text selection
+    // uninterrupted and dismiss any popover opened on the first click.
+    if (event.detail > 1 || window.getSelection()?.toString().trim()) {
+      if (activeUnit) onSelectUnit(stopIndex, null, side);
+      return;
+    }
+    const down = pointerDown.current;
+    pointerDown.current = null;
+    if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 5) return;
+    const hit = hitUnit(event.clientX, event.clientY);
+    if (hit) {
+      event.stopPropagation();
+      onSelectUnit(stopIndex, hit === activeUnit ? null : hit, side);
+    } else if (activeUnit) {
+      onSelectUnit(stopIndex, null, side);
+    }
+  };
   return (
     <div
       ref={box}
@@ -256,10 +475,15 @@ export const PdfStrip = memo(function PdfStrip({
       data-page={image.label}
       data-text-left={edges?.[0]}
       data-text-right={edges?.[1]}
+      data-unit-hover={localHover ? "true" : undefined}
       style={{ aspectRatio: `${image.width}/${image.height}` }}
+      onPointerMove={interactive ? onPointerMove : undefined}
+      onPointerLeave={interactive ? onPointerLeave : undefined}
+      onPointerDown={interactive ? onPointerDown : undefined}
+      onClick={interactive ? onClick : undefined}
     >
       <img
-        src={base + (clean || focus ? image.clean : image.src)}
+        src={base + (clean || focus || useCleanForUnits ? image.clean : image.src)}
         alt={image.text?.length ? "" : label}
         width={image.width}
         height={image.height}
@@ -275,6 +499,133 @@ export const PdfStrip = memo(function PdfStrip({
             {mark.kind === "removed" && <path d={`M ${x} ${y + (bottom - y) * .55} H ${right}`} stroke={color} strokeWidth=".45"/>}</g>;
         })}
       </svg>}
+      {showUnitOverlay && (
+        <svg className="pdf-unit-marks" viewBox={`0 0 ${image.width} ${image.height}`} aria-hidden="true">
+          {visibleMarks.map((mark, i) => {
+            const [x, y, right, bottom] = mark.rect,
+              w = Math.max(right - x, 0.5),
+              h = Math.max(bottom - y, 0.5),
+              state = unitStates?.[mark.unit] ?? "pending",
+              isActive = mark.unit === activeUnit,
+              isHovered = mark.unit === hoveredUnit,
+              baseColor =
+                mark.kind === "removed"
+                  ? "#c72938"
+                  : mark.kind === "moved"
+                    ? "#2563c9"
+                    : "#1f8c52";
+            if (!useCleanForUnits) {
+              if (!isHovered) return null;
+              return (
+                <g key={i} data-unit={mark.unit} data-state={state} data-hovered="true">
+                  <rect
+                    x={x - 1}
+                    y={y - 0.8}
+                    width={w + 2}
+                    height={h + 1.6}
+                    rx="1.5"
+                    fill={baseColor}
+                    fillOpacity=".10"
+                    stroke={baseColor}
+                    strokeWidth="1"
+                    strokeOpacity=".75"
+                  />
+                </g>
+              );
+            }
+            const isBeforeSide = mark.kind === "removed" || (mark.kind === "moved" && side === "before");
+            const isAfterSide = mark.kind === "added" || (mark.kind === "moved" && side === "after");
+            const isAcceptedBefore = state === "accepted" && isBeforeSide;
+            const isAcceptedAfter = state === "accepted" && isAfterSide;
+            const isRejectedBefore = state === "rejected" && isBeforeSide;
+            const isRejectedAfter = state === "rejected" && isAfterSide;
+            const isCommented = state === "commented";
+            const color = isAcceptedBefore
+              ? "#737373"
+              : isAcceptedAfter
+                ? "#14a35a"
+                : isRejectedBefore
+                  ? "#2563c9"
+                  : isRejectedAfter
+                    ? "#c72938"
+                    : isCommented
+                      ? "#0b8af0"
+                      : baseColor;
+            const fillOpacity = isActive
+              ? isAcceptedBefore
+                ? 0.14
+                : 0.24
+              : isHovered
+                ? isAcceptedBefore
+                  ? 0.12
+                  : 0.21
+                : isAcceptedBefore
+                  ? 0.06
+                  : isAcceptedAfter
+                    ? 0.16
+                    : isRejectedBefore
+                      ? 0.13
+                      : isRejectedAfter
+                        ? 0.09
+                        : isCommented
+                          ? 0.16
+                          : activeUnit
+                            ? 0.13
+                            : 0.18;
+            const strike = (mark.kind === "removed" && !isRejectedBefore) || isRejectedAfter;
+            const underline = isAcceptedAfter || isRejectedBefore || isCommented;
+            return (
+              <g
+                key={i}
+                data-unit={mark.unit}
+                data-state={state}
+                data-active={isActive ? "true" : undefined}
+                data-hovered={isHovered ? "true" : undefined}
+              >
+                <rect
+                  x={isActive || isHovered ? x - 1 : x}
+                  y={isActive || isHovered ? y - 0.8 : y}
+                  width={isActive || isHovered ? w + 2 : w}
+                  height={isActive || isHovered ? h + 1.6 : h}
+                  rx={isActive || isHovered ? "1.5" : "1"}
+                  fill={color}
+                  fillOpacity={fillOpacity}
+                  stroke={isActive || isHovered ? color : undefined}
+                  strokeWidth={isActive ? "1.25" : isHovered ? "0.95" : undefined}
+                  strokeOpacity={isActive ? ".95" : isHovered ? ".75" : undefined}
+                />
+                {underline && (
+                  <path
+                    d={`M ${x} ${bottom + 0.6} H ${right}`}
+                    stroke={color}
+                    strokeWidth={isCommented ? "1.15" : "1.25"}
+                    strokeOpacity={isActive ? ".95" : ".85"}
+                    strokeDasharray={isCommented ? "2.2 1.5" : undefined}
+                  />
+                )}
+                {strike && (
+                  <path
+                    d={`M ${x} ${y + h * 0.55} H ${right}`}
+                    stroke={color}
+                    strokeWidth={isRejectedAfter ? ".8" : isAcceptedBefore ? ".55" : ".5"}
+                    strokeOpacity={
+                      isRejectedAfter
+                        ? ".85"
+                        : isAcceptedBefore
+                          ? ".45"
+                          : isCommented
+                            ? ".35"
+                            : activeUnit && !isActive && !isHovered
+                              ? ".55"
+                              : ".9"
+                    }
+                  />
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      )}
       {image.text?.length ? (
         <div
           className="pdf-text"

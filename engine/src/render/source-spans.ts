@@ -82,10 +82,57 @@ export function sourcePairs(
   right: Position[],
 ): Pair[] | null {
   if (unit.text_ops?.length !== 1) return null;
-  const [, i, j, x, y] = unit.text_ops[0],
-    a = old.read(unit.file),
+  let [, i, j, x, y] = unit.text_ops[0];
+  const a = old.read(unit.file),
     b = next.read(unit.file);
   if (a == null || b == null) return null;
+  // Only when a word-diff span absorbed adjacent unchanged TeX markup (such as
+  // a trailing " $L$"), trim unchanged whitespace-bounded segments so plain-text
+  // edits stay locatable without slicing mid-word characters or trimming inside
+  // unclosed commands, braces, math or comments.
+  const balancedTeX = (text: string) => {
+    let depth = 0, dollars = 0;
+    for (let k = 0; k < text.length; k++) {
+      if (text[k] === "\\") { k++; continue; }
+      if (text[k] === "%") return false;
+      if (text[k] === "{") depth++;
+      else if (text[k] === "}") { depth--; if (depth < 0) return false; }
+      else if (text[k] === "$") dollars++;
+    }
+    return depth === 0 && dollars % 2 === 0;
+  };
+  const insideComment = (text: string, pos: number) => {
+    const lineStart = text.lastIndexOf("\n", pos - 1) + 1;
+    for (let k = lineStart; k < pos; k++) {
+      if (text[k] === "\\") { k++; continue; }
+      if (text[k] === "%") return true;
+    }
+    return false;
+  };
+  if (
+    (/[\\{}$%]/.test(a.slice(i, j)) || /[\\{}$%]/.test(b.slice(x, y))) &&
+    !insideComment(a, i) &&
+    !insideComment(b, x)
+  ) {
+    let pi = i, px = x;
+    while (pi < j && px < y && a[pi] === b[px]) {
+      pi++;
+      px++;
+      if (/\s/.test(a[pi - 1]) && balancedTeX(a.slice(i, pi))) {
+        i = pi;
+        x = px;
+      }
+    }
+    let sj = j, sy = y;
+    while (sj > i && sy > x && a[sj - 1] === b[sy - 1]) {
+      sj--;
+      sy--;
+      if (/\s/.test(a[sj]) && balancedTeX(a.slice(sj, j))) {
+        j = sj;
+        y = sy;
+      }
+    }
+  }
   if (compact(a.slice(i, j)) === compact(b.slice(x, y))) return null;
   const before = locate(old, a, i, j, left, "removed"),
     after = locate(next, b, x, y, right, "added");
