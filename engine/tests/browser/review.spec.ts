@@ -1322,6 +1322,22 @@ test("clicking individual highlights in a multi-unit card lets you accept one ed
     await route.fulfill({ json: statePayload({ restored: last?.changes ?? [] }) });
   });
 
+  await page.addInitScript(() => {
+    window.addEventListener("papilot:note-focus-ready", () => {
+      window.dispatchEvent(
+        new CustomEvent("papilot:note-groups", {
+          detail: {
+            round: 1,
+            groups: [
+              { key: "n1", units: ["u1"] },
+              { key: "n2", units: ["u2"] },
+            ],
+          },
+        }),
+      );
+    });
+  });
+
   await page.goto("/?task=unit-pick");
   const card = page.locator('.change[data-stop="0"]');
   await expect(card).toBeVisible();
@@ -1390,4 +1406,365 @@ test("clicking individual highlights in a multi-unit card lets you accept one ed
   await expect(chips.nth(1)).toHaveAttribute("data-state", "pending");
   await expect(card.locator(".side.before")).toBeVisible();
   await expect(card.locator(".side.after:not(.mixed-resolved)")).toBeVisible();
+});
+
+test("overflowing per-unit chips show a position count and sync active unit to source events", async ({ page }) => {
+  const unitIds = Array.from({ length: 12 }, (_, i) => `u${i + 1}`);
+  const decisions: Record<string, string> = Object.fromEntries(unitIds.map((id) => [id, "pending"]));
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 60"><rect width="500" height="60" fill="#fff"/></svg>';
+  await page.route("**/files/chip-overflow/1/*.svg", (route) =>
+    route.fulfill({ contentType: "image/svg+xml", body: svg }),
+  );
+  await page.route("**/api/tasks/chip-overflow/state*", (route) =>
+    route.fulfill({
+      json: {
+        csrf: "tok",
+        sourceEditing: true,
+        deferred: false,
+        task: "chip-overflow",
+        title: "Chip overflow",
+        closed: false,
+        state: "reviewing",
+        latest: 1,
+        round: 1,
+        history: [{ number: 1, created: 1 }],
+        decisions,
+        comments: [],
+        waiting: [],
+      },
+    }),
+  );
+  await page.route("**/api/tasks/chip-overflow/rounds/1", (route) =>
+    route.fulfill({
+      json: {
+        task: "chip-overflow",
+        round: 1,
+        before: "aaaa",
+        after: "bbbb",
+        files: "/files/chip-overflow/1/",
+        units: unitIds.map((id, i) => ({
+          id,
+          file: "paper/method.tex",
+          status: "modified",
+          kind: "text",
+          whole_file: false,
+          ops: [["replace", i * 2, i * 2 + 1, i * 2, i * 2 + 1]],
+          text_ops: [["replace", i * 10, i * 10 + 4, i * 10, i * 10 + 4]],
+          old_start: i * 2 + 1,
+          old_end: i * 2 + 1,
+          new_start: i * 2 + 1,
+          new_end: i * 2 + 1,
+          old_text: `old${i + 1}`,
+          new_text: `new${i + 1}`,
+          visual: "text",
+          pages: ["1"],
+          section: "1 Method",
+        })),
+        sections: [
+          {
+            node: "sec:1",
+            number: "1",
+            title: "Method",
+            blocks: [
+              {
+                kind: "change",
+                units: unitIds,
+                before: [
+                  {
+                    src: "before.svg",
+                    clean: "before.svg",
+                    width: 500,
+                    height: 60,
+                    page: 1,
+                    label: "1",
+                    marks: unitIds.map((id, i) => ({
+                      kind: "removed",
+                      unit: id,
+                      rect: [10 + i * 38, 10, 42 + i * 38, 24],
+                    })),
+                  },
+                ],
+                after: [
+                  {
+                    src: "after.svg",
+                    clean: "after.svg",
+                    width: 500,
+                    height: 60,
+                    page: 1,
+                    label: "1",
+                    marks: unitIds.map((id, i) => ({
+                      kind: "added",
+                      unit: id,
+                      rect: [10 + i * 38, 10, 42 + i * 38, 24],
+                    })),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        loose: [],
+        warnings: [],
+        builds: [],
+      },
+    }),
+  );
+
+  await page.addInitScript((ids: string[]) => {
+    const win = window as unknown as {
+      __currentEvents: unknown[];
+      __openSourceEvents: unknown[];
+    };
+    win.__currentEvents = [];
+    win.__openSourceEvents = [];
+    window.addEventListener("papilot:note-focus-ready", () => {
+      window.dispatchEvent(
+        new CustomEvent("papilot:note-groups", {
+          detail: {
+            round: 1,
+            groups: ids.map((id, i) => ({ key: `n${i + 1}`, units: [id] })),
+          },
+        }),
+      );
+    });
+    window.addEventListener("papilot:review:current", (event) => {
+      win.__currentEvents.push((event as CustomEvent).detail);
+    });
+    window.addEventListener("latex-review:open-source", (event) => {
+      event.preventDefault();
+      win.__openSourceEvents.push((event as CustomEvent).detail);
+    });
+  }, unitIds);
+
+  await page.goto("/?task=chip-overflow");
+  const card = page.locator('.change[data-stop="0"]');
+  await expect(card).toBeVisible();
+  const count = card.locator(".unit-chips-count");
+  await expect(count).toHaveText("1/12");
+
+  // Confirm the chip strip actually overflows horizontally.
+  const overflow = await card.locator(".unit-chips").evaluate((el) => ({
+    scrollWidth: el.scrollWidth,
+    clientWidth: el.clientWidth,
+  }));
+  expect(overflow.scrollWidth).toBeGreaterThan(overflow.clientWidth);
+
+  // Navigate to u11 via keyboard (without Playwright's click-scrolling) to exercise horizontal auto-scroll.
+  for (let step = 0; step < 10; step++) {
+    await page.keyboard.press("ArrowRight");
+  }
+  const chip11 = card.locator('.unit-chip[data-unit="u11"]');
+  await expect(count).toHaveText("11/12");
+  await expect(chip11).toHaveAttribute("data-active", "true");
+  const scrolled = await card.locator(".unit-chips").evaluate((el) => {
+    const active = el.querySelector<HTMLElement>('.unit-chip[data-unit="u11"]')!;
+    const lr = el.getBoundingClientRect(), cr = active.getBoundingClientRect();
+    return { scrollLeft: el.scrollLeft, visible: cr.left >= lr.left && cr.right <= lr.right };
+  });
+  expect(scrolled.scrollLeft).toBeGreaterThan(0);
+  expect(scrolled.visible).toBe(true);
+  const currentEvents = await page.evaluate(
+    () => (window as unknown as { __currentEvents: { from: string; units: { id: string }[] }[] }).__currentEvents,
+  );
+  expect(currentEvents.at(-1)?.units[0]?.id).toBe("u11");
+  expect(currentEvents.at(-1)?.from).toBe("scroll");
+
+  // Opening LaTeX source targets the focused sub-unit u11 rather than only u1.
+  await card.locator(".change-head button.source-toggle").click();
+  const openEvents = await page.evaluate(
+    () => (window as unknown as { __openSourceEvents: { change: string; lines: [number, number] }[] }).__openSourceEvents,
+  );
+  expect(openEvents.at(-1)?.change).toBe("u11");
+  expect(openEvents.at(-1)?.lines).toEqual([20, 21]);
+});
+
+test("unannotated multi-unit blocks decide as one change and annotations group their own units", async ({ page }) => {
+  const unitIds = ["u1", "u2", "u3"];
+  const decisions: Record<string, string> = { u1: "pending", u2: "pending", u3: "pending" };
+  const decideCalls: { action: string; changes: string[] }[] = [];
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 40"><rect width="500" height="40" fill="#fff"/></svg>';
+  await page.route("**/files/note-split/1/*.svg", (route) =>
+    route.fulfill({ contentType: "image/svg+xml", body: svg }),
+  );
+  const statePayload = () => ({
+    task: "note-split",
+    title: "Annotation-only unit split",
+    state: "reviewing",
+    latest: 1,
+    round: 1,
+    closed: false,
+    decisions: { ...decisions },
+    comments: {},
+    csrf: "tok",
+    undo: decideCalls.length
+      ? { id: `d-${decideCalls.length}`, kind: decideCalls.at(-1)!.action, changes: decideCalls.at(-1)!.changes }
+      : null,
+    history: [{ number: 1, created: 1700000000 }],
+  });
+  await page.route("**/api/tasks/note-split/state*", (route) => route.fulfill({ json: statePayload() }));
+  await page.route("**/api/tasks/note-split/rounds/1", (route) =>
+    route.fulfill({
+      json: {
+        task: "note-split",
+        round: 1,
+        before: "b",
+        after: "a",
+        files: "/files/note-split/1/",
+        warnings: [],
+        units: unitIds.map((id, i) => ({
+          id,
+          file: "main.tex",
+          status: "modified",
+          kind: "text",
+          whole_file: false,
+          truncated: false,
+          old_start: 10 + i,
+          old_end: 10 + i,
+          new_start: 10 + i,
+          new_end: 10 + i,
+          old_text: `old ${i + 1}`,
+          new_text: `new ${i + 1}`,
+          ops: [],
+        })),
+        sections: [
+          {
+            node: "intro",
+            number: "1",
+            title: "Intro",
+            blocks: [
+              {
+                kind: "change",
+                units: unitIds,
+                identical: false,
+                before: [
+                  {
+                    src: "before.svg",
+                    clean: "before-clean.svg",
+                    width: 500,
+                    height: 40,
+                    page: 1,
+                    label: "1",
+                    top: 100,
+                    marks: [
+                      { unit: "u1", kind: "removed", rect: [16, 10, 90, 28] },
+                      { unit: "u2", kind: "removed", rect: [140, 10, 230, 28] },
+                      { unit: "u3", kind: "removed", rect: [280, 10, 380, 28] },
+                    ],
+                  },
+                ],
+                after: [
+                  {
+                    src: "after.svg",
+                    clean: "after-clean.svg",
+                    width: 500,
+                    height: 40,
+                    page: 1,
+                    label: "1",
+                    top: 100,
+                    marks: [
+                      { unit: "u1", kind: "added", rect: [16, 10, 90, 28] },
+                      { unit: "u2", kind: "added", rect: [140, 10, 230, 28] },
+                      { unit: "u3", kind: "added", rect: [280, 10, 380, 28] },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        loose: [],
+      },
+    }),
+  );
+  await page.route("**/api/tasks/note-split/decide", async (route) => {
+    const body = route.request().postDataJSON() as { action: "accept" | "reject" | "comment"; changes: string[] };
+    decideCalls.push({ action: body.action, changes: body.changes });
+    const nextState = body.action === "accept" ? "accepted" : body.action === "reject" ? "rejected" : "commented";
+    for (const id of body.changes) decisions[id] = nextState;
+    await route.fulfill({ json: statePayload() });
+  });
+  await page.route("**/api/tasks/note-split/undo", async (route) => {
+    const last = decideCalls.pop();
+    if (last) for (const id of last.changes) decisions[id] = "pending";
+    await route.fulfill({ json: { ...statePayload(), restored: last?.changes ?? [] } });
+  });
+
+  await page.goto("/?task=note-split");
+  const card = page.locator('.change[data-stop="0"]');
+  await expect(card).toBeVisible();
+
+  // 1. Without annotations, a 3-unit block shows zero chips and accepts all 3 units in one click.
+  await expect(card.locator(".unit-chip")).toHaveCount(0);
+  await expect(card.locator(".unit-focus-group")).toHaveCount(0);
+  await card.locator(".change-head button.accept").click();
+  await expect.poll(() => decideCalls.length).toBe(1);
+  expect(decideCalls[0]).toEqual({ action: "accept", changes: ["u1", "u2", "u3"] });
+
+  // Undo to restore pending state.
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
+  await expect.poll(() => decideCalls.length).toBe(0);
+  await expect(card).toHaveAttribute("data-state", "pending");
+
+  // 2. A single annotation covering the entire block still shows zero chips.
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new CustomEvent("papilot:note-groups", {
+        detail: { round: 1, groups: [{ key: "n1", units: ["u1", "u2", "u3"] }] },
+      }),
+    );
+  });
+  await expect(card.locator(".unit-chip")).toHaveCount(0);
+
+  // 3. Two annotations sharing the block create 2 chips: n1 owns [u1, u2] and n2 owns [u3].
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new CustomEvent("papilot:note-groups", {
+        detail: {
+          round: 1,
+          groups: [
+            { key: "n1", units: ["u1", "u2"] },
+            { key: "n2", units: ["u3"] },
+          ],
+        },
+      }),
+    );
+  });
+  const chips = card.locator(".unit-chip");
+  await expect(chips).toHaveCount(2);
+  await expect(chips.nth(0)).toHaveAttribute("data-unit", "u1");
+  await expect(chips.nth(1)).toHaveAttribute("data-unit", "u3");
+
+  // Clicking chip 2 then clicking u2's mark on the PDF strip activates chip 1 (since u2 belongs to n1).
+  await chips.nth(1).click();
+  await expect(chips.nth(1)).toHaveAttribute("data-active", "true");
+  const afterStrip = card.locator(".side.after .pdf-strip");
+  const box = (await afterStrip.boundingBox())!;
+  await page.mouse.click(box.x + (185 / 500) * box.width, box.y + (19 / 40) * box.height);
+  await expect(chips.nth(0)).toHaveAttribute("data-active", "true");
+
+  // Accepting chip 1 decides BOTH u1 and u2 in a single request and advances to chip 2 (u3).
+  await card.locator(".unit-focus-group").getByRole("button", { name: "Accept", exact: true }).click();
+  await expect.poll(() => decideCalls.length).toBe(1);
+  expect(decideCalls[0]).toEqual({ action: "accept", changes: ["u1", "u2"] });
+  await expect(chips.nth(0)).toHaveAttribute("data-state", "accepted");
+  await expect(chips.nth(1)).toHaveAttribute("data-state", "pending");
+  await expect(chips.nth(1)).toHaveAttribute("data-active", "true");
+
+  // 4. Undo, then verify one partial annotation (n1: [u1]) splits off the unannotated remainder [u2, u3] into 1 group.
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
+  await expect.poll(() => decideCalls.length).toBe(0);
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new CustomEvent("papilot:note-groups", {
+        detail: { round: 1, groups: [{ key: "n1", units: ["u1"] }] },
+      }),
+    );
+  });
+  await expect(chips).toHaveCount(2);
+  await expect(chips.nth(0)).toHaveAttribute("data-units", "u1");
+  await expect(chips.nth(1)).toHaveAttribute("data-units", "u2 u3");
+  await chips.nth(1).click();
+  await card.locator(".unit-focus-group").getByRole("button", { name: "Accept", exact: true }).click();
+  await expect.poll(() => decideCalls.length).toBe(1);
+  expect(decideCalls[0]).toEqual({ action: "accept", changes: ["u2", "u3"] });
 });

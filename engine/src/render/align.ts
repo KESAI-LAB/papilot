@@ -147,10 +147,20 @@ function build(
   // words, since words that moved are the same text. A running head or a
   // page number left unpaired only turned with its page: unless its words
   // changed, it is neither moved text nor anything a crop must show.
+  const hasBodyTokens = (effect: { old: [number, number]; new: [number, number] }) => {
+    for (let t = effect.old[0]; t < effect.old[1]; t++)
+      if (a.tokens[t].flow !== "edge") return true;
+    for (let t = effect.new[0]; t < effect.new[1]; t++)
+      if (b.tokens[t].flow !== "edge") return true;
+    return false;
+  };
   const edited = { old: new Uint8Array(a.tokens.length), new: new Uint8Array(b.tokens.length) };
   for (const effect of result.changes) {
-    edited.old.fill(1, effect.old[0], effect.old[1]);
-    edited.new.fill(1, effect.new[0], effect.new[1]);
+    const bodyEffect = hasBodyTokens(effect);
+    for (let t = effect.old[0]; t < effect.old[1]; t++)
+      if (!bodyEffect || a.tokens[t].flow !== "edge") edited.old[t] = 1;
+    for (let t = effect.new[0]; t < effect.new[1]; t++)
+      if (!bodyEffect || b.tokens[t].flow !== "edge") edited.new[t] = 1;
   }
   for (const [name, w, map] of [
     ["old", a, result.tokens],
@@ -167,14 +177,17 @@ function build(
       }
     });
   }
-  for (const effect of result.changes)
+  for (const effect of result.changes) {
+    const bodyEffect = hasBodyTokens(effect);
     for (const [name, w, [i, j]] of [
       ["old", a, effect.old],
       ["new", b, effect.new],
     ] as const)
       for (let t = i; t < j; t++)
-        for (const g of tokenGlyphs(w.tokens[t]))
-          add(sides[name].changed, w, g);
+        if (!bodyEffect || w.tokens[t].flow !== "edge")
+          for (const g of tokenGlyphs(w.tokens[t]))
+            add(sides[name].changed, w, g);
+  }
   for (const side of [sides.old, sides.new]) {
     const changed = new Set([...side.changed.values()].flat()),
       // A line-end hyphen the comparison left unpaired marks where a line
@@ -593,6 +606,32 @@ function gather(
     part = parts.get(key);
   parts.set(key, { page, column, rect: part ? union(part.rect, rect) : rect });
 }
+function isEdgeLine(side: Side, line: number): boolean {
+  const range = side.words.lines[line];
+  if (!range || range[0] >= range[1]) return false;
+  for (let t = range[0]; t < range[1]; t++)
+    if (side.words.tokens[t].flow !== "edge") return false;
+  return true;
+}
+function skipEdgeLine(side: Side, line: number, allowEdge: boolean): boolean {
+  return isEdgeLine(side, line) && (!allowEdge || !side.changedLine[line]);
+}
+function touchesEdge(side: Side, crops: Position[]): boolean {
+  return crops.some((at) =>
+    (side.byPage.get(at.page) ?? []).some(
+      (line) =>
+        isEdgeLine(side, line) &&
+        side.parts[line].some((part) => part.page === at.page && containsCenter(at.clip, part.rect)),
+    ),
+  );
+}
+function bodyBound(side: Side, start: number, step: -1 | 1, allowEdge: boolean): Line | null {
+  for (let i = start; i >= 0 && i < side.parts.length; i += step) {
+    if (skipEdgeLine(side, i, allowEdge)) continue;
+    return step < 0 ? (side.parts[i]?.at(-1) ?? null) : (side.parts[i]?.[0] ?? null);
+  }
+  return null;
+}
 // The crops of one side of a gap: the lines between its ends, and the
 // edit's own crops inside that stretch, which hold its figures and rules.
 // A crop runs up to the end lines on its page, so nothing printed between
@@ -602,17 +641,23 @@ function cropsOf(
   name: SideName,
   gap: Gap,
   own: Position[],
+  allowEdge = false,
 ): Position[] {
   const side = al[name],
     document = side.build.document,
     [lo, hi] = gap[name],
-    top = side.parts[lo]?.at(-1) ?? null,
-    end = side.parts[hi]?.[0] ?? null,
     same = (a: number, b: number) => a === b || a === -1 || b === -1,
     parts = new Map<string, Part>();
+  let hasBody = false;
   for (let i = lo + 1; i < hi; i++)
+    if (!isEdgeLine(side, i)) { hasBody = true; break; }
+  const top = hasBody ? bodyBound(side, lo, -1, allowEdge) : (side.parts[lo]?.at(-1) ?? null),
+    end = hasBody ? bodyBound(side, hi, 1, allowEdge) : (side.parts[hi]?.[0] ?? null);
+  for (let i = lo + 1; i < hi; i++) {
+    if (hasBody && skipEdgeLine(side, i, allowEdge)) continue;
     for (const part of side.parts[i])
       gather(parts, part.page, part.column, part.rect);
+  }
   for (const at of own) {
     if ((top && at.page < top.page) || (end && at.page > end.page)) continue;
     const column = document.page(at.page).column(at.clip);
@@ -713,17 +758,23 @@ function linesCrops(
   name: SideName,
   first: number,
   last: number,
+  allowEdge = false,
 ): Position[] {
   const side = al[name],
     parts = new Map<string, Part>();
+  let hasBody = false;
   for (let i = first; i <= last; i++)
+    if (!isEdgeLine(side, i)) { hasBody = true; break; }
+  for (let i = first; i <= last; i++) {
+    if (hasBody && skipEdgeLine(side, i, allowEdge)) continue;
     for (const { page, column, rect } of side.parts[i])
       gather(parts, page, column, rect);
+  }
   return framed(
     side.build.document,
     parts.values(),
-    side.parts[first - 1]?.at(-1) ?? null,
-    side.parts[last + 1]?.[0] ?? null,
+    hasBody ? bodyBound(side, first - 1, -1, allowEdge) : (side.parts[first - 1]?.at(-1) ?? null),
+    hasBody ? bodyBound(side, last + 1, 1, allowEdge) : (side.parts[last + 1]?.[0] ?? null),
   );
 }
 // Words touched by the actual footprint, including words sharing a row
@@ -754,11 +805,12 @@ function completeCrops(
   first: number,
   last: number,
   required?: number[],
+  allowEdge = false,
 ) {
   const side = al[name],
     w = side.words;
   for (;;) {
-    const crops = linesCrops(al, name, first, last),
+    const crops = linesCrops(al, name, first, last, allowEdge),
       shown = visibleTokens(side, crops);
     let lo = first,
       hi = last;
@@ -825,6 +877,7 @@ function cutLines(
   mine: Mine,
   minOld?: number,
   maxOld?: number,
+  allowEdge = false,
 ): Group | null {
   const count = {
       old: al.old.words.tokens.length,
@@ -840,7 +893,7 @@ function cutLines(
     oldLines = al.old.words.lines;
   // Close the footprint over whole words before selecting its counterpart.
   // A continuation row may share another word that continues in turn.
-  let next = completeCrops(al, "new", first, last);
+  let next = completeCrops(al, "new", first, last, undefined, allowEdge);
   if (!next.shown.size) return null;
   const bounds = (current: typeof next) => {
     const above = equal("new", Math.min(...current.shown), -1),
@@ -890,7 +943,7 @@ function cutLines(
     hyphenContinued(al.old, span.oldFirst) &&
     al.tokens.old[oldLines[span.oldFirst][0]] === lines[next.first - 1][0]
   ) {
-    const expanded = completeCrops(al, "new", next.first - 1, next.last),
+    const expanded = completeCrops(al, "new", next.first - 1, next.last, undefined, allowEdge),
       updated = expanded.shown.size ? bounds(expanded) : null;
     if (updated) {
       next = expanded;
@@ -905,7 +958,7 @@ function cutLines(
     hyphenContinued(al.old, span.oldLast - 1) &&
     al.tokens.old[oldLines[span.oldLast][1] - 1] === lines[next.last + 1][1] - 1
   ) {
-    const expanded = completeCrops(al, "new", next.first, next.last + 1),
+    const expanded = completeCrops(al, "new", next.first, next.last + 1, undefined, allowEdge),
       updated = expanded.shown.size ? bounds(expanded) : null;
     if (updated) {
       next = expanded;
@@ -926,10 +979,11 @@ function cutLines(
       (_, i) => above + 1 + i,
     ).filter(
       (t) =>
-        kept(al, "old", al.old.tokenLine[t], mine) ||
-        (al.tokens.old[t] >= 0 && shownNew.has(al.tokens.old[t])),
+        (allowEdge || w.tokens[t].flow !== "edge") &&
+        (kept(al, "old", al.old.tokenLine[t], mine) ||
+          (al.tokens.old[t] >= 0 && shownNew.has(al.tokens.old[t]))),
     ),
-    left = completeCrops(al, "old", oldFirst, oldLast, needed).crops,
+    left = completeCrops(al, "old", oldFirst, oldLast, needed, allowEdge).crops,
     faded = new Map<number, Rect[]>();
   for (const at of left)
     for (const line of al.old.byPage.get(at.page) ?? []) {
@@ -974,9 +1028,10 @@ export function alignedSpanCrops(
   const next = range("new", newCrops);
   if (!next) return null;
   const old = range("old", oldCrops);
-  return cutLines(al, next[0], next[1], mine, old?.[0], old?.[1]);
+  const allowEdge = touchesEdge(al.old, oldCrops) || touchesEdge(al.new, newCrops);
+  return cutLines(al, next[0], next[1], mine, old?.[0], old?.[1], allowEdge);
 }
-function cut(al: Alignment, region: Region, mine: Mine): Group | null {
+function cut(al: Alignment, region: Region, mine: Mine, allowEdge = false): Group | null {
   const words = (name: SideName, touch: Touch | null) => {
       const side = al[name],
         result: number[] = [];
@@ -1022,7 +1077,7 @@ function cut(al: Alignment, region: Region, mine: Mine): Group | null {
     [first, last] = [gap.new[0] + 1, gap.new[1] - 1];
     if (first > last) return null;
   }
-  return cutLines(al, first, last, mine);
+  return cutLines(al, first, last, mine, undefined, undefined, allowEdge);
 }
 // An edit's crops, one group per region, cut at its words (above). A
 // figure, where the picture matters as much as the words, is cut at the same
@@ -1060,9 +1115,10 @@ export function alignedCrops(
       narrow ? newLines : [...newLines, ...touched(al, "new", right)],
     );
   if (!found.length) return null;
+  const allowEdge = touchesEdge(al.old, left) || touchesEdge(al.new, right);
   const crops = (gap: Gap) => ({
-    left: cropsOf(al, "old", gap, left),
-    right: cropsOf(al, "new", gap, right),
+    left: cropsOf(al, "old", gap, left, allowEdge),
+    right: cropsOf(al, "new", gap, right, allowEdge),
   });
   const settle = (region: Region) => {
     const gap = tighten(al, release(al, gapAt(al, region.span), mine)),
@@ -1084,6 +1140,6 @@ export function alignedCrops(
     if (left.length && right.length) return [{ left, right }];
   }
   return found.map(
-    (region) => (!wide && cut(al, region, mine)) || settle(region),
+    (region) => (!wide && cut(al, region, mine, allowEdge)) || settle(region),
   );
 }
