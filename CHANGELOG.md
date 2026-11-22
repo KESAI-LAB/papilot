@@ -6,6 +6,7 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Added
 
+- Review individual edits directly on the PDF inside multi-edit change cards using numbered per-edit chips (`1 #5`, `2`, `3`, `4 #6`) with distinct pending, active, accepted, rejected, and commented states. Once every edit in a block is decided with a mix of accepts and rejects, the review compiles that block once and shows the resulting clean PDF in place. ([#316](https://github.com/PapilotAI/papilot/pull/316))
 - Sort annotations in **My notes** by **Original order**, **PDF position**, or **Newest first** across color groups and individual notes. Notes whose positions need confirmation stay visible at the end in PDF position order, and note numbers continue matching their PDF markers. ([#291](https://github.com/PapilotAI/papilot/issues/291))
 - Support optional color `group` (`yellow`, `green`, `purple`, `orange`, `red`) and quick-note `stamp` labels in the agent `annotation_create` and `annotation_update` tools, including setting, changing, or clearing (`null`) either field without resending `comment`, and show stamps on grouped notes in **My notes** and colored marks on the PDF. ([#292](https://github.com/PapilotAI/papilot/issues/292))
 - Prepare automatic signed APT distribution for stable amd64 desktop releases. Debian packages use system-managed app upgrades and retain agent setup. ([#268](https://github.com/PapilotAI/papilot/issues/268))
@@ -14,12 +15,15 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ### Changed
 
+- Show review changes directly in place on the full PDF with a single-row review toolbar, top-bar change navigator, and full-paper ChangeMap scrollbar, removing the `PDF | Changes` toggle and intermediate `AppliedPaper` compilations — built on the full-document review prototype and discussion by [@RIvance](https://github.com/RIvance). ([#263](https://github.com/PapilotAI/papilot/pull/263), [#310](https://github.com/PapilotAI/papilot/pull/310))
+- Consolidate linked annotations and alternative-option previews inline inside each change card beneath its header, removing the separate bottom note drawer and scope switcher while routing the card's single Accept/Reject/Comment controls directly to the active option. ([#316](https://github.com/PapilotAI/papilot/pull/316))
 - Keep the Typeless microphone at the mouse's release point when creating a PDF note. Once the draft has text, its quote arrow uses the same position, so stopping dictation and confirming the note need no mouse movement. Transcription still requires explicit confirmation; touch and keyboard entry retain the regular controls. See [Typeless voice notes](docs/typeless.md). ([#253](https://github.com/PapilotAI/papilot/pull/253))
 - Store new task worktrees under `~/.papilot/worktrees` by default. Existing tasks retain their stored paths, and project-specific overrides still apply. ([#273](https://github.com/PapilotAI/papilot/issues/273))
 - Refresh the website's GitHub star count with a 15-minute edge cache. Keep the last successful count during GitHub failures and show the deployment-time count without JavaScript. ([#257](https://github.com/PapilotAI/papilot/issues/257))
 
 ### Fixed
 
+- Fix PDF/source diff alignment across hyphenated words, prose line rewraps, and split-word boundaries, and merge consecutive word highlights smoothly across justified LaTeX spaces without overlapping math and prose marks. ([#310](https://github.com/PapilotAI/papilot/pull/310), [#316](https://github.com/PapilotAI/papilot/pull/316))
 - Allow wheel scrolling over annotation cards and inline editors in **My notes** and **Notes in this task**, while keeping overscroll contained inside the list and floating PDF note popovers. ([#293](https://github.com/PapilotAI/papilot/issues/293))
 - Generate initial task-review commit drafts in the selected commit-message language instead of copying the task title. Manual edits and preserved reconciliation messages remain intact. ([#255](https://github.com/PapilotAI/papilot/issues/255))
 - Keep PDF reference previews aligned with their links as the PDF scrolls, zooms or resizes. Previews stay inside the visible viewport and close when the reference leaves view. ([#260](https://github.com/PapilotAI/papilot/issues/260))
