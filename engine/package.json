@@ -39,7 +39,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
-    "fast-check": "^4.10.2",
+    "fast-check": "^4.10.3",
     "pdfjs-dist": "^6.5.438",
     "prettier": "^3.10.1",
     "typescript": "^7.0.2",
