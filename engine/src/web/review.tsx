@@ -1422,7 +1422,10 @@ export function ReviewApp({
   }
   async function copy(index: number) {
     if (!detail || !state) return;
-    const selected = window.getSelection()?.toString().trim() ?? "",
+    // Only text selected in this change describes it.
+    const selection = window.getSelection(),
+      change = document.querySelector(`.change[data-stop="${index}"]`),
+      selected = selection && change?.contains(selection.anchorNode) && change.contains(selection.focusNode) ? selection.toString().trim() : "",
       known = stops[index].units.map((id) => units.get(id)!).filter(Boolean);
     const reference = copyReference(
       state.title,
@@ -2364,12 +2367,16 @@ export function ReviewApp({
     document.addEventListener("visibilitychange", look);
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", look); };
   }, [task, paperView, changes, Boolean(state?.csrf)]);
-  // A host shows its PDF navigation controls while the whole paper is shown.
+  // A host shows its PDF navigation controls while the whole paper is shown,
+  // and keeps their place while the round's comparison renders again.
+  const paperPending = !paperView && !paperUnavailable && !detail?.sourceOnly
+    && (detail?.rendering === "pending" || Boolean(state?.job && ["queued", "running"].includes(state.job.status)));
   useEffect(() => {
     const root = document.documentElement;
     if (paperView) root.dataset.fullPaper = "available";
+    else if (paperPending) root.dataset.fullPaper = "pending";
     else delete root.dataset.fullPaper;
-  }, [paperView]);
+  }, [paperView, paperPending]);
   useEffect(() => {
     const root = document.documentElement;
     if (detail?.round) {
