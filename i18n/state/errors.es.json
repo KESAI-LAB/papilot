@@ -1099,9 +1099,19 @@
     "textHash": "a935c3477e9b2124a3c3876244ebeab90e7f86eb95e241f7616664148a4ec36d",
     "model": "codex"
   },
+  "Send enabled or hiddenModels.": {
+    "revision": "cfda5072eb7e62eebc28833d233278200fbf31edb9414d4f6f3e76b30cb5fcee",
+    "textHash": "88b4a449091dfe59fc0b11ae2484ac0b7824e0f00da8f037cc0260394b61be76",
+    "model": "gemini-4-argon-medium"
+  },
   "Send enabled or routes.": {
     "revision": "6f5dbffa4930fa0568fe0a705ea4f906694abaedff2cedbaabd3895c48fdb561",
     "textHash": "5b758c9ae54dd65a08d0213c39fe7d1e0bd34c3c3313f18ffcf57d4d12bdbf54",
+    "model": "gemini-4-argon-medium"
+  },
+  "Send hiddenModels as a list of model IDs.": {
+    "revision": "e9b323431dba9ce3d9c01bb81ef2a837ccdc30fc05ac4ffcb7243ed512e7820b",
+    "textHash": "dfdf140da2db446f97129b6beeb4ea1d28076fd83ad8fcdb7b8594fb8e9d4595",
     "model": "gemini-4-argon-medium"
   },
   "Send indirectChanges as true or false.": {
@@ -1877,6 +1887,11 @@
   "This worker has already finished.": {
     "revision": "ef51ff20e82b40ce841d909d249d5b3392ce018e3ea78ab7cef06bf494deafa5",
     "textHash": "2a3a48d209b79486dbc3748b9303a082b7e41aa60d12f118de07e30d2bcd0205",
+    "model": "gemini-4-argon-medium"
+  },
+  "Turn this agent on in Settings → Agents first.": {
+    "revision": "e74bdf67fa767ae90c766b9d59b65dcb3dcafb1ea9d749cd598e6de9d834e22e",
+    "textHash": "33c5ec85aa98cffbdb430c55b97c2b983156eb0e6eb95bc64c48ff3b86fcfce6",
     "model": "gemini-4-argon-medium"
   },
   "Unknown Git action.": {
