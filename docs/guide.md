@@ -364,6 +364,24 @@ Files are stored beside Papilot's database, outside the manuscript and task work
 
 Sending a draft attaches its files to that task. Deleting a task removes its stored attachments after task cleanup is confirmed. Unsent uploads expire after 30 days and are cleaned up during later uploads; each paper can keep up to 500 MB of unsent uploads.
 
+## Statistics
+
+Open **Settings → Statistics** to see what Papilot has done for you, across all papers or for one paper, over the last **7 days**, **30 days**, **90 days**, or **All time** (the default).
+
+- **Figures**: four numbers at the top.
+  - **Accepted changes** and **Rejected changes** count the changes you kept and the ones you stopped, across task reviews, uncommitted manuscript changes, and AI review suggestions.
+  - **Agent time** adds up how long agents worked on finished turns.
+  - **Tasks started** counts the tasks you started.
+- **Activity**: your active days, current streak, and longest streak, above a calendar with one square per day, shaded by how much happened that day. It shows as many weeks as fit, and ‹ › page back through earlier weeks. Days before the chosen range stay visible but fade. Hover a day, tap it, or move with the arrow keys to see its runs, decisions, and tokens.
+- **Cards**:
+  - **Reviews & notes**: your acceptance rate as a ring, with review comments, undos, annotations, and annotations sent to tasks.
+  - **Tokens**: the total, split into input, cached, cache write, and output, with the spend. Spend is provider-reported where the agent reports it. Otherwise it is an API-equivalent estimate (`~`) for known model IDs; models without known API pricing keep their token counts without guessed prices.
+  - **Active hours**: a weekday-by-hour heatmap of when you work, in local time, with the peak hour.
+  - **Agents & models**: tokens (or runs) by agent and by model, across editing tasks, AI reviews, collaboration workers, and background helpers.
+- **Share** draws the figures and the latest 26 weeks of activity into an image in your current theme and accent. Save it as a PNG, or copy or share it where the browser allows (Papilot on this computer or over HTTPS). Paper names are not included.
+
+Activity events are stored locally in your workspace SQLite database, backfilled once from existing tasks, runs, and annotations when upgrading, and kept even after individual tasks or papers are removed.
+
 ## Skills
 
 A skill is a named set of instructions for a common revision, so you do not have to write the prompt each time. Type `/` at the start of the prompt for a new task or a follow-up, keep typing to narrow the list, and press Enter or Tab (or click) to choose one; Escape closes the list and Backspace in an empty prompt removes the chosen skill. You can also pick a skill from the composer's **+** menu. What you type next says where or how to apply it, such as "Section 3 only"; send without text to apply it to the whole paper. The agent receives the skill's instructions with your words, and the chat shows the skill's name.
