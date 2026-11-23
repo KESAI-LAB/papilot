@@ -427,6 +427,22 @@ Omit it to use the default icon; unknown values also fall back to the default.
 
 Papilot reads the skills again when you return to its window, so a new skill file appears without a restart.
 
+## Writing memory
+
+Papilot keeps the writing preferences you want every agent to follow in later tasks, such as how strongly to state claims, terminology, voice or heading case. They are plain Markdown lists you can read and edit; each `-` line is one preference, and any other text you write in the file is kept and sent along.
+
+| Scope | File | Who receives it |
+| --- | --- | --- |
+| **This paper** | `<paper>/.papilot/memory.local.md` | Only this checkout. Papilot lists the file in the repository's `.git/info/exclude` before creating it, so Git never shows or commits it. |
+| **Shared with coauthors** | `<paper>/.papilot/memory.md` | Everyone with the repository, once you commit the file. Overleaf sync skips it. |
+| **All papers** | `~/.papilot/memory.md` | Every paper you open. `PAPILOT_MEMORY` names another file. |
+
+The agent of every editing task and AI review receives the saved preferences with its instructions, and so do Collaboration mode workers and their audit, so a review does not flag a deliberate convention. Conflict resolution and import repair do not use them, since they keep the text as it is. Your current request, PDF notes and review feedback take precedence, and a preference for this paper takes precedence over one for all papers. When memory changes during a task, the agent receives the new version with your next message. Preferences describe writing only; they never widen what an agent may do. Saving shared memory does not rebuild the PDF.
+
+**Learning from reviews.** When you finish reviewing a task (no pending changes and no comments waiting to go back), Papilot records your messages, PDF notes, comments and rejected edits from it, without asking any model. When you go on to save the task, as its commit message is written or as you apply it (or, for a task with nothing to save, as its review finishes), the task's own agent reads its recorded feedback from this paper's tasks in one read-only turn of its light model, beside the commit message rather than before it, and judges whether it shows a lasting preference: something you asked for, such as "Remember to use sentence case for headings in this paper", or the same kind of correction more than once, in one task or across tasks. It names the principle behind your corrections rather than a word swap, such as not strengthening claims after you turned down "prove" for "show" and "significantly outperforms" for "outperforms". A suggestion appears below the save step and never holds it up: the preference, where it would be kept, and under **What prompted it** the edits and words it is based on with the task each came from. Papilot checks each of them against your reviews before showing it. Select **Remember** or **Dismiss**, or save the task and leave it; a remembered suggestion keeps its **Undo** until you leave the task. Nothing is saved until you choose **Remember**, and a dismissed suggestion is not proposed again. **Undo** reverses what **Remember** did: it takes the new preference back out and restores one it replaced. Edit a remembered preference or keep it elsewhere in **Settings → Memory**. The same feedback is read once, however often the commit message is written again. An agent reads only the feedback from its own tasks. Agents that cannot run read-only tasks do not learn and keep nothing, and no other agent receives your feedback instead. Turn learning off in **Settings → Memory**; turning it back on starts again from the next finished review.
+
+**Settings → Memory**, under **Writing and review**, lists the preferences for this paper, kept on this computer or shared with coauthors, and for all papers, each list under the file that holds it. Edit one in place, add one to a list, delete one, or use its menu to move it between this paper, all papers and shared; commit `.papilot/memory.md` from the Git panel to send shared ones to coauthors. **Memory language** sets the language of the preferences Papilot suggests; **Auto** follows the language of your feedback. Before suggesting a preference, the agent compares it with the ones you saved, in any language, and suggests nothing for a point they already cover, or offers to replace the one it refines. Deleting a task deletes what Papilot noted from its review.
+
 ## Remote access with Tailscale
 
 Papilot binds **only to 127.0.0.1**. Configure a private Tailscale Serve endpoint and the exact owner login shown by your tailnet. The server verifies the remote Host, browser Origin, and Tailscale identity supplied by the local proxy.
@@ -491,6 +507,7 @@ If installation or its initial startup check fails, the existing server keeps ru
 | --- | --- | --- |
 | `PAPILOT_PORT` | `7274` | Local HTTP port; the server binds to `127.0.0.1`. |
 | `PAPILOT_DATA` | `~/.papilot` for the `papilot` command, `.papilot` in a source checkout | SQLite state and generated example project. |
+| `PAPILOT_MEMORY` | `~/.papilot/memory.md` | Personal writing memory file, followed in every paper (see [Writing memory](#writing-memory)). |
 | `PAPILOT_CODEX_BIN` | `papilot`: `codex` on `PATH` (0.164.0 or newer), else one installed into the data folder. Desktop app: the first `codex` on `PATH` that runs | Codex executable used by the backend. |
 | `PAPILOT_SERVICE_PATH` | Unset | Absolute tool directories to prioritize in the macOS service; retained across service reinstalls. |
 | `PAPILOT_INSTALL_METHOD` | Unset | `managed` for an installation that pins Papilot's version, such as a container image or system package: no in-app updates and no runtime downloads of Codex or agent SDKs (see [Updates](#updates)). The Nix package sets `nix`. |
