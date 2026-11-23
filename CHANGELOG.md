@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Changed
+
+- **The conflict-resolution agent prepares merge suggestions too.** When saving a task finds that the manuscript changed in overlapping passages, the agent chosen under **Settings → Git → Conflict-resolution agent** now prepares the merge suggestion instead of the task's own agent. It takes over the task's conversation for the merge and can ask about passages it cannot settle. The merge waits until that agent is connected; if it cannot take the task, the merge ends with an error instead of running on another agent. Once the merge is saved, the task returns to its own agent and settings. With **Follow current conversation**, the task's agent prepares it as before. ([#331](https://github.com/PapilotAI/papilot/pull/331))
+
 ### Fixed
 
 - **Comparing PDFs with gradient fills no longer fails or misses drawing changes at random.** Comparing the drawings of a PDF with a shading, such as a TikZ or Beamer gradient, released the shading while the PDF reader still used it once memory was reclaimed. The PDF comparison could then fail with "Rendering the PDF comparison failed." or leave out a changed drawing. ([#328](https://github.com/PapilotAI/papilot/pull/328))
