@@ -279,6 +279,13 @@ try {
   fs.mkdirSync('test-results', { recursive: true });
   await page.screenshot({ path: `test-results/desktop-${packaged ? 'packaged' : 'dev'}.png` });
   assert.deepEqual(errors, []);
+  // View › Zoom In steps the saved interface size, which zooms the whole window.
+  const zoomMenu = id => application.evaluate(({ Menu }, id) => Menu.getApplicationMenu().getMenuItemById(id).click(), id);
+  const zoomFactor = app => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getZoomFactor());
+  await zoomMenu('zoom-in'); await zoomMenu('zoom-in');
+  await expect.poll(() => zoomFactor(application)).toBe(1.25);
+  assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('papilot:appearance'))).size, 1.25);
+  await page.screenshot({ path: `test-results/desktop-zoom-${packaged ? 'packaged' : 'dev'}.png` });
   await page.evaluate(() => localStorage.setItem('papilot:desktop-smoke', 'keep draft'));
   await application.close(); application = null;
   await assert.rejects(fetch(`${origin}/api/health`, { signal: AbortSignal.timeout(5000) }), 'Quitting Electron stops its backend');
@@ -286,6 +293,9 @@ try {
   const reopened = await application.firstWindow({ timeout: 90000 });
   await reopened.waitForURL(origin + '/');
   assert.equal(await reopened.evaluate(() => localStorage.getItem('papilot:desktop-smoke')), 'keep draft', 'Local preferences survive a desktop restart');
+  await expect.poll(() => zoomFactor(application), { message: 'Interface size survives a desktop restart' }).toBe(1.25);
+  await application.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById('zoom-reset').click());
+  await expect.poll(() => zoomFactor(application)).toBe(1);
   await application.close(); application = null;
   const occupied = createServer();
   await new Promise((resolve, reject) => { occupied.once('error', reject); occupied.listen(Number(new URL(origin).port), '127.0.0.1', resolve); });

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { browserStorage } from './storage.ts';
-import { APPEARANCE_KEY, appearanceVariables, parseAppearance, type Appearance } from './appearance.ts';
+import { APPEARANCE_KEY, appearanceVariables, parseAppearance, stepInterfaceSize, type Appearance } from './appearance.ts';
 
 export type Theme = 'system' | 'light' | 'dark';
 const key = 'papilot:theme';
@@ -33,6 +33,15 @@ export function useTheme() {
     for (const [name, value] of Object.entries(variables)) document.documentElement.style.setProperty(name, value);
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', variables['--bg']);
   }, [resolved, appearance]);
+  // The desktop app zooms the whole window, including the review frame.
+  useLayoutEffect(() => { window.papilotDesktop?.setZoom?.(appearance.size); }, [appearance.size]);
+  // View › Zoom In/Out/Actual Size step the saved size rather than a separate
+  // zoom. Repeated steps build on each other even before a render.
+  useEffect(() => window.papilotDesktop?.onZoom?.(direction => setAppearance(current => {
+    const next = { ...current, size: stepInterfaceSize(current.size, direction) };
+    browserStorage.setItem(APPEARANCE_KEY, JSON.stringify(next));
+    return next;
+  })), []);
   return { theme, resolved, appearance,
     setTheme: (value: Theme) => { browserStorage.setItem(key, value); setTheme(value); },
     setAppearance: (value: Appearance) => { browserStorage.setItem(APPEARANCE_KEY, JSON.stringify(value)); setAppearance(value); },

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, webFrame, type IpcRendererEvent } from 'electron';
 
 // Expose specific window and user-selected folder actions, not generic IPC or
 // filesystem access. Papers open in place; their files stay on disk.
@@ -34,6 +34,14 @@ contextBridge.exposeInMainWorld('papilotDesktop', {
     ipcRenderer.on('papilot:open-settings', receive);
     return () => { ipcRenderer.off('papilot:open-settings', receive); };
   },
+  // Settings › Appearance › Interface size zooms this window; the View menu's
+  // zoom items ask the page to step that saved size.
+  setZoom: (factor: unknown) => { if (typeof factor === 'number' && factor >= 1 && factor <= 2) webFrame.setZoomFactor(factor); },
+  onZoom: (listener: (direction: 'in' | 'out' | 'reset') => void) => {
+    const receive = (_event: IpcRendererEvent, direction: unknown) => { if (direction === 'in' || direction === 'out' || direction === 'reset') listener(direction); };
+    ipcRenderer.on('papilot:zoom', receive);
+    return () => { ipcRenderer.off('papilot:zoom', receive); };
+  },
   // File › Open Paper… picks the folder in the main process and sends its path.
   onOpenFolder: (listener: (folder: string) => void) => {
     const receive = (_event: IpcRendererEvent, folder: unknown) => { if (typeof folder === 'string') listener(folder); };
@@ -41,6 +49,13 @@ contextBridge.exposeInMainWorld('papilotDesktop', {
     return () => { ipcRenderer.off('papilot:open-folder', receive); };
   },
 });
+
+// Apply the saved interface size before the page first paints, so the window
+// does not open at 100% and then jump. The page keeps it in sync afterwards.
+try {
+  const size = JSON.parse(localStorage.getItem('papilot:appearance') || '{}')?.size;
+  if (typeof size === 'number' && size >= 1 && size <= 2) webFrame.setZoomFactor(size);
+} catch { /* storage unavailable or malformed: the page applies its default */ }
 
 // Every handler validates the local chooser window separately from app pages.
 contextBridge.exposeInMainWorld('papilotEnvironment', {

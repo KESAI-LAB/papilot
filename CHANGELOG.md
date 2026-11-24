@@ -4,6 +4,10 @@ Notable changes to Papilot, newest first. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Added
+
+- Choose an **Interface size** from 100% to 200% in **Settings → Appearance** in the desktop app. It zooms text, controls, the editor, PDF and review viewer together, follows **View → Zoom In / Zoom Out / Actual Size**, and is restored after a restart. Browsers keep using their own page zoom. ([#314](https://github.com/PapilotAI/papilot/issues/314))
+
 ## [0.13.0] - 2026-11-22
 
 Review changes directly in place on the full PDF, decide individual annotations that share a paragraph, sort and organize manuscript notes, and choose a dedicated Git conflict-resolution agent. See the [release notes](docs/releases/0.13.0/release-notes.md) for update instructions.

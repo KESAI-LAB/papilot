@@ -371,5 +371,9 @@
   "Shortcut: {shortcut}": "快捷键：{shortcut}",
   "Typeless voice notes": "Typeless 语音批注",
   "Saved page {page}": "上次位置 · 第 {page} 页",
-  "Preview unavailable": "预览不可用"
+  "Preview unavailable": "预览不可用",
+  "Interface size": "界面大小",
+  "Scales text and controls everywhere, including the editor, PDF and dialogs.": "缩放所有文字和控件，包括编辑器、PDF 和对话框。",
+  "Text size": "文字大小",
+  "Use your browser’s zoom to scale text and controls.": "使用浏览器的缩放功能来调整文字和控件大小。"
 }
