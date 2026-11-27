@@ -5399,6 +5399,11 @@
     "textHash": "77309512bc14bdd47119777f0082a5fc67ea33e5370bc350b355a902e2dfa262",
     "model": "gemini-4-argon-medium"
   },
+  "Sign-in not checked": {
+    "revision": "707cd16a4e38dfbca7d083fc1ce415d5a61106a5b6c5b29b1a4fa2fa0fb40423",
+    "textHash": "6d13a9309711f0cfe93295dbdebc264560d6a16184d87de4f6361b6843ee41a9",
+    "model": "manual"
+  },
   "Sign-in required": {
     "revision": "3ee8b65b91484e6c4a6f6b78936693f92676b71a090e05140a9a592130590e7e",
     "textHash": "30c5427c5a9ff8f42cc5d66255a3590d7002cf459ab3b4028e21b808cdea4532",
@@ -6513,6 +6518,11 @@
     "revision": "312945174b7b7c114ab11c85bdd93fb3dccbcad1c5c9a8029d19d8702657b9b1",
     "textHash": "e1c14a32a9b5425a82d7bbfd1c25125c1acd93580ce2b35e5f4e300b338fdaa4",
     "model": "gemini-4-argon-medium"
+  },
+  "Uses the local ZCode CLI and its configured default model.": {
+    "revision": "a1d910c0da5148e6b91e8c2f2b9b8650453a2d3b0a9696b9259b9b76dd3540da",
+    "textHash": "716a7fbbef2f32e62598a24c23d7865d6dec86d805e7fad5b115f69f5ecfeee2",
+    "model": "manual"
   },
   "Uses your Pi CLI, providers, skills and extensions. Tools run on the host with Pi’s permissions.": {
     "revision": "4d1e1b79f02e8db38121d6690e0dc2c00fb22099b3c68fe9ca41b952576dee21",

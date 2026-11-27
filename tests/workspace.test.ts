@@ -3218,7 +3218,7 @@ test('creating an AI review skill task persists its snapshot and queues review-o
     await assert.rejects(f.workspace.createTask({ ...input, prepareReview: undefined, instructions: 'Edit it.' }), /Invalid task ID/);
     for (const agent of AGENT_IDS.filter(id => id !== 'collaboration')) {
       const selection = { ...input, id: `ai-review-client-${agent}`, agent };
-      if (['qoder', 'codebuddy', 'workbuddy'].includes(agent)) {
+      if (['qoder', 'codebuddy', 'workbuddy', 'zcode'].includes(agent)) {
         await assert.rejects(f.workspace.createTask(selection), /The selected agent does not support read-only AI review\. Select another agent\./);
         assert.equal(f.store.findTask(selection.id), undefined);
         continue;
@@ -4021,6 +4021,40 @@ test('switching agents applies validated destination permissions and keeps AI re
     Object.defineProperty((f.workspace as any).agents.claude, 'supportsReadOnlyTasks', { value: false });
     await assert.rejects(f.workspace.switchTaskAgent(f.task.id, f.choice), /does not support read-only AI review/);
     assert.equal(f.store.task(f.task.id).agent, 'codex');
+  } finally { f.close(); }
+});
+
+test('an editing task switches to ZCode with its configured default model', async () => {
+  const f = switchFixture();
+  try {
+    f.workspace.runtimes.zcode.connected = true;
+    f.workspace.runtimes.zcode.authenticated = true;
+    const choice = { agent: 'zcode' as const, model: '' };
+    await assert.rejects(f.workspace.switchTaskAgent(f.task.id, { ...choice, model: 'unknown' }), /available model/);
+    await assert.rejects(f.workspace.switchTaskAgent(f.task.id, { ...choice, effort: 'high' }), /reasoning effort/);
+    await assert.rejects(f.workspace.switchTaskAgent(f.task.id, { ...choice, serviceTier: 'priority' }), /Fast mode/);
+    const switched = await f.workspace.switchTaskAgent(f.task.id, choice);
+    assert.equal(switched.agent, 'zcode');
+    assert.equal(switched.model, null);
+    assert.equal(switched.threadId, null);
+    assert.equal(switched.handoff, true);
+  } finally { f.close(); }
+});
+
+test('read-only citation choices reject ZCode before changing a saved check', async () => {
+  const f = fixture();
+  try {
+    const input = { id: 'citation-check-fixture', projectId: f.task.projectId };
+    const zcode = { agent: 'zcode' as const, model: null, effort: null };
+    assert.throws(() => f.workspace.createCitationCheck({ ...input, ...zcode }), /does not support read-only tasks/);
+    assert.equal(f.store.findTask(input.id), undefined);
+    const task = f.workspace.createCitationCheck({ ...input, agent: 'codex' });
+    f.store.updateTask(task.id, { status: 'idle' });
+    const saved = f.store.task(task.id);
+    assert.throws(() => f.workspace.rerunCitationCheck(task.id, zcode), /does not support read-only tasks/);
+    assert.deepEqual(f.store.task(task.id), saved);
+    assert.throws(() => f.workspace.setQuickModel(zcode), /does not support read-only tasks/);
+    assert.equal(f.workspace.quickModel(), null);
   } finally { f.close(); }
 });
 
