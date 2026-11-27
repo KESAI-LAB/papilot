@@ -945,7 +945,20 @@ export class Builder {
         .join("");
       pretex += `\\includeonly{${targets.join(",")}}` + (preload ? `\\AtBeginDocument{${preload}}` : "");
     }
-    args.push(`-usepretex=${pretex}`);
+    // TeX code must not travel on latexmk's command line: MiKTeX's Windows
+    // launcher strips backslashes and braces while forwarding arguments to
+    // Perl, so \input{../papilot-trace.tex} arrives as input../papilot-trace.tex
+    // and TeX stops with "I can't find file". Keep the code in an rc file and
+    // pass only the bare -usepretex, which carries nothing the launcher can
+    // lose, as the pass hook below already does for its Perl code page.
+    const pretexRc = path.join(folder, "papilot-pretex.latexmkrc");
+    // A quoted heredoc keeps the TeX code literal: no Perl interpolation, and
+    // the backslashes, braces and $ in it are safe.
+    await fs.promises.writeFile(
+      pretexRc,
+      "$pre_tex_code = <<'PAPILOT_PRETEX';\n" + pretex + "\nPAPILOT_PRETEX\nchomp $pre_tex_code;\n",
+    );
+    args.push("-r", path.relative(cwd, pretexRc).split(path.sep).join("/"), "-usepretex");
     // latexmk only reruns TeX for changed inputs. Output carried over from a
     // build without the trace would stay without one, so TeX runs once more.
     if (fs.existsSync(path.join(out, job + ".fdb_latexmk")) && !fs.existsSync(path.join(out, job + ".papilot"))) args.push("-g");
